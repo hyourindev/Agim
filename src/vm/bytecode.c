@@ -759,6 +759,33 @@ static const char *opcode_names[] = {
     [OP_HASH_MD5] = "HASH_MD5",
     [OP_HASH_SHA256] = "HASH_SHA256",
     [OP_PRINT] = "PRINT",
+    /* Result operations */
+    [OP_RESULT_OK] = "RESULT_OK",
+    [OP_RESULT_ERR] = "RESULT_ERR",
+    [OP_RESULT_IS_OK] = "RESULT_IS_OK",
+    [OP_RESULT_IS_ERR] = "RESULT_IS_ERR",
+    [OP_RESULT_UNWRAP] = "RESULT_UNWRAP",
+    [OP_RESULT_UNWRAP_OR] = "RESULT_UNWRAP_OR",
+    [OP_RESULT_MATCH] = "RESULT_MATCH",
+    /* Tool introspection */
+    [OP_LIST_TOOLS] = "LIST_TOOLS",
+    [OP_TOOL_SCHEMA] = "TOOL_SCHEMA",
+    /* Option operations */
+    [OP_SOME] = "SOME",
+    [OP_NONE] = "NONE",
+    [OP_IS_SOME] = "IS_SOME",
+    [OP_IS_NONE] = "IS_NONE",
+    [OP_UNWRAP_OPTION] = "UNWRAP_OPTION",
+    [OP_UNWRAP_OPTION_OR] = "UNWRAP_OPTION_OR",
+    /* Struct operations */
+    [OP_STRUCT_NEW] = "STRUCT_NEW",
+    [OP_STRUCT_GET] = "STRUCT_GET",
+    [OP_STRUCT_SET] = "STRUCT_SET",
+    [OP_STRUCT_GET_INDEX] = "STRUCT_GET_INDEX",
+    /* Enum operations */
+    [OP_ENUM_NEW] = "ENUM_NEW",
+    [OP_ENUM_IS] = "ENUM_IS",
+    [OP_ENUM_PAYLOAD] = "ENUM_PAYLOAD",
     [OP_HALT] = "HALT",
 };
 
@@ -828,6 +855,36 @@ size_t chunk_disassemble_instruction(Chunk *chunk, size_t offset) {
         uint16_t ic_slot = chunk_read_arg(chunk, offset + 3);
         printf(" key=%d ic=%d\n", key_idx, ic_slot);
         return offset + 5;
+    }
+
+    case OP_STRUCT_GET:
+    case OP_STRUCT_SET:
+    case OP_ENUM_IS: {
+        uint16_t name_idx = chunk_read_arg(chunk, offset + 1);
+        printf(" name=%d\n", name_idx);
+        return offset + 3;
+    }
+
+    case OP_STRUCT_GET_INDEX: {
+        uint8_t index = chunk->code[offset + 1];
+        printf(" index=%d\n", index);
+        return offset + 2;
+    }
+
+    case OP_STRUCT_NEW: {
+        uint16_t type_idx = chunk_read_arg(chunk, offset + 1);
+        uint8_t field_count = chunk->code[offset + 3];
+        printf(" type=%d fields=%d\n", type_idx, field_count);
+        /* Variable-length: type + field_count + (field_name_idx * field_count) */
+        return offset + 4 + (field_count * 2);
+    }
+
+    case OP_ENUM_NEW: {
+        uint16_t type_idx = chunk_read_arg(chunk, offset + 1);
+        uint16_t variant_idx = chunk_read_arg(chunk, offset + 3);
+        uint8_t has_payload = chunk->code[offset + 5];
+        printf(" type=%d variant=%d payload=%d\n", type_idx, variant_idx, has_payload);
+        return offset + 6;
     }
 
     default:

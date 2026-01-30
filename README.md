@@ -4,7 +4,7 @@
 
 **Build agents. Run anywhere.**
 
-A language and runtime for building performant, isolated AI agents.
+First 
 
 ## File Extensions
 
