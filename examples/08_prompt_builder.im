@@ -1,0 +1,57 @@
+// Prompt Builder - Construct prompts for LLMs
+
+@tool(description: "Build a system prompt")
+fn system_prompt(role, instructions) {
+    return {
+        "role": "system",
+        "content": "You are " + role + ". " + instructions
+    }
+}
+
+@tool(description: "Build a user message")
+fn user_message(content) {
+    return {"role": "user", "content": content}
+}
+
+@tool(description: "Build an assistant message")
+fn assistant_message(content) {
+    return {"role": "assistant", "content": content}
+}
+
+@tool(description: "Create a chat completion request")
+fn build_chat_request(messages, model, max_tokens) {
+    return {
+        "model": model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": 0.7
+    }
+}
+
+@tool(description: "Add context to a prompt")
+fn with_context(prompt, context) {
+    return "Context:\n" + context + "\n\nQuestion: " + prompt
+}
+
+// Demo
+print("=== Prompt Builder Demo ===")
+print("")
+
+let messages = [
+    system_prompt("a helpful coding assistant", "Answer concisely."),
+    user_message("What is recursion?"),
+    assistant_message("Recursion is when a function calls itself."),
+    user_message("Show me an example in Python")
+]
+
+let request = build_chat_request(messages, "gpt-4", 500)
+
+print("Chat request:")
+print(json.encode(request))
+print("")
+
+// Context injection
+let ctx = "The user is working on a Fibonacci implementation."
+let enhanced = with_context("How do I optimize this?", ctx)
+print("Enhanced prompt:")
+print(enhanced)

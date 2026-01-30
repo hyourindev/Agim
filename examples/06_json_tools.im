@@ -1,0 +1,48 @@
+// JSON Tools - Parse and manipulate JSON data
+
+@tool(description: "Parse JSON string safely")
+fn parse_json_safe(str) {
+    return json.parse(str)
+}
+
+@tool(description: "Extract a value from JSON by key")
+fn json_get(data, key) {
+    return data[key]
+}
+
+@tool(description: "Check if JSON has a key")
+fn json_has(data, key) {
+    return data[key] != nil
+}
+
+@tool(description: "Get all keys from a JSON object")
+fn json_keys(data) {
+    return keys(data)
+}
+
+// Demo
+print("=== JSON Tools Demo ===")
+print("")
+
+let user = {
+    "name": "Alice",
+    "age": 30,
+    "city": "NYC",
+    "tags": ["developer", "agent"]
+}
+
+print("User data:")
+print("  Name: " + json_get(user, "name"))
+print("  Age: " + str(json_get(user, "age")))
+print("  Has email: " + str(json_has(user, "email")))
+print("  Keys: " + json.encode(json_keys(user)))
+
+print("")
+print("Parsing JSON string:")
+let json_str = "{\"status\": \"ok\", \"count\": 42}"
+let parse_result = parse_json_safe(json_str)
+if is_ok(parse_result) {
+    let data = unwrap(parse_result)
+    print("  Status: " + data["status"])
+    print("  Count: " + str(data["count"]))
+}

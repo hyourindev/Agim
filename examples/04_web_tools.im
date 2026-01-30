@@ -1,0 +1,31 @@
+// Web Tools - HTTP requests with error handling
+
+@tool(description: "Fetch a URL and return the content")
+fn fetch_url(url) {
+    return http.get(url)
+}
+
+@tool(description: "Check if a URL is reachable")
+fn check_url(url) {
+    let result = http.get(url)
+    return is_ok(result)
+}
+
+// Demo
+print("=== Web Tools Demo ===")
+print("")
+
+print("Fetching httpbin.org/uuid...")
+let result = http.get("https://httpbin.org/uuid")
+
+if is_ok(result) {
+    print("Success!")
+    let body = unwrap(result)
+    let parse_result = json.parse(body)
+    if is_ok(parse_result) {
+        let data = unwrap(parse_result)
+        print("UUID: " + data["uuid"])
+    }
+} else {
+    print("Failed to fetch")
+}

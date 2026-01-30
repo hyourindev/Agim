@@ -1,0 +1,29 @@
+// Basic Tools - Define tools that agents can call
+
+@tool(description: "Add two numbers")
+fn add(a, b) {
+    return a + b
+}
+
+@tool(description: "Multiply two numbers")
+fn multiply(a, b) {
+    return a * b
+}
+
+@tool(description: "Calculate percentage")
+fn percentage(value, total) {
+    if total == 0 {
+        return err("Cannot divide by zero")
+    }
+    return ok((value / total) * 100)
+}
+
+// Test the tools
+print("add(5, 3) = " + str(add(5, 3)))
+print("multiply(4, 7) = " + str(multiply(4, 7)))
+
+let pct = percentage(25, 200)
+match pct {
+    ok(v) => print("percentage(25, 200) = " + str(v) + "%")
+    err(e) => print("Error: " + e)
+}

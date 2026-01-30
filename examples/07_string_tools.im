@@ -1,0 +1,58 @@
+// String Tools - Text processing utilities for agents
+
+@tool(description: "Truncate text to max length with ellipsis")
+fn truncate(text, max_len) {
+    if len(text) <= max_len {
+        return text
+    }
+    return slice(text, 0, max_len - 3) + "..."
+}
+
+@tool(description: "Extract text between two markers")
+fn extract_between(text, start_marker, end_marker) {
+    let start = index_of(text, start_marker)
+    if start < 0 {
+        return nil
+    }
+    start = start + len(start_marker)
+
+    let end = index_of(slice(text, start, len(text)), end_marker)
+    if end < 0 {
+        return nil
+    }
+
+    return slice(text, start, start + end)
+}
+
+@tool(description: "Clean whitespace from text")
+fn clean_text(text) {
+    let result = trim(text)
+    result = replace(result, "\n\n\n", "\n\n")
+    result = replace(result, "  ", " ")
+    return result
+}
+
+@tool(description: "Count words in text")
+fn word_count(text) {
+    let words = split(trim(text), " ")
+    let count = 0
+    for w in words {
+        if len(trim(w)) > 0 {
+            count = count + 1
+        }
+    }
+    return count
+}
+
+// Demo
+print("=== String Tools Demo ===")
+print("")
+
+let text = "This is a sample text for testing the string tools."
+
+print("Original: " + text)
+print("Truncated: " + truncate(text, 25))
+print("Word count: " + str(word_count(text)))
+
+let html = "Hello <b>world</b> today"
+print("Extract between <b> tags: " + extract_between(html, "<b>", "</b>"))

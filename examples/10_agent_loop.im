@@ -1,0 +1,86 @@
+// Agent Loop - Simple think-act-observe pattern
+
+let agent_state = {
+    "memory": [],
+    "step": 0
+}
+
+fn think(observation) {
+    // Simulate agent thinking based on observation
+    push(agent_state["memory"], {
+        "type": "observation",
+        "content": observation,
+        "step": agent_state["step"]
+    })
+
+    // Simple decision logic (would be LLM in real agent)
+    if contains(observation, "error") {
+        return {"action": "retry", "reason": "Error detected"}
+    }
+    if contains(observation, "done") {
+        return {"action": "finish", "reason": "Task completed"}
+    }
+    return {"action": "continue", "reason": "Processing"}
+}
+
+fn act(decision) {
+    agent_state["step"] = agent_state["step"] + 1
+
+    push(agent_state["memory"], {
+        "type": "action",
+        "content": decision["action"],
+        "step": agent_state["step"]
+    })
+
+    // Execute action
+    if decision["action"] == "retry" {
+        return "Retrying last operation..."
+    }
+    if decision["action"] == "finish" {
+        return "Task finished successfully"
+    }
+    return "Continuing execution..."
+}
+
+fn observe(result) {
+    return "Observed: " + result
+}
+
+fn run_loop(initial_input, max_steps) {
+    let current = initial_input
+    let step = 0
+
+    while step < max_steps {
+        print("Step " + str(step + 1) + ":")
+
+        let decision = think(current)
+        print("  Think: " + decision["reason"])
+
+        let result = act(decision)
+        print("  Act: " + result)
+
+        if decision["action"] == "finish" {
+            break
+        }
+
+        current = observe(result)
+        print("  Observe: " + current)
+        print("")
+
+        step = step + 1
+    }
+
+    return agent_state
+}
+
+// Demo
+print("=== Agent Loop Demo ===")
+print("")
+
+let final_state = run_loop("Starting task: process data", 3)
+
+print("")
+print("Final memory:")
+for item in final_state["memory"] {
+    print("  [" + str(item["step"]) + "] " + item["type"] + ": " + str(item["content"]))
+}

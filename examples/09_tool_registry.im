@@ -1,0 +1,50 @@
+// Tool Registry - Manage tools for agents
+
+let tool_list = []
+
+fn add_tool(name, description) {
+    push(tool_list, {"name": name, "description": description})
+}
+
+fn get_tools() {
+    return tool_list
+}
+
+fn get_schema() {
+    let schema = []
+    let i = 0
+    while i < len(tool_list) {
+        let t = tool_list[i]
+        push(schema, {
+            "type": "function",
+            "function": {
+                "name": t["name"],
+                "description": t["description"]
+            }
+        })
+        i = i + 1
+    }
+    return schema
+}
+
+// Register some tools
+add_tool("search", "Search the web")
+add_tool("calculator", "Do math")
+add_tool("weather", "Get weather")
+
+// Demo
+print("=== Tool Registry Demo ===")
+print("")
+
+print("Tools registered: " + str(len(tool_list)))
+
+let i = 0
+while i < len(tool_list) {
+    let t = tool_list[i]
+    print("  - " + t["name"] + ": " + t["description"])
+    i = i + 1
+}
+
+print("")
+print("Schema:")
+print(json.encode(get_schema()))

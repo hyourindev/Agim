@@ -1,0 +1,49 @@
+// File Tools - Safe file operations
+
+@tool(description: "Read a file safely")
+fn safe_read(path) {
+    if not fs.exists(path) {
+        return err("File not found: " + path)
+    }
+    return fs.read(path)
+}
+
+@tool(description: "Write content to a file")
+fn safe_write(path, content) {
+    return fs.write(path, content)
+}
+
+// Demo
+print("=== File Tools Demo ===")
+print("")
+
+// Write a file
+let config = json.encode({"name": "agent", "version": "1.0"})
+let write_result = safe_write("/tmp/agent.json", config)
+
+if is_ok(write_result) {
+    print("File written successfully")
+} else {
+    print("Write failed")
+}
+
+// Read it back
+let read_result = safe_read("/tmp/agent.json")
+
+if is_ok(read_result) {
+    let content = unwrap(read_result)
+    print("File content: " + content)
+    let parse_result = json.parse(content)
+    if is_ok(parse_result) {
+        let data = unwrap(parse_result)
+        print("Agent name: " + data["name"])
+    }
+} else {
+    print("Read failed")
+}
+
+// Test non-existent file
+let bad_result = safe_read("/tmp/nonexistent.xyz")
+if is_err(bad_result) {
+    print("Expected error for missing file: OK")
+}

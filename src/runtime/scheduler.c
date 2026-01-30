@@ -1,0 +1,753 @@
+/*
+ * Agim - Scheduler
+ *
+ * Copyright (c) 2025 Agim Language Contributors
+ * SPDX-License-Identifier: MIT
+ */
+
+#define _POSIX_C_SOURCE 200809L
+
+#include "runtime/scheduler.h"
+#include "runtime/worker.h"
+#include "vm/primitives.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+/*============================================================================
+ * Default Configuration
+ *============================================================================*/
+
+SchedulerConfig scheduler_config_default(void) {
+    return (SchedulerConfig){
+        .max_blocks = 10000,
+        .default_reductions = 10000,
+        .num_workers = 0,        /* Single-threaded by default */
+        .enable_stealing = true,
+    };
+}
+
+/*============================================================================
+ * Block Registry Operations (Hash Table)
+ *============================================================================*/
+
+static void registry_init(BlockRegistry *reg) {
+    atomic_store(&reg->total_count, 0);
+
+    for (size_t i = 0; i < REGISTRY_SHARDS; i++) {
+        RegistryShard *shard = &reg->shards[i];
+        shard->capacity = REGISTRY_INITIAL_CAPACITY;
+        shard->count = 0;
+        shard->buckets = calloc(shard->capacity, sizeof(BlockEntry *));
+        pthread_mutex_init(&shard->lock, NULL);
+    }
+}
+
+static void registry_free(BlockRegistry *reg) {
+    for (size_t i = 0; i < REGISTRY_SHARDS; i++) {
+        RegistryShard *shard = &reg->shards[i];
+        pthread_mutex_lock(&shard->lock);
+
+        /* Free all entries and blocks in this shard */
+        for (size_t j = 0; j < shard->capacity; j++) {
+            BlockEntry *entry = shard->buckets[j];
+            while (entry) {
+                BlockEntry *next = entry->next;
+                if (entry->block) {
+                    block_free(entry->block);
+                }
+                free(entry);
+                entry = next;
+            }
+        }
+        free(shard->buckets);
+        pthread_mutex_unlock(&shard->lock);
+        pthread_mutex_destroy(&shard->lock);
+    }
+}
+
+static inline size_t registry_shard_index(Pid pid) {
+    return pid % REGISTRY_SHARDS;
+}
+
+static inline size_t registry_bucket_index(Pid pid, size_t capacity) {
+    /* Simple hash - spread PIDs across buckets */
+    return (pid / REGISTRY_SHARDS) % capacity;
+}
+
+static void registry_grow_shard(RegistryShard *shard) {
+    size_t new_capacity = shard->capacity * 2;
+    BlockEntry **new_buckets = calloc(new_capacity, sizeof(BlockEntry *));
+
+    /* Rehash all entries */
+    for (size_t i = 0; i < shard->capacity; i++) {
+        BlockEntry *entry = shard->buckets[i];
+        while (entry) {
+            BlockEntry *next = entry->next;
+            size_t new_idx = registry_bucket_index(entry->pid, new_capacity);
+            entry->next = new_buckets[new_idx];
+            new_buckets[new_idx] = entry;
+            entry = next;
+        }
+    }
+
+    free(shard->buckets);
+    shard->buckets = new_buckets;
+    shard->capacity = new_capacity;
+}
+
+static bool registry_insert(BlockRegistry *reg, Block *block) {
+    Pid pid = block->pid;
+    size_t shard_idx = registry_shard_index(pid);
+    RegistryShard *shard = &reg->shards[shard_idx];
+
+    pthread_mutex_lock(&shard->lock);
+
+    /* Grow if load factor > 0.75 */
+    if (shard->count * 4 >= shard->capacity * 3) {
+        registry_grow_shard(shard);
+    }
+
+    size_t bucket_idx = registry_bucket_index(pid, shard->capacity);
+
+    /* Create entry */
+    BlockEntry *entry = malloc(sizeof(BlockEntry));
+    if (!entry) {
+        pthread_mutex_unlock(&shard->lock);
+        return false;
+    }
+
+    entry->pid = pid;
+    entry->block = block;
+    entry->next = shard->buckets[bucket_idx];
+    shard->buckets[bucket_idx] = entry;
+    shard->count++;
+
+    pthread_mutex_unlock(&shard->lock);
+
+    atomic_fetch_add(&reg->total_count, 1);
+    return true;
+}
+
+static Block *registry_lookup(BlockRegistry *reg, Pid pid) {
+    size_t shard_idx = registry_shard_index(pid);
+    RegistryShard *shard = &reg->shards[shard_idx];
+
+    pthread_mutex_lock(&shard->lock);
+
+    size_t bucket_idx = registry_bucket_index(pid, shard->capacity);
+    BlockEntry *entry = shard->buckets[bucket_idx];
+
+    while (entry) {
+        if (entry->pid == pid) {
+            Block *block = entry->block;
+            pthread_mutex_unlock(&shard->lock);
+            return block;
+        }
+        entry = entry->next;
+    }
+
+    pthread_mutex_unlock(&shard->lock);
+    return NULL;
+}
+
+static void registry_remove(BlockRegistry *reg, Pid pid) {
+    size_t shard_idx = registry_shard_index(pid);
+    RegistryShard *shard = &reg->shards[shard_idx];
+
+    pthread_mutex_lock(&shard->lock);
+
+    size_t bucket_idx = registry_bucket_index(pid, shard->capacity);
+    BlockEntry **entry_ptr = &shard->buckets[bucket_idx];
+
+    while (*entry_ptr) {
+        BlockEntry *entry = *entry_ptr;
+        if (entry->pid == pid) {
+            *entry_ptr = entry->next;
+            free(entry);
+            shard->count--;
+            pthread_mutex_unlock(&shard->lock);
+            atomic_fetch_sub(&reg->total_count, 1);
+            return;
+        }
+        entry_ptr = &entry->next;
+    }
+
+    pthread_mutex_unlock(&shard->lock);
+}
+
+/* Iterator for walking all blocks (used for stats and cleanup) */
+typedef void (*BlockIteratorFn)(Block *block, void *ctx);
+
+static void registry_iterate(BlockRegistry *reg, BlockIteratorFn fn, void *ctx) {
+    for (size_t i = 0; i < REGISTRY_SHARDS; i++) {
+        RegistryShard *shard = &reg->shards[i];
+        pthread_mutex_lock(&shard->lock);
+
+        for (size_t j = 0; j < shard->capacity; j++) {
+            BlockEntry *entry = shard->buckets[j];
+            while (entry) {
+                if (entry->block) {
+                    fn(entry->block, ctx);
+                }
+                entry = entry->next;
+            }
+        }
+
+        pthread_mutex_unlock(&shard->lock);
+    }
+}
+
+/*============================================================================
+ * Run Queue Operations
+ *============================================================================*/
+
+static void runqueue_init(RunQueue *queue) {
+    queue->head = NULL;
+    queue->tail = NULL;
+    queue->count = 0;
+}
+
+static void runqueue_push(RunQueue *queue, Block *block) {
+    block->next = NULL;
+    block->prev = queue->tail;
+
+    if (queue->tail) {
+        queue->tail->next = block;
+    } else {
+        queue->head = block;
+    }
+    queue->tail = block;
+    queue->count++;
+}
+
+static Block *runqueue_pop(RunQueue *queue) {
+    Block *block = queue->head;
+    if (!block) return NULL;
+
+    queue->head = block->next;
+    if (queue->head) {
+        queue->head->prev = NULL;
+    } else {
+        queue->tail = NULL;
+    }
+
+    block->next = NULL;
+    block->prev = NULL;
+    queue->count--;
+
+    return block;
+}
+
+static void runqueue_remove(RunQueue *queue, Block *block) {
+    if (block->prev) {
+        block->prev->next = block->next;
+    } else {
+        queue->head = block->next;
+    }
+
+    if (block->next) {
+        block->next->prev = block->prev;
+    } else {
+        queue->tail = block->prev;
+    }
+
+    block->next = NULL;
+    block->prev = NULL;
+    queue->count--;
+}
+
+/*============================================================================
+ * Scheduler Lifecycle
+ *============================================================================*/
+
+Scheduler *scheduler_new(const SchedulerConfig *config) {
+    Scheduler *scheduler = malloc(sizeof(Scheduler));
+    if (!scheduler) return NULL;
+
+    if (config) {
+        scheduler->config = *config;
+    } else {
+        scheduler->config = scheduler_config_default();
+    }
+
+    /* Block registry (sharded hash table) */
+    registry_init(&scheduler->registry);
+
+    atomic_store(&scheduler->next_pid, 1);
+
+    /* Run queue (single-threaded mode) */
+    runqueue_init(&scheduler->run_queue);
+
+    /* Multi-threaded workers */
+    scheduler->workers = NULL;
+    scheduler->worker_count = 0;
+    atomic_store(&scheduler->next_worker, 0);
+
+    /* Initialize workers if multi-threaded */
+    if (scheduler->config.num_workers > 0) {
+        scheduler->workers = malloc(sizeof(Worker *) * scheduler->config.num_workers);
+        if (!scheduler->workers) {
+            registry_free(&scheduler->registry);
+            free(scheduler);
+            return NULL;
+        }
+
+        for (size_t i = 0; i < scheduler->config.num_workers; i++) {
+            scheduler->workers[i] = worker_new((int)i, scheduler);
+            if (!scheduler->workers[i]) {
+                /* Cleanup on failure */
+                for (size_t j = 0; j < i; j++) {
+                    worker_free(scheduler->workers[j]);
+                }
+                free(scheduler->workers);
+                registry_free(&scheduler->registry);
+                free(scheduler);
+                return NULL;
+            }
+        }
+        scheduler->worker_count = scheduler->config.num_workers;
+    }
+
+    /* State */
+    atomic_store(&scheduler->running, false);
+    scheduler->current = NULL;
+
+    /* Synchronization */
+    pthread_mutex_init(&scheduler->block_mutex, NULL);
+
+    /* Primitives runtime */
+    scheduler->primitives = NULL;
+
+    /* Statistics */
+    atomic_store(&scheduler->total_spawned, 0);
+    atomic_store(&scheduler->total_terminated, 0);
+    atomic_store(&scheduler->total_reductions, 0);
+    atomic_store(&scheduler->context_switches, 0);
+
+    return scheduler;
+}
+
+void scheduler_free(Scheduler *scheduler) {
+    if (!scheduler) return;
+
+    /* Stop and free workers */
+    if (scheduler->workers) {
+        for (size_t i = 0; i < scheduler->worker_count; i++) {
+            if (scheduler->workers[i]) {
+                worker_stop(scheduler->workers[i]);
+            }
+        }
+        for (size_t i = 0; i < scheduler->worker_count; i++) {
+            if (scheduler->workers[i]) {
+                worker_free(scheduler->workers[i]);
+            }
+        }
+        free(scheduler->workers);
+    }
+
+    /* Free all blocks via registry */
+    registry_free(&scheduler->registry);
+
+    pthread_mutex_destroy(&scheduler->block_mutex);
+
+    free(scheduler);
+}
+
+/*============================================================================
+ * Block Management
+ *============================================================================*/
+
+static bool register_block(Scheduler *scheduler, Block *block) {
+    /* Check max blocks limit */
+    size_t current = atomic_load(&scheduler->registry.total_count);
+    if (current >= scheduler->config.max_blocks) {
+        return false;
+    }
+
+    return registry_insert(&scheduler->registry, block);
+}
+
+Pid scheduler_spawn(Scheduler *scheduler, Bytecode *code, const char *name) {
+    return scheduler_spawn_ex(scheduler, code, name, CAP_ALL, NULL);
+}
+
+Pid scheduler_spawn_ex(Scheduler *scheduler, Bytecode *code, const char *name,
+                       CapabilitySet caps, const BlockLimits *limits) {
+    if (!scheduler || !code) return PID_INVALID;
+
+    /* Allocate PID (atomic for thread safety) */
+    Pid pid = atomic_fetch_add(&scheduler->next_pid, 1);
+
+    /* Create block */
+    Block *block = block_new(pid, name, limits);
+    if (!block) return PID_INVALID;
+
+    /* Set capabilities */
+    block->capabilities = caps;
+
+    /* Load bytecode */
+    if (!block_load(block, code)) {
+        block_free(block);
+        return PID_INVALID;
+    }
+
+    /* Register block (thread-safe via sharded locks) */
+    if (!register_block(scheduler, block)) {
+        block_free(block);
+        return PID_INVALID;
+    }
+
+    /* Set scheduler reference in VM */
+    block->vm->scheduler = scheduler;
+
+    /* Add to run queue or worker */
+    if (scheduler->worker_count > 0) {
+        /* Multi-threaded: distribute to workers round-robin */
+        size_t worker_idx = atomic_fetch_add(&scheduler->next_worker, 1) %
+                            scheduler->worker_count;
+        worker_enqueue(scheduler->workers[worker_idx], block);
+    } else {
+        /* Single-threaded: use run queue */
+        scheduler_enqueue(scheduler, block);
+    }
+
+    atomic_fetch_add(&scheduler->total_spawned, 1);
+
+    return pid;
+}
+
+Block *scheduler_get_block(Scheduler *scheduler, Pid pid) {
+    if (!scheduler || pid == PID_INVALID) return NULL;
+    return registry_lookup(&scheduler->registry, pid);
+}
+
+void scheduler_kill(Scheduler *scheduler, Pid pid) {
+    Block *block = scheduler_get_block(scheduler, pid);
+    if (!block) return;
+
+    if (block_is_alive(block)) {
+        block_crash(block, "killed");
+
+        /* Remove from run queue if present */
+        if (atomic_load(&block->state) == BLOCK_RUNNABLE) {
+            runqueue_remove(&scheduler->run_queue, block);
+        }
+
+        scheduler->total_terminated++;
+    }
+}
+
+Block *scheduler_current(Scheduler *scheduler) {
+    return scheduler ? scheduler->current : NULL;
+}
+
+/*============================================================================
+ * Execution
+ *============================================================================*/
+
+void scheduler_enqueue(Scheduler *scheduler, Block *block) {
+    if (!scheduler || !block) return;
+
+    if (atomic_load(&block->state) == BLOCK_RUNNABLE) {
+        runqueue_push(&scheduler->run_queue, block);
+    }
+}
+
+Block *scheduler_dequeue(Scheduler *scheduler) {
+    if (!scheduler) return NULL;
+    return runqueue_pop(&scheduler->run_queue);
+}
+
+bool scheduler_queue_empty(const Scheduler *scheduler) {
+    return !scheduler || scheduler->run_queue.count == 0;
+}
+
+/* Helper to check if there are waiting blocks that can make progress */
+typedef struct {
+    size_t waiting_count;
+    size_t waiting_with_messages;
+} WaitingBlocksInfo;
+
+static void check_waiting_callback(Block *block, void *ctx) {
+    WaitingBlocksInfo *info = (WaitingBlocksInfo *)ctx;
+    if (atomic_load(&block->state) == BLOCK_WAITING) {
+        info->waiting_count++;
+        /* Check if this waiting block has messages that could wake it */
+        if (block_has_messages(block)) {
+            info->waiting_with_messages++;
+        }
+    }
+}
+
+static bool has_wakeable_waiting_blocks(Scheduler *scheduler) {
+    WaitingBlocksInfo info = {0, 0};
+    registry_iterate(&scheduler->registry, check_waiting_callback, &info);
+
+    /* If there are waiting blocks with messages, they can make progress */
+    if (info.waiting_with_messages > 0) {
+        return true;
+    }
+
+    /* If there are waiting blocks but none have messages and no runnable blocks,
+     * this is a deadlock - return false to stop the scheduler */
+    return false;
+}
+
+bool scheduler_step(Scheduler *scheduler) {
+    if (!scheduler) return false;
+
+    /* Get next runnable block */
+    Block *block = scheduler_dequeue(scheduler);
+    if (!block) {
+        /* Check if there are waiting blocks that can make progress.
+         * If all waiting blocks have no messages, this is a deadlock. */
+        if (has_wakeable_waiting_blocks(scheduler)) {
+            return true; /* Still have waiting blocks that could be woken */
+        }
+        return false; /* No runnable blocks and no wakeable waiting blocks */
+    }
+
+    /* Run the block */
+    scheduler->current = block;
+    scheduler->context_switches++;
+
+    BlockRunResult result = block_run(block);
+
+    scheduler->total_reductions += block->counters.reductions;
+    scheduler->current = NULL;
+
+    /* Handle result */
+    switch (result) {
+    case BLOCK_RUN_YIELD:
+        /* Re-enqueue at end of run queue */
+        scheduler_enqueue(scheduler, block);
+        break;
+
+    case BLOCK_RUN_WAITING:
+        /* Block is waiting, don't re-enqueue (will be woken later) */
+        break;
+
+    case BLOCK_RUN_OK:
+    case BLOCK_RUN_HALTED:
+    case BLOCK_RUN_ERROR:
+        /* Block terminated */
+        scheduler->total_terminated++;
+
+        /* Notify linked blocks */
+        {
+            size_t link_count;
+            const Pid *links = block_get_links(block, &link_count);
+            for (size_t i = 0; i < link_count; i++) {
+                Block *linked = scheduler_get_block(scheduler, links[i]);
+                if (linked && block_is_alive(linked)) {
+                    /* Send exit signal as message */
+                    Value *exit_msg = value_map();
+                    exit_msg = map_set(exit_msg, "type", value_string("exit"));
+                    exit_msg = map_set(exit_msg, "pid", value_pid(block->pid));
+                    exit_msg = map_set(exit_msg, "reason",
+                            result == BLOCK_RUN_ERROR
+                                ? value_string(block->u.exit.exit_reason
+                                               ? block->u.exit.exit_reason : "error")
+                                : value_string("normal"));
+                    exit_msg = map_set(exit_msg, "code", value_int(block->u.exit.exit_code));
+
+                    if (block_send(linked, block->pid, exit_msg)) {
+                        /* Wake linked block if waiting (use atomic CAS) */
+                        if (block_try_transition(linked, BLOCK_WAITING, BLOCK_RUNNABLE)) {
+                            scheduler_enqueue(scheduler, linked);
+                        }
+                    }
+                }
+            }
+        }
+        break;
+    }
+
+    return true;
+}
+
+void scheduler_run(Scheduler *scheduler) {
+    if (!scheduler) return;
+
+    atomic_store(&scheduler->running, true);
+
+    if (scheduler->worker_count > 0) {
+        /* Multi-threaded: start all workers */
+        for (size_t i = 0; i < scheduler->worker_count; i++) {
+            worker_start(scheduler->workers[i]);
+        }
+
+        /* Wait for all workers to complete or be stopped */
+        for (size_t i = 0; i < scheduler->worker_count; i++) {
+            worker_join(scheduler->workers[i]);
+        }
+
+        /* Aggregate statistics from workers */
+        for (size_t i = 0; i < scheduler->worker_count; i++) {
+            Worker *w = scheduler->workers[i];
+            atomic_fetch_add(&scheduler->total_reductions,
+                             atomic_load(&w->total_reductions));
+            atomic_fetch_add(&scheduler->context_switches,
+                             atomic_load(&w->blocks_executed));
+        }
+    } else {
+        /* Single-threaded: use existing step loop */
+        while (atomic_load(&scheduler->running)) {
+            if (!scheduler_step(scheduler)) {
+                break; /* No more runnable blocks */
+            }
+        }
+    }
+
+    atomic_store(&scheduler->running, false);
+}
+
+void scheduler_stop(Scheduler *scheduler) {
+    if (!scheduler) return;
+
+    atomic_store(&scheduler->running, false);
+
+    /* Stop all workers */
+    if (scheduler->workers) {
+        for (size_t i = 0; i < scheduler->worker_count; i++) {
+            if (scheduler->workers[i]) {
+                worker_stop(scheduler->workers[i]);
+            }
+        }
+    }
+}
+
+/*============================================================================
+ * Primitives Runtime
+ *============================================================================*/
+
+void scheduler_set_primitives(Scheduler *scheduler, PrimitivesRuntime *primitives) {
+    if (scheduler) {
+        scheduler->primitives = primitives;
+    }
+}
+
+PrimitivesRuntime *scheduler_get_primitives(Scheduler *scheduler) {
+    return scheduler ? scheduler->primitives : NULL;
+}
+
+/*============================================================================
+ * Statistics
+ *============================================================================*/
+
+/* Helper callback for counting blocks by state */
+static void count_block_states_callback(Block *block, void *ctx) {
+    SchedulerStats *stats = (SchedulerStats *)ctx;
+    switch (atomic_load(&block->state)) {
+    case BLOCK_RUNNABLE:
+    case BLOCK_RUNNING:
+        stats->blocks_runnable++;
+        stats->blocks_alive++;
+        break;
+    case BLOCK_WAITING:
+        stats->blocks_waiting++;
+        stats->blocks_alive++;
+        break;
+    case BLOCK_DEAD:
+        stats->blocks_dead++;
+        break;
+    }
+}
+
+SchedulerStats scheduler_stats(const Scheduler *scheduler) {
+    SchedulerStats stats = {0};
+    if (!scheduler) return stats;
+
+    stats.blocks_total = scheduler->total_spawned;
+    stats.total_reductions = scheduler->total_reductions;
+    stats.context_switches = scheduler->context_switches;
+
+    /* Count blocks by state using iterator */
+    registry_iterate((BlockRegistry *)&scheduler->registry, count_block_states_callback, &stats);
+
+    return stats;
+}
+
+void scheduler_print_stats(const Scheduler *scheduler) {
+    SchedulerStats stats = scheduler_stats(scheduler);
+
+    printf("Scheduler Statistics:\n");
+    printf("  Blocks total:     %zu\n", stats.blocks_total);
+    printf("  Blocks alive:     %zu\n", stats.blocks_alive);
+    printf("  Blocks runnable:  %zu\n", stats.blocks_runnable);
+    printf("  Blocks waiting:   %zu\n", stats.blocks_waiting);
+    printf("  Blocks dead:      %zu\n", stats.blocks_dead);
+    printf("  Total reductions: %zu\n", stats.total_reductions);
+    printf("  Context switches: %zu\n", stats.context_switches);
+}
+
+/*============================================================================
+ * Debug
+ *============================================================================*/
+
+/* Helper callback for printing blocks */
+static void print_block_callback(Block *block, void *ctx) {
+    size_t *index = (size_t *)ctx;
+    printf("    [%zu] pid=%lu name=%s state=%s\n",
+           (*index)++, block->pid,
+           block->name ? block->name : "(none)",
+           block_state_name(atomic_load(&block->state)));
+}
+
+void scheduler_print(const Scheduler *scheduler) {
+    if (!scheduler) {
+        printf("Scheduler: (null)\n");
+        return;
+    }
+
+    printf("Scheduler {\n");
+    printf("  running: %s\n", atomic_load(&scheduler->running) ? "yes" : "no");
+    printf("  next_pid: %lu\n", atomic_load(&scheduler->next_pid));
+    printf("  workers: %zu\n", scheduler->worker_count);
+    printf("  run_queue: %zu blocks\n", scheduler->run_queue.count);
+    printf("  total_blocks: %zu\n", atomic_load(&scheduler->registry.total_count));
+    printf("  blocks:\n");
+
+    size_t index = 0;
+    registry_iterate((BlockRegistry *)&scheduler->registry, print_block_callback, &index);
+
+    printf("}\n");
+}
+
+/*============================================================================
+ * Multi-threaded Scheduler Helpers
+ *============================================================================*/
+
+bool scheduler_is_multithreaded(const Scheduler *scheduler) {
+    return scheduler && scheduler->worker_count > 0;
+}
+
+size_t scheduler_worker_count(const Scheduler *scheduler) {
+    return scheduler ? scheduler->worker_count : 0;
+}
+
+Worker *scheduler_get_worker(Scheduler *scheduler, size_t index) {
+    if (!scheduler || index >= scheduler->worker_count) return NULL;
+    return scheduler->workers[index];
+}
+
+void scheduler_wake_block(Scheduler *scheduler, Block *block) {
+    if (!scheduler || !block) return;
+
+    /* Atomically change state to runnable if waiting */
+    if (block_try_transition(block, BLOCK_WAITING, BLOCK_RUNNABLE)) {
+
+        if (scheduler->worker_count > 0) {
+            /* Multi-threaded: add to a worker queue */
+            size_t worker_idx = atomic_fetch_add(&scheduler->next_worker, 1) %
+                                scheduler->worker_count;
+            worker_enqueue(scheduler->workers[worker_idx], block);
+        } else {
+            /* Single-threaded: add to run queue */
+            scheduler_enqueue(scheduler, block);
+        }
+    }
+}
