@@ -24,11 +24,34 @@ set(CMAKE_C_FLAGS_RELEASE "-O3 -march=native -flto -DNDEBUG")
 # Options
 option(AGIM_BUILD_TESTS "Build test suite" ON)
 option(AGIM_ENABLE_ASAN "Enable AddressSanitizer" OFF)
+option(AGIM_ENABLE_PGO_GENERATE "Enable Profile-Guided Optimization (generate phase)" OFF)
+option(AGIM_ENABLE_PGO_USE "Enable Profile-Guided Optimization (use phase)" OFF)
 
 # Sanitizers
 if(AGIM_ENABLE_ASAN)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fno-omit-frame-pointer")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
+endif()
+
+# Profile-Guided Optimization
+if(AGIM_ENABLE_PGO_GENERATE)
+    if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-generate")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-generate")
+    elseif(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-instr-generate")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-instr-generate")
+    endif()
+endif()
+
+if(AGIM_ENABLE_PGO_USE)
+    if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-use -fprofile-correction")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-use")
+    elseif(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-instr-use=default.profdata")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-instr-use=default.profdata")
+    endif()
 endif()
 
 # Include directories

@@ -27,6 +27,9 @@ typedef struct String {
 Value *value_string(const char *str);
 Value *value_string_n(const char *str, size_t length);
 
+/* String interning for commonly used strings */
+Value *string_intern(const char *str, size_t len);
+
 /* String Properties */
 
 size_t string_length(const Value *v);

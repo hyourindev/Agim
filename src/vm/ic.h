@@ -43,6 +43,12 @@ typedef struct InlineCache {
     ICEntry entries[IC_MAX_ENTRIES];
 } InlineCache;
 
+/* Direct-mapped cache hash function.
+ * Uses pointer address shifted right to reduce alignment bias.
+ * Shift by 4 accounts for typical 16-byte allocation alignment. */
+#define IC_HASH(shape) (((uintptr_t)(shape)) >> 4)
+#define IC_CACHE_MASK (IC_MAX_ENTRIES - 1)
+
 /* Inline Cache API */
 
 void ic_init(InlineCache *ic);

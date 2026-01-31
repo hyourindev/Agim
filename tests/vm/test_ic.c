@@ -134,6 +134,66 @@ void test_ic_shape_id(void) {
     value_free(map2);
 }
 
+/* Test direct-mapped cache hash behavior */
+void test_ic_direct_mapped(void) {
+    InlineCache ic;
+    ic_init(&ic);
+
+    /* Create a map and update the cache */
+    Value *map = value_map();
+    map_set(map, "test", value_int(123));
+
+    Map *m = map->as.map;
+    size_t bucket = agim_hash_cstring("test") % m->capacity;
+    ic_update(&ic, map, bucket);
+
+    /* Verify O(1) lookup works */
+    Value *result = NULL;
+    bool hit = ic_lookup(&ic, map, "test", &result);
+    ASSERT(hit);
+    ASSERT(result != NULL);
+    ASSERT_EQ(123, result->as.integer);
+
+    /* Verify state is monomorphic after one shape */
+    ASSERT_EQ(IC_MONO, ic.state);
+
+    value_free(map);
+}
+
+/* Test that IC correctly transitions to mega state */
+void test_ic_mega_transition(void) {
+    InlineCache ic;
+    ic_init(&ic);
+
+    /* Keep all maps alive to ensure unique shape IDs */
+    int num_maps = IC_MAX_ENTRIES + 5;
+    Value *maps[IC_MAX_ENTRIES + 5];
+
+    /* Create many maps to force megamorphic state */
+    for (int i = 0; i < num_maps; i++) {
+        maps[i] = value_map();
+        map_set(maps[i], "k", value_int(i));
+
+        Map *m = maps[i]->as.map;
+        size_t bucket = agim_hash_cstring("k") % m->capacity;
+        ic_update(&ic, maps[i], bucket);
+    }
+
+    /* Should be megamorphic after exceeding max entries */
+    ASSERT_EQ(IC_MEGA, ic.state);
+
+    /* Megamorphic cache should always miss */
+    Value *test_map = value_map();
+    map_set(test_map, "k", value_int(999));
+    Value *result = NULL;
+    ASSERT(!ic_lookup(&ic, test_map, "k", &result));
+
+    value_free(test_map);
+    for (int i = 0; i < num_maps; i++) {
+        value_free(maps[i]);
+    }
+}
+
 /* Main */
 
 int main(void) {
@@ -142,6 +202,8 @@ int main(void) {
     RUN_TEST(test_ic_poly_lookup);
     RUN_TEST(test_ic_mega);
     RUN_TEST(test_ic_shape_id);
+    RUN_TEST(test_ic_direct_mapped);
+    RUN_TEST(test_ic_mega_transition);
 
     return TEST_RESULT();
 }

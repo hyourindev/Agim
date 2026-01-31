@@ -450,6 +450,11 @@ static inline bool check_jump_backward(CallFrame *frame, uint16_t offset) {
 #define USE_COMPUTED_GOTO 0
 #endif
 
+/* Reduction batching: check every 64 instructions instead of every one.
+ * This significantly reduces branch overhead in the hot dispatch loop.
+ * Must be a power of 2 for efficient bitmask operation. */
+#define REDUCTION_BATCH 64
+
 /* Main Execution Loop */
 
 void vm_load(VM *vm, Bytecode *code) {
@@ -568,12 +573,14 @@ VMResult vm_run(VM *vm) {
         [OP_ENUM_PAYLOAD] = &&op_slow,
     };
 
-    /* Dispatch macro: check reduction limit and jump to next opcode */
-    #define DISPATCH()                                      \
-        do {                                                \
-            if (++vm->reductions >= vm->reduction_limit)    \
-                return VM_YIELD;                            \
-            goto *dispatch_table[read_byte(frame)];         \
+    /* Dispatch macro: batched reduction check every REDUCTION_BATCH instructions */
+    #define DISPATCH()                                                      \
+        do {                                                                \
+            if ((++vm->reductions & (REDUCTION_BATCH - 1)) == 0) {          \
+                if (vm->reductions >= vm->reduction_limit)                  \
+                    return VM_YIELD;                                        \
+            }                                                               \
+            goto *dispatch_table[read_byte(frame)];                         \
         } while (0)
 
     /* Dispatch without reduction check (for chained operations) */

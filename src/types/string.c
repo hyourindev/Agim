@@ -40,6 +40,40 @@ Value *value_string(const char *str) {
     return value_string_n(str, strlen(str));
 }
 
+/* String Interning Cache
+ * Direct-mapped cache for commonly used strings to reduce allocation overhead.
+ * Uses hash-based indexing with 1024 entries for fast O(1) lookup.
+ */
+
+#define INTERN_CACHE_SIZE 1024
+static Value *intern_cache[INTERN_CACHE_SIZE];
+
+Value *string_intern(const char *str, size_t len) {
+    if (!str) return NULL;
+
+    uint64_t hash = agim_hash_string(str, len);
+    size_t idx = hash % INTERN_CACHE_SIZE;
+
+    /* Check cache hit */
+    Value *cached = intern_cache[idx];
+    if (cached &&
+        cached->type == VAL_STRING &&
+        cached->as.string->length == len &&
+        memcmp(cached->as.string->data, str, len) == 0) {
+        /* Increment refcount and return cached value */
+        atomic_fetch_add_explicit(&cached->refcount, 1, memory_order_relaxed);
+        return cached;
+    }
+
+    /* Cache miss: create new string and cache it */
+    Value *v = value_string_n(str, len);
+    if (v) {
+        /* Store in cache (may evict previous entry) */
+        intern_cache[idx] = v;
+    }
+    return v;
+}
+
 /* String Properties */
 
 size_t string_length(const Value *v) {

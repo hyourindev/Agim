@@ -55,6 +55,14 @@ Heap *heap_new(const GCConfig *config) {
     heap->sweep_prev = NULL;
     heap->step_budget = config ? config->incremental_step : 100;
 
+    /* Gray list for tri-color marking */
+    heap->gray_list = NULL;
+    heap->gray_count = 0;
+    heap->gray_capacity = 0;
+
+    /* Card table for write barriers */
+    memset(heap->card_table, 0, sizeof(heap->card_table));
+
     heap->generational_enabled = true;
     heap->young_count = 0;
     heap->old_count = 0;
@@ -88,6 +96,7 @@ void heap_free(Heap *heap) {
     }
 
     free(heap->remember_set);
+    free(heap->gray_list);
     free(heap);
 }
 
@@ -620,6 +629,98 @@ void gc_complete(Heap *heap, VM *vm) {
     }
 }
 
+/* Gray List for Tri-Color Marking */
+
+static bool gc_gray_push(Heap *heap, Value *value) {
+    if (!heap || !value) return false;
+
+    if (heap->gray_count >= heap->gray_capacity) {
+        size_t new_cap = heap->gray_capacity == 0 ? 64 : heap->gray_capacity * 2;
+        Value **new_list = realloc(heap->gray_list, sizeof(Value *) * new_cap);
+        if (!new_list) return false;
+        heap->gray_list = new_list;
+        heap->gray_capacity = new_cap;
+    }
+
+    heap->gray_list[heap->gray_count++] = value;
+    return true;
+}
+
+static Value *gc_gray_pop(Heap *heap) {
+    if (!heap || heap->gray_count == 0) return NULL;
+    return heap->gray_list[--heap->gray_count];
+}
+
+/* Incremental marking with work packets */
+bool gc_mark_increment(Heap *heap, size_t max_objects) {
+    if (!heap) return true;
+
+    size_t marked = 0;
+    while (heap->gray_count > 0 && marked < max_objects) {
+        Value *obj = gc_gray_pop(heap);
+        if (!obj || !value_is_marked(obj)) continue;
+
+        /* Scan object and push children to gray list */
+        switch (obj->type) {
+        case VAL_ARRAY: {
+            Array *arr = obj->as.array;
+            for (size_t i = 0; i < arr->length; i++) {
+                Value *child = arr->items[i];
+                if (child && !value_is_marked(child)) {
+                    value_set_marked(child, true);
+                    gc_gray_push(heap, child);
+                }
+            }
+            break;
+        }
+        case VAL_MAP: {
+            Map *map = obj->as.map;
+            for (size_t i = 0; i < map->capacity; i++) {
+                MapEntry *entry = map->buckets[i];
+                while (entry) {
+                    if (entry->value && !value_is_marked(entry->value)) {
+                        value_set_marked(entry->value, true);
+                        gc_gray_push(heap, entry->value);
+                    }
+                    entry = entry->next;
+                }
+            }
+            break;
+        }
+        case VAL_CLOSURE: {
+            Closure *closure = (Closure *)obj->as.closure;
+            for (size_t i = 0; i < closure->upvalue_count; i++) {
+                Upvalue *upvalue = closure->upvalues[i];
+                if (upvalue && !upvalue_is_open(upvalue)) {
+                    NanValue closed = upvalue->closed;
+                    if (nanbox_is_obj(closed)) {
+                        Value *child = (Value *)nanbox_as_obj(closed);
+                        if (child && !value_is_marked(child)) {
+                            value_set_marked(child, true);
+                            gc_gray_push(heap, child);
+                        }
+                    }
+                }
+            }
+            break;
+        }
+        default:
+            break;
+        }
+        marked++;
+    }
+
+    /* Return true if marking is complete (gray list empty) */
+    return heap->gray_count == 0;
+}
+
+/* Card Table Operations */
+
+static void gc_clear_card_table(Heap *heap) {
+    if (!heap) return;
+    memset(heap->card_table, 0, sizeof(heap->card_table));
+}
+
 /* Generational GC */
 
 static void remember_set_add(Heap *heap, Value *value) {
@@ -656,6 +757,9 @@ static void remember_set_clear(Heap *heap) {
         }
     }
     heap->remember_count = 0;
+
+    /* Clear card table as well */
+    gc_clear_card_table(heap);
 }
 
 void gc_write_barrier(Heap *heap, Value *container, Value *value) {
@@ -664,6 +768,10 @@ void gc_write_barrier(Heap *heap, Value *container, Value *value) {
 
     if (value_is_old_gen(container) && !value_is_old_gen(value)) {
         remember_set_add(heap, container);
+
+        /* Also mark the card as dirty for faster scanning */
+        size_t card_idx = ((uintptr_t)container / GC_CARD_SIZE) % GC_CARD_TABLE_SIZE;
+        heap->card_table[card_idx] = 1;
     }
 }
 

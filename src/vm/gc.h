@@ -33,6 +33,13 @@ typedef enum GCPhase {
     GC_SWEEPING,
 } GCPhase;
 
+/* Incremental marking constants */
+#define GC_MARK_WORK_PACKET_SIZE 256
+
+/* Card table for generational GC write barriers */
+#define GC_CARD_SIZE 512
+#define GC_CARD_TABLE_SIZE 4096
+
 /* Heap (Per-Block) */
 
 typedef struct Heap {
@@ -48,6 +55,14 @@ typedef struct Heap {
     Value *sweep_cursor;
     Value **sweep_prev;
     size_t step_budget;
+
+    /* Gray list for tri-color marking */
+    Value **gray_list;
+    size_t gray_count;
+    size_t gray_capacity;
+
+    /* Card table for efficient write barrier */
+    uint8_t card_table[GC_CARD_TABLE_SIZE];
 
     /* Generational GC state */
     bool generational_enabled;
@@ -97,6 +112,9 @@ void gc_collect_young(Heap *heap, VM *vm);
 void gc_collect_full(Heap *heap, VM *vm);
 void gc_write_barrier(Heap *heap, Value *container, Value *value);
 void gc_set_generational(Heap *heap, bool enabled);
+
+/* Incremental marking with gray list */
+bool gc_mark_increment(Heap *heap, size_t max_objects);
 
 /* Statistics */
 

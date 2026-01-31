@@ -78,6 +78,54 @@ void test_mailbox_limit(void) {
     ASSERT(!mailbox_push(&mailbox, overflow, 3));
     message_free(overflow);
 
+    /* Clean up */
+    while (!mailbox_empty(&mailbox)) {
+        Message *m = mailbox_pop(&mailbox);
+        if (m) message_free(m);
+    }
+
+    mailbox_free(&mailbox);
+}
+
+void test_mailbox_receive_timeout(void) {
+    Mailbox mailbox;
+    mailbox_init(&mailbox);
+
+    /* Try to receive from empty mailbox with short timeout */
+    Message *msg = mailbox_receive(&mailbox, 10);  /* 10ms timeout */
+    ASSERT(msg == NULL);  /* Should timeout and return NULL */
+
+    /* Now push a message and receive it */
+    Value *v = value_int(42);
+    Message *sent = message_new(1, v);
+    ASSERT(mailbox_push(&mailbox, sent, 100));
+
+    /* Receive should succeed immediately */
+    msg = mailbox_receive(&mailbox, 1000);  /* 1 second timeout */
+    ASSERT(msg != NULL);
+    ASSERT_EQ(42, msg->value->as.integer);
+    message_free(msg);
+
+    mailbox_free(&mailbox);
+}
+
+void test_mailbox_notify(void) {
+    Mailbox mailbox;
+    mailbox_init(&mailbox);
+
+    /* Just verify notify doesn't crash on empty mailbox */
+    mailbox_notify(&mailbox);
+
+    /* Push and notify */
+    Value *v = value_int(100);
+    Message *msg = message_new(1, v);
+    ASSERT(mailbox_push(&mailbox, msg, 100));
+    mailbox_notify(&mailbox);
+
+    /* Clean up */
+    Message *popped = mailbox_pop(&mailbox);
+    if (popped) message_free(popped);
+
     mailbox_free(&mailbox);
 }
 
@@ -419,6 +467,8 @@ int main(void) {
     RUN_TEST(test_mailbox_init);
     RUN_TEST(test_mailbox_push_pop);
     RUN_TEST(test_mailbox_limit);
+    RUN_TEST(test_mailbox_receive_timeout);
+    RUN_TEST(test_mailbox_notify);
 
     /* Block message tests */
     RUN_TEST(test_block_send_receive);

@@ -7,6 +7,7 @@
 
 #include "../test_common.h"
 #include "vm/value.h"
+#include "types/string.h"
 
 void test_nil(void) {
     Value *v = value_nil();
@@ -149,6 +150,34 @@ void test_copy(void) {
     value_free(copy);
 }
 
+/* Test string interning cache */
+void test_string_intern(void) {
+    const char *test_str = "hello_intern";
+    size_t len = strlen(test_str);
+
+    /* First intern should create a new string */
+    Value *s1 = string_intern(test_str, len);
+    ASSERT(s1 != NULL);
+    ASSERT(value_is_string(s1));
+    ASSERT_STR_EQ(test_str, s1->as.string->data);
+
+    /* Second intern of same string should hit cache */
+    Value *s2 = string_intern(test_str, len);
+    ASSERT(s2 != NULL);
+    ASSERT(value_is_string(s2));
+    ASSERT_STR_EQ(test_str, s2->as.string->data);
+
+    /* Different string should not collide (usually) */
+    const char *other_str = "different_string";
+    Value *s3 = string_intern(other_str, strlen(other_str));
+    ASSERT(s3 != NULL);
+    ASSERT_STR_EQ(other_str, s3->as.string->data);
+
+    value_free(s1);
+    value_free(s2);
+    value_free(s3);
+}
+
 int main(void) {
     RUN_TEST(test_nil);
     RUN_TEST(test_bool);
@@ -160,6 +189,7 @@ int main(void) {
     RUN_TEST(test_map);
     RUN_TEST(test_equality);
     RUN_TEST(test_copy);
+    RUN_TEST(test_string_intern);
 
     return TEST_RESULT();
 }

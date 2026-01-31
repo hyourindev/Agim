@@ -16,6 +16,7 @@
 #include <stdatomic.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <pthread.h>
 
 typedef struct Value Value;
 
@@ -65,6 +66,10 @@ typedef struct Mailbox {
 
     _Atomic(size_t) dropped_count;
     _Atomic(size_t) total_received;
+
+    /* Condition variable for blocking receive */
+    pthread_mutex_t cond_mutex;
+    pthread_cond_t cond;
 } Mailbox;
 
 /* Message Operations */
@@ -89,5 +94,9 @@ void mailbox_set_overflow_policy(Mailbox *mailbox, OverflowPolicy policy);
 OverflowPolicy mailbox_get_overflow_policy(const Mailbox *mailbox);
 size_t mailbox_dropped_count(const Mailbox *mailbox);
 size_t mailbox_bytes_used(const Mailbox *mailbox);
+
+/* Blocking receive with timeout (returns NULL on timeout) */
+Message *mailbox_receive(Mailbox *mailbox, uint64_t timeout_ms);
+void mailbox_notify(Mailbox *mailbox);
 
 #endif /* AGIM_RUNTIME_MAILBOX_H */

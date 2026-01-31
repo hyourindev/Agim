@@ -34,6 +34,7 @@ typedef struct TimerEntry {
 typedef struct TimerBucket {
     TimerEntry *head;
     TimerEntry *tail;
+    pthread_mutex_t lock;  /* Per-bucket lock for parallel timer operations */
 } TimerBucket;
 
 typedef struct TimerConfig {

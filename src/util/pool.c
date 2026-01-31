@@ -130,9 +130,18 @@ PoolStats pool_stats(const MemoryPool *pool) {
 
 /* Global Pools */
 
-#define NUM_GLOBAL_POOLS 6
+/* Pool sizes optimized for common allocation patterns:
+ * 24: Cons cell, small closure
+ * 48: String header
+ * 64: Small array
+ * 96: Map entry
+ * 128: Stack frame
+ * 256: Medium objects
+ * 512: Large objects
+ */
+#define NUM_GLOBAL_POOLS 7
 static MemoryPool global_pools[NUM_GLOBAL_POOLS];
-static const size_t pool_sizes[NUM_GLOBAL_POOLS] = {16, 32, 64, 128, 256, 512};
+static const size_t pool_sizes[NUM_GLOBAL_POOLS] = {24, 48, 64, 96, 128, 256, 512};
 static bool pools_initialized = false;
 
 void pools_init(void) {

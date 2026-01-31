@@ -10,10 +10,13 @@
  * SPDX-License-Identifier: MIT
  */
 
+#define _POSIX_C_SOURCE 200809L
+
 #include "runtime/mailbox.h"
 #include "vm/value.h"
 
 #include <stdlib.h>
+#include <time.h>
 
 /* Message Operations */
 
@@ -55,6 +58,10 @@ void mailbox_init(Mailbox *mailbox) {
     atomic_store_explicit(&mailbox->current_bytes, 0, memory_order_relaxed);
     atomic_store_explicit(&mailbox->dropped_count, 0, memory_order_relaxed);
     atomic_store_explicit(&mailbox->total_received, 0, memory_order_relaxed);
+
+    /* Initialize condition variable for blocking receive */
+    pthread_mutex_init(&mailbox->cond_mutex, NULL);
+    pthread_cond_init(&mailbox->cond, NULL);
 }
 
 void mailbox_free(Mailbox *mailbox) {
@@ -77,6 +84,10 @@ void mailbox_free(Mailbox *mailbox) {
     atomic_store_explicit(&mailbox->tail, &mailbox->stub, memory_order_relaxed);
     atomic_store_explicit(&mailbox->count, 0, memory_order_relaxed);
     atomic_store_explicit(&mailbox->current_bytes, 0, memory_order_relaxed);
+
+    /* Destroy condition variable */
+    pthread_cond_destroy(&mailbox->cond);
+    pthread_mutex_destroy(&mailbox->cond_mutex);
 }
 
 bool mailbox_push(Mailbox *mailbox, Message *msg, size_t max_size) {
@@ -271,6 +282,9 @@ SendResult mailbox_push_ex(Mailbox *mailbox, Message *msg) {
     atomic_fetch_add_explicit(&mailbox->current_bytes, msg_size, memory_order_relaxed);
     atomic_fetch_add_explicit(&mailbox->total_received, 1, memory_order_relaxed);
 
+    /* Notify any waiting receivers */
+    mailbox_notify(mailbox);
+
     return SEND_OK;
 }
 
@@ -300,4 +314,47 @@ size_t mailbox_dropped_count(const Mailbox *mailbox) {
 size_t mailbox_bytes_used(const Mailbox *mailbox) {
     if (!mailbox) return 0;
     return atomic_load_explicit(&mailbox->current_bytes, memory_order_relaxed);
+}
+
+/* Blocking Receive with Timeout */
+
+void mailbox_notify(Mailbox *mailbox) {
+    if (!mailbox) return;
+    pthread_mutex_lock(&mailbox->cond_mutex);
+    pthread_cond_signal(&mailbox->cond);
+    pthread_mutex_unlock(&mailbox->cond_mutex);
+}
+
+Message *mailbox_receive(Mailbox *mailbox, uint64_t timeout_ms) {
+    if (!mailbox) return NULL;
+
+    /* First try non-blocking pop */
+    Message *msg = mailbox_pop(mailbox);
+    if (msg) return msg;
+
+    /* No message available, wait with timeout */
+    pthread_mutex_lock(&mailbox->cond_mutex);
+
+    struct timespec deadline;
+    clock_gettime(CLOCK_REALTIME, &deadline);
+    deadline.tv_sec += timeout_ms / 1000;
+    deadline.tv_nsec += (timeout_ms % 1000) * 1000000;
+    if (deadline.tv_nsec >= 1000000000) {
+        deadline.tv_sec++;
+        deadline.tv_nsec -= 1000000000;
+    }
+
+    while (mailbox_empty(mailbox)) {
+        int rc = pthread_cond_timedwait(&mailbox->cond, &mailbox->cond_mutex, &deadline);
+        if (rc != 0) {
+            /* Timeout or error */
+            pthread_mutex_unlock(&mailbox->cond_mutex);
+            return NULL;
+        }
+    }
+
+    pthread_mutex_unlock(&mailbox->cond_mutex);
+
+    /* Try to pop again after wakeup */
+    return mailbox_pop(mailbox);
 }

@@ -35,31 +35,26 @@ bool ic_lookup(InlineCache *ic, Value *map, const char *key, Value **result) {
         return false;
     }
 
-    if (ic->state == IC_MEGA) {
-        return false;
-    }
-
-    if (ic->state == IC_UNINITIALIZED) {
+    if (ic->state == IC_MEGA || ic->state == IC_UNINITIALIZED) {
         return false;
     }
 
     uint64_t shape = ic_shape_id(map);
     Map *m = map->as.map;
 
-    for (uint8_t i = 0; i < ic->count; i++) {
-        if (ic->entries[i].shape_id == shape) {
-            size_t bucket = ic->entries[i].bucket;
-            if (bucket < m->capacity) {
-                MapEntry *entry = m->buckets[bucket];
-                while (entry) {
-                    if (strcmp(entry->key->data, key) == 0) {
-                        *result = entry->value;
-                        return true;
-                    }
-                    entry = entry->next;
+    /* O(1) direct-mapped cache lookup using shape hash */
+    size_t idx = IC_HASH(shape) & IC_CACHE_MASK;
+    if (ic->entries[idx].shape_id == shape) {
+        size_t bucket = ic->entries[idx].bucket;
+        if (bucket < m->capacity) {
+            MapEntry *entry = m->buckets[bucket];
+            while (entry) {
+                if (strcmp(entry->key->data, key) == 0) {
+                    *result = entry->value;
+                    return true;
                 }
+                entry = entry->next;
             }
-            return false;
         }
     }
 
@@ -75,26 +70,32 @@ void ic_update(InlineCache *ic, Value *map, size_t bucket) {
 
     uint64_t shape = ic_shape_id(map);
 
-    for (uint8_t i = 0; i < ic->count; i++) {
-        if (ic->entries[i].shape_id == shape) {
-            ic->entries[i].bucket = bucket;
-            return;
-        }
+    /* O(1) direct-mapped cache: hash shape to get slot index */
+    size_t idx = IC_HASH(shape) & IC_CACHE_MASK;
+
+    /* Check if this slot already has the same shape */
+    if (ic->entries[idx].shape_id == shape) {
+        ic->entries[idx].bucket = bucket;
+        return;
     }
 
-    if (ic->count < IC_MAX_ENTRIES) {
-        ic->entries[ic->count].shape_id = shape;
-        ic->entries[ic->count].bucket = bucket;
-        ic->count++;
+    /* New shape: track total unique shapes seen */
+    ic->count++;
 
-        if (ic->count == 1) {
-            ic->state = IC_MONO;
-        } else {
-            ic->state = IC_POLY;
-        }
+    /* Update cache state based on shapes seen */
+    if (ic->count == 1) {
+        ic->state = IC_MONO;
+    } else if (ic->count <= IC_MAX_ENTRIES) {
+        ic->state = IC_POLY;
     } else {
+        /* More than IC_MAX_ENTRIES unique shapes = megamorphic */
         ic->state = IC_MEGA;
+        return;
     }
+
+    /* Store in direct-mapped slot (may evict previous entry) */
+    ic->entries[idx].shape_id = shape;
+    ic->entries[idx].bucket = bucket;
 }
 
 /* Statistics (Debug) */

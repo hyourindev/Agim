@@ -99,12 +99,79 @@ void test_gc_collect(void) {
     heap_free(heap);
 }
 
+/* Test gray list incremental marking */
+void test_gc_mark_increment(void) {
+    GCConfig config = gc_config_default();
+    Heap *heap = heap_new(&config);
+    VM *vm = vm_new();
+
+    /* Allocate some values to create work for incremental marking */
+    Value *arr = heap_alloc(heap, VAL_ARRAY);
+    Value *v1 = heap_alloc(heap, VAL_INT);
+    Value *v2 = heap_alloc(heap, VAL_INT);
+
+    ASSERT(heap != NULL);
+    ASSERT(arr != NULL);
+
+    /* Start incremental GC */
+    bool started = gc_start_incremental(heap, vm);
+    ASSERT(started);
+    ASSERT(gc_in_progress(heap));
+
+    /* Complete the incremental GC */
+    gc_complete(heap, vm);
+    ASSERT(!gc_in_progress(heap));
+
+    /* Mark increment with empty gray list should return true (complete) */
+    bool complete = gc_mark_increment(heap, 100);
+    ASSERT(complete);  /* No work to do */
+
+    value_release(arr);
+    value_release(v1);
+    value_release(v2);
+
+    vm_free(vm);
+    heap_free(heap);
+}
+
+/* Test card table in write barrier */
+void test_gc_card_table(void) {
+    GCConfig config = gc_config_default();
+    Heap *heap = heap_new(&config);
+    VM *vm = vm_new();
+
+    /* Enable generational GC */
+    gc_set_generational(heap, true);
+
+    /* Allocate and promote an old object */
+    Value *old_arr = heap_alloc(heap, VAL_ARRAY);
+    value_set_old_gen(old_arr);
+
+    /* Allocate a young object */
+    Value *young_val = heap_alloc(heap, VAL_INT);
+
+    /* Write barrier should mark the card as dirty */
+    gc_write_barrier(heap, old_arr, young_val);
+
+    /* Verify the write barrier recorded the reference */
+    /* (card table is internal but we can check remember set) */
+    ASSERT(value_is_remembered(old_arr));
+
+    value_release(old_arr);
+    value_release(young_val);
+
+    vm_free(vm);
+    heap_free(heap);
+}
+
 int main(void) {
     RUN_TEST(test_heap_create);
     RUN_TEST(test_heap_alloc);
     RUN_TEST(test_heap_stats);
     RUN_TEST(test_gc_mark);
     RUN_TEST(test_gc_collect);
+    RUN_TEST(test_gc_mark_increment);
+    RUN_TEST(test_gc_card_table);
 
     return TEST_RESULT();
 }
