@@ -148,8 +148,8 @@ TLSSocket *tls_connect(const char *host, uint16_t port,
     /* Set the I/O buffer */
     br_ssl_engine_set_buffer(&sock->sc.eng, sock->iobuf, sizeof(sock->iobuf), 1);
 
-    /* Reset client context for new handshake with SNI hostname */
-    br_ssl_client_reset(&sock->sc, host, 0);
+    /* Reset client context for new handshake with SNI hostname and hostname verification */
+    br_ssl_client_reset(&sock->sc, host, 1);
 
     /* Initialize simplified I/O wrapper */
     br_sslio_init(&sock->ioc, &sock->sc.eng,

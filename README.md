@@ -1,19 +1,17 @@
 # Agim
 
-> **WIP** - This project is under active development. The `.im` implementation language works, but the `.ag` declarative agent DSL is not yet implemented.
+> **Work in Progress** - This project is under active development. The `.im` implementation language works, but the `.ag` declarative agent DSL is not yet implemented. APIs may change.
 
-**Build agents. Run anywhere.**
+**The Erlang for AI Agents** - Build fault-tolerant, distributed AI agent systems.
 
-First 
+Agim is an Erlang-inspired language and runtime designed specifically for AI agents:
 
-## File Extensions
-
-| Extension | Description |
-|-----------|-------------|
-| `.ag` | Agent workflows - declarative DSL (planned) |
-| `.im` | Implementations - imperative tool code (current) |
-
-The name **Agim** splits into its extensions: **AG** + **IM**
+- **Lightweight processes** - Millions of concurrent agent processes (like Erlang)
+- **Message passing** - Isolated agents communicate via async mailboxes
+- **Fault tolerance** - "Let it crash" philosophy with supervisor trees
+- **Capability-based security** - Fine-grained permission control for untrusted code
+- **Built-in networking** - HTTP, WebSocket, TLS, TCP, SSE out of the box
+- **LLM integration** - First-class tool calling and inference callbacks
 
 ## Quick Start
 
@@ -26,356 +24,725 @@ cmake -B build && cmake --build build
 
 # Run tests
 cd build && ctest --output-on-failure
+
+# Disassemble bytecode (see what the compiler generates)
+./build/agim -d examples/01_hello.im
 ```
 
-## Language Features
+## File Extensions
 
-### Data Types
-- `nil`, `true`, `false` - Primitives
-- `42`, `3.14` - Numbers (int and float)
-- `"hello"` - Strings
-- `[1, 2, 3]` - Arrays
-- `{"key": "value"}` - Maps
+| Extension | Description |
+|-----------|-------------|
+| `.im` | **Implementations** - Imperative tool/agent code (working) |
+| `.ag` | **Agent workflows** - Declarative DSL (planned) |
 
-### Variables & Functions
+The name **Agim** splits into its extensions: **AG** + **IM**
+
+---
+
+## The Language
+
+Agim's `.im` language is a statically-aware, dynamically-typed language with:
+- Erlang-style concurrency (processes, message passing)
+- Rust-style error handling (Result/Option types)
+- ML-style pattern matching
+- First-class functions and closures
+- Structs and algebraic data types (enums with payloads)
+
+### Primitives
+
 ```
-let x = 42
-let name = "Agim"
+nil                     // Null value
+true, false             // Booleans
+42                      // Integers (64-bit signed)
+3.14159                 // Floats (64-bit double)
+"hello, world"          // Strings (UTF-8, immutable)
+```
 
-fn greet(who) {
-    return "Hello, " + who + "!"
+### Collections
+
+```
+// Arrays - dynamic, heterogeneous
+let nums = [1, 2, 3, 4, 5]
+let mixed = [1, "two", true, [3, 4]]
+
+// Maps - string keys, any values
+let person = {
+    "name": "Alice",
+    "age": 30,
+    "tags": ["developer", "rust"]
 }
+
+// Access
+nums[0]              // 1
+person["name"]       // "Alice"
+person.name          // "Alice" (dot syntax for string keys)
 ```
 
-### Control Flow
+### Variables
+
 ```
-if x > 0 {
-    print("positive")
-} else {
-    print("non-positive")
-}
-
-while x > 0 {
-    x = x - 1
-}
-
-for item in items {
-    print(item)
-}
+let x = 42              // Immutable binding
+let mut counter = 0     // Mutable binding
+counter = counter + 1   // Mutation allowed
 ```
 
-### Tools (Agent-Exposed Functions)
+### Functions
+
 ```
-@tool(description: "Add two numbers")
+// Basic function
 fn add(a, b) {
     return a + b
 }
 
-// Or using the tool keyword
-tool add(a: number, b: number) -> number {
-    return a + b
+// With type annotations (checked at compile time)
+fn greet(name: string) -> string {
+    return "Hello, " + name + "!"
+}
+
+// Default parameters
+fn connect(host: string, port: int = 8080) {
+    // ...
+}
+
+// First-class functions
+let double = fn(x) { return x * 2 }
+let nums = [1, 2, 3]
+// map(nums, double)  // [2, 4, 6]
+```
+
+### Closures
+
+```
+fn make_counter() {
+    let mut count = 0
+    return fn() {
+        count = count + 1
+        return count
+    }
+}
+
+let counter = make_counter()
+counter()  // 1
+counter()  // 2
+counter()  // 3
+```
+
+### Control Flow
+
+```
+// If-else (expression, returns value)
+let status = if x > 0 { "positive" } else { "non-positive" }
+
+// While loops
+while condition {
+    do_something()
+}
+
+// For-in loops (arrays)
+for item in items {
+    print(item)
+}
+
+// Range loops
+for i in 0..10 {       // 0 to 9 (exclusive end)
+    print(i)
+}
+
+for i in 0..=10 {      // 0 to 10 (inclusive end)
+    print(i)
+}
+
+// Break and continue
+for i in 0..100 {
+    if i == 50 { break }
+    if i % 2 == 0 { continue }
+    print(i)
+}
+```
+
+### Structs
+
+```
+struct Point {
+    x: int,
+    y: int
+}
+
+struct Person {
+    name: string,
+    age: int,
+    address: Address    // Nested structs
+}
+
+struct Address {
+    city: string,
+    zip: string
+}
+
+// Construction
+let p = Point { x: 10, y: 20 }
+let alice = Person {
+    name: "Alice",
+    age: 30,
+    address: Address { city: "NYC", zip: "10001" }
+}
+
+// Access
+print(p.x)                    // 10
+print(alice.address.city)     // "NYC"
+```
+
+### Enums (Algebraic Data Types)
+
+```
+// Simple enum
+enum Color {
+    Red,
+    Green,
+    Blue
+}
+
+// Enum with payloads (tagged unions)
+enum Shape {
+    Circle(float),                    // radius
+    Rectangle(float, float),          // width, height
+    Point                             // no payload
+}
+
+enum Option<T> {
+    Some(T),
+    None
+}
+
+enum Result<T, E> {
+    Ok(T),
+    Err(E)
+}
+
+// Construction
+let color = Color.Red
+let shape = Shape.Circle(5.0)
+let maybe = Option.Some(42)
+```
+
+### Pattern Matching
+
+```
+// Match on enums
+match shape {
+    Shape.Circle(r) => print("Circle with radius " + str(r)),
+    Shape.Rectangle(w, h) => print("Rectangle " + str(w) + "x" + str(h)),
+    Shape.Point => print("Just a point")
+}
+
+// Match on Result types
+match fetch_data(url) {
+    Ok(data) => process(data),
+    Err(e) => print("Error: " + e)
+}
+
+// Match is an expression
+let area = match shape {
+    Shape.Circle(r) => 3.14159 * r * r,
+    Shape.Rectangle(w, h) => w * h,
+    Shape.Point => 0.0
+}
+
+// Guards (when clauses)
+match value {
+    n when n > 0 => "positive",
+    n when n < 0 => "negative",
+    _ => "zero"
 }
 ```
 
 ### Result Types (Error Handling)
+
+Agim uses Result types instead of exceptions:
+
 ```
-fn safe_divide(a, b) {
-    if b == 0 {
+fn divide(a: float, b: float) -> Result<float, string> {
+    if b == 0.0 {
         return err("division by zero")
     }
     return ok(a / b)
 }
 
-let result = safe_divide(10, 2)
-match result {
-    ok(val) => print("Result: " + str(val))
-    err(e) => print("Error: " + e)
+// Check and unwrap
+let result = divide(10.0, 2.0)
+if is_ok(result) {
+    print("Result: " + str(unwrap(result)))
 }
 
-// Or use is_ok/is_err/unwrap
-if is_ok(result) {
-    print(unwrap(result))
+// With default
+let value = unwrap_or(divide(10.0, 0.0), 0.0)  // Returns 0.0 on error
+
+// Pattern matching (preferred)
+match divide(10.0, 2.0) {
+    Ok(v) => print("Got: " + str(v)),
+    Err(e) => print("Error: " + e)
 }
 ```
 
 ### Modules
+
 ```
 // math.im
 export fn double(x) { return x * 2 }
-export let PI = 314
+export fn square(x) { return x * x }
+export let PI = 3.14159
+
+// Private (not exported)
+fn helper() { ... }
 
 // main.im
 import "math.im"
+
 print(double(5))    // 10
-print(PI)           // 314
+print(PI)           // 3.14159
 ```
+
+### Tools (Agent-Callable Functions)
+
+Tools are functions exposed to AI agents for tool calling:
+
+```
+// Using decorator syntax
+@tool(description: "Search the web for information")
+fn search(query: string) -> Result<[string], string> {
+    return http_get("https://api.search.com?q=" + query)
+}
+
+// Using tool keyword
+tool calculate(
+    expression: string,
+    description: "Evaluate a math expression"
+) -> Result<float, string> {
+    // Implementation
+}
+
+// List all registered tools (for LLM function calling)
+let tools = list_tools()  // Returns tool schemas
+```
+
+### Concurrency (Actor Model)
+
+Agim uses Erlang-style processes and message passing:
+
+```
+// Spawn a new process
+let pid = spawn(fn() {
+    // This runs in a separate process
+    let msg = receive()  // Block until message arrives
+    print("Got: " + str(msg))
+})
+
+// Send message to process
+send(pid, "Hello from main!")
+
+// Get own process ID
+let me = self()
+
+// Yield execution to other processes
+yield()
+
+// Example: ping-pong
+let pong = spawn(fn() {
+    while true {
+        let msg = receive()
+        print("Pong got: " + str(msg))
+        send(msg.from, "pong")
+    }
+})
+
+send(pong, { "type": "ping", "from": self() })
+let response = receive()  // "pong"
+```
+
+---
+
+## The Virtual Machine
+
+Agim compiles to bytecode and runs on a custom VM with two execution modes:
+
+### Stack-Based VM (`vm.c`)
+
+The primary interpreter uses a stack-based architecture:
+
+```
+                    ┌─────────────────┐
+                    │   Call Stack    │
+                    ├─────────────────┤
+                    │ Frame 2 (current)│ ← fp (frame pointer)
+                    │   - locals      │
+                    │   - operand stack│ ← sp (stack pointer)
+                    ├─────────────────┤
+                    │ Frame 1         │
+                    ├─────────────────┤
+                    │ Frame 0 (main)  │
+                    └─────────────────┘
+```
+
+**Execution model:**
+- **Bytecode format**: Variable-length instructions (1-3 bytes typically)
+- **Operand stack**: All operations push/pop from the stack
+- **Call frames**: Each function call creates a new frame with its own locals
+- **Constants pool**: Literals stored separately, referenced by index
+
+**Example compilation:**
+```
+Source:   let x = 1 + 2
+
+Bytecode: OP_CONST 0      ; Push constant[0] (1)
+          OP_CONST 1      ; Push constant[1] (2)
+          OP_ADD          ; Pop two, push sum
+          OP_SET_LOCAL 0  ; Store in local slot 0
+```
+
+### Register-Based VM (`regvm.c`)
+
+An optimized interpreter using registers instead of a stack:
+
+```
+                    ┌─────────────────┐
+                    │   Registers     │
+                    │ r0  r1  r2  ... │  (256 registers per frame)
+                    ├─────────────────┤
+                    │   Instruction   │
+                    │   [op|rd|rs1|rs2]│  (32-bit packed)
+                    └─────────────────┘
+```
+
+**Benefits:**
+- Fewer memory accesses (no stack push/pop overhead)
+- Better instruction-level parallelism
+- Computed goto dispatch (faster than switch)
+
+**Instruction format:**
+```c
+// 32-bit instruction: [op:8][rd:8][rs1:8][rs2:8]
+typedef struct {
+    uint8_t op;    // Opcode
+    uint8_t rd;    // Destination register
+    uint8_t rs1;   // Source register 1
+    uint8_t rs2;   // Source register 2 / immediate
+} RegInstr;
+
+// Example: ADD r0, r1, r2  (r0 = r1 + r2)
+```
+
+### Value Representation (NaN-Boxing)
+
+Values are stored as 64-bit NaN-boxed doubles for efficiency:
+
+```c
+// NaN-boxing layout (64 bits):
+//
+// Doubles:  Normal IEEE 754 double values
+// Tagged:   Use NaN space to encode other types
+//
+//   [1][11111111111][quiet][tag:3][payload:48]
+//        exponent    NaN bit  type   value
+//
+// Tags:
+//   000 = pointer (to heap object)
+//   001 = nil
+//   010 = false
+//   011 = true
+//   100 = integer (48-bit signed)
+```
+
+**Benefits:**
+- Doubles stored directly (no boxing overhead for math)
+- Small integers stored inline (no allocation)
+- Pointers fit in 48 bits (x86-64 canonical addresses)
+- Single 64-bit comparison for type checking
+
+### Garbage Collection
+
+Agim uses a **mark-sweep garbage collector** with generational hints:
+
+```
+                    ┌─────────────┐
+      Roots ────────►│  Mark Phase │
+   (stack, globals)  │  (traverse) │
+                    └──────┬──────┘
+                           │
+                           ▼
+                    ┌─────────────┐
+                    │ Sweep Phase │
+                    │ (free dead) │
+                    └─────────────┘
+```
+
+**Features:**
+- **Write barriers**: Track cross-generation references
+- **Incremental marking**: Reduce pause times
+- **Reference counting**: For cycle-free structures (strings)
+- **Copy-on-Write**: Shared structures until mutation
+
+### Process Scheduler
+
+The scheduler implements preemptive multitasking:
+
+```
+                    ┌─────────────────────────────────────┐
+                    │            Scheduler                │
+                    │  ┌─────────────────────────────┐   │
+                    │  │      Run Queue (global)      │   │
+                    │  └─────────────────────────────┘   │
+                    │         │           │              │
+                    │         ▼           ▼              │
+                    │   ┌─────────┐ ┌─────────┐         │
+                    │   │ Worker 0│ │ Worker 1│  ...    │
+                    │   │ (thread)│ │ (thread)│         │
+                    │   └────┬────┘ └────┬────┘         │
+                    │        │           │              │
+                    │   ┌────▼────┐ ┌────▼────┐         │
+                    │   │ Deque 0 │ │ Deque 1 │         │
+                    │   │(local q)│ │(local q)│         │
+                    │   └─────────┘ └─────────┘         │
+                    └─────────────────────────────────────┘
+```
+
+**Features:**
+- **Reduction-based preemption**: Each process gets N reductions before yielding
+- **Work-stealing**: Idle workers steal from busy workers' deques
+- **Lock-free mailboxes**: MPSC queues for message passing
+- **Timer wheel**: Efficient timeout handling
+
+### Memory Allocators
+
+Multiple allocation strategies for different use cases:
+
+| Allocator | Use Case | Thread Safety |
+|-----------|----------|---------------|
+| `agim_alloc` | General allocation | Yes (malloc) |
+| `worker_alloc` | Hot-path VM allocations | Thread-local (no locks) |
+| `pool_alloc` | Fixed-size blocks | Mutex + free list |
+
+---
+
+## Architecture
+
+```
+agim/
+├── src/
+│   ├── vm/              # Virtual Machine
+│   │   ├── vm.c         # Stack-based bytecode interpreter
+│   │   ├── regvm.c      # Register-based VM (optimized)
+│   │   ├── bytecode.c   # Opcode definitions
+│   │   ├── value.c      # Value representation
+│   │   ├── nanbox.h     # NaN-boxing implementation
+│   │   ├── gc.c         # Garbage collector
+│   │   └── ic.c         # Inline caching for fast property access
+│   │
+│   ├── lang/            # Language Frontend
+│   │   ├── lexer.c      # Tokenizer (hand-written)
+│   │   ├── parser.c     # Recursive descent parser
+│   │   ├── compiler.c   # Bytecode code generator
+│   │   ├── typechecker.c# Static type checking (optional annotations)
+│   │   └── module.c     # Module system and imports
+│   │
+│   ├── runtime/         # Process Runtime (Erlang-style)
+│   │   ├── scheduler.c  # Preemptive process scheduler
+│   │   ├── worker.c     # Worker threads with work-stealing
+│   │   ├── block.c      # Process ("block") management
+│   │   ├── mailbox.c    # Lock-free MPSC message queues
+│   │   ├── supervisor.c # Supervisor trees for fault tolerance
+│   │   ├── capability.c # Capability-based security
+│   │   ├── timer.c      # Hierarchical timer wheel
+│   │   ├── hotreload.c  # Hot code reloading
+│   │   ├── checkpoint.c # Process state checkpointing
+│   │   └── serialize.c  # Value serialization
+│   │
+│   ├── net/             # Networking Stack
+│   │   ├── tcp.c        # TCP client/server
+│   │   ├── tls.c        # TLS/SSL via BearSSL
+│   │   ├── http.c       # HTTP client
+│   │   ├── http_parser.c# HTTP protocol parser
+│   │   ├── websocket.c  # WebSocket client (RFC 6455)
+│   │   ├── sse.c        # Server-Sent Events
+│   │   └── url.c        # URL parsing
+│   │
+│   ├── dist/            # Distribution
+│   │   └── node.c       # Distributed node communication
+│   │
+│   ├── types/           # Data Types
+│   │   ├── array.c      # Dynamic arrays (COW)
+│   │   ├── map.c        # Hash maps (COW)
+│   │   ├── string.c     # Immutable strings
+│   │   ├── vector.c     # Numeric vectors
+│   │   └── closure.c    # Closures and upvalues
+│   │
+│   ├── builtin/         # Built-in Functions
+│   │   ├── tools.c      # Tool registry for agents
+│   │   ├── memory.c     # Persistent memory store
+│   │   └── inference.c  # LLM inference callbacks
+│   │
+│   └── util/            # Utilities
+│       ├── alloc.c      # Memory allocation wrappers
+│       ├── pool.c       # Pool allocators
+│       └── worker_alloc.c # Thread-local allocation
+│
+├── tests/               # Test suite
+├── bench/               # Benchmarks
+├── examples/            # Example programs (55+)
+└── vendor/              # Dependencies (BearSSL)
+```
+
+---
+
+## Security Model
+
+Agim is designed to run **untrusted agent code** safely. Every process runs in a sandbox with explicit capabilities:
+
+| Capability | Description | Default |
+|------------|-------------|---------|
+| `CAP_SPAWN` | Create new processes | Denied |
+| `CAP_SEND` | Send messages to other processes | Denied |
+| `CAP_RECEIVE` | Receive messages | Denied |
+| `CAP_HTTP` | Make HTTP/HTTPS requests | Denied |
+| `CAP_FILE_READ` | Read files from disk | Denied |
+| `CAP_FILE_WRITE` | Write files to disk | Denied |
+| `CAP_SHELL` | Execute shell commands | Denied |
+| `CAP_EXEC` | Execute external processes | Denied |
+| `CAP_ENV` | Access environment variables | Denied |
+| `CAP_MEMORY` | Use persistent memory store | Denied |
+| `CAP_INFER` | Call LLM inference | Denied |
+| `CAP_WEBSOCKET` | WebSocket connections | Denied |
+
+```c
+// Capability enforcement in VM
+if (!block_has_cap(vm->block, CAP_SHELL)) {
+    vm_set_error(vm, "shell() requires CAP_SHELL capability");
+    return VM_ERROR_PERMISSION;
+}
+```
+
+---
 
 ## Built-in Functions
 
 ### Core
 | Function | Description |
 |----------|-------------|
-| `print(x)` | Print a value |
+| `print(x)` | Print to stdout |
 | `print_err(x)` | Print to stderr |
 | `len(x)` | Length of string/array/map |
-| `type(x)` | Get type name as string |
-| `keys(map)` | Get array of map keys |
-| `push(arr, val)` | Push value to array |
-| `pop(arr)` | Pop value from array |
+| `type(x)` | Type name as string |
+| `str(x)`, `int(x)`, `float(x)` | Type conversions |
+
+### Collections
+| Function | Description |
+|----------|-------------|
+| `push(arr, val)` | Append to array |
+| `pop(arr)` | Remove last element |
+| `keys(map)` | Get map keys as array |
 | `slice(x, start, end)` | Slice string or array |
-| `str(x)` | Convert to string |
-| `int(x)` | Convert to integer |
-| `float(x)` | Convert to float |
 
-### Result Types
+### Strings
 | Function | Description |
 |----------|-------------|
-| `ok(value)` | Create success Result |
-| `err(message)` | Create error Result |
-| `is_ok(result)` | Check if Result is ok |
-| `is_err(result)` | Check if Result is err |
-| `unwrap(result)` | Get value (panics on err) |
-| `unwrap_or(result, default)` | Get value or default |
-
-### String Operations
-| Function | Description |
-|----------|-------------|
-| `split(str, delim)` | Split string into array |
+| `split(str, delim)` | Split into array |
 | `join(arr, delim)` | Join array into string |
-| `trim(str)` | Trim whitespace |
-| `upper(str)` | Convert to uppercase |
-| `lower(str)` | Convert to lowercase |
+| `trim(str)` | Remove whitespace |
+| `upper(str)`, `lower(str)` | Case conversion |
 | `replace(str, old, new)` | Replace all occurrences |
-| `contains(str, sub)` | Check if contains substring |
-| `starts_with(str, prefix)` | Check prefix |
-| `ends_with(str, suffix)` | Check suffix |
-| `index_of(str, sub)` | Find substring index (-1 if not found) |
-| `char_at(str, idx)` | Get character at index |
+| `contains(str, sub)` | Check substring |
+| `starts_with`, `ends_with` | Check prefix/suffix |
 
-### Math
+### Results
 | Function | Description |
 |----------|-------------|
-| `abs(n)` | Absolute value |
-| `floor(n)` | Floor (round down) |
-| `ceil(n)` | Ceiling (round up) |
-| `round(n)` | Round to nearest |
-| `sqrt(n)` | Square root |
-| `pow(base, exp)` | Power/exponent |
-| `min(a, b)` | Minimum of two values |
-| `max(a, b)` | Maximum of two values |
-| `random()` | Random float 0-1 |
-| `random_int(min, max)` | Random integer in range |
+| `ok(value)` | Create Ok result |
+| `err(message)` | Create Err result |
+| `is_ok(r)`, `is_err(r)` | Check result type |
+| `unwrap(r)` | Get value (panics on Err) |
+| `unwrap_or(r, default)` | Get value or default |
 
-### Time
+### I/O & Network
 | Function | Description |
 |----------|-------------|
-| `time()` | Current timestamp in milliseconds |
-| `time_format(ts, fmt)` | Format timestamp (strftime format) |
-| `sleep(ms)` | Sleep for milliseconds |
+| `read_file(path)` | Read file contents |
+| `write_file(path, data)` | Write to file |
+| `http_get(url)` | HTTP GET request |
+| `http_post(url, body)` | HTTP POST request |
+| `ws_connect(url)` | WebSocket connection |
+| `shell(cmd)` | Execute shell command |
 
-### JSON
+### Concurrency
 | Function | Description |
 |----------|-------------|
-| `json_parse(str)` | Parse JSON string to value |
-| `json_encode(val)` | Encode value to JSON string |
+| `spawn(fn)` | Create new process |
+| `send(pid, msg)` | Send message |
+| `receive()` | Wait for message |
+| `self()` | Get own PID |
+| `yield()` | Yield execution |
 
-### Base64
+### Utilities
 | Function | Description |
 |----------|-------------|
-| `base64_encode(str)` | Encode to base64 |
-| `base64_decode(str)` | Decode from base64 |
-
-### Environment
-| Function | Description |
-|----------|-------------|
-| `env_get(name)` | Get environment variable |
-| `env_set(name, val)` | Set environment variable |
-
-### File I/O
-| Function | Description |
-|----------|-------------|
-| `read_file(path)` | Read file contents (returns Result) |
-| `write_file(path, content)` | Write to file (returns Result) |
-| `file_exists(path)` | Check if file exists |
-| `read_lines(path)` | Read file as array of lines (returns Result) |
-| `read_stdin()` | Read from standard input |
-
-### HTTP & Shell
-| Function | Description |
-|----------|-------------|
-| `http_get(url)` | HTTP GET request (returns Result) |
-| `http_post(url, body)` | HTTP POST request (returns Result) |
-| `shell(command)` | Execute shell command (returns Result) |
-
-### WebSocket
-| Function | Description |
-|----------|-------------|
-| `ws_connect(url)` | Connect to WebSocket server |
-| `ws_send(handle, msg)` | Send message to WebSocket |
-| `ws_recv(handle)` | Receive message from WebSocket |
-| `ws_close(handle)` | Close WebSocket connection |
-
-### HTTP Streaming (SSE)
-| Function | Description |
-|----------|-------------|
-| `http_stream(url)` | Open HTTP streaming connection |
-| `stream_read(handle)` | Read next line from stream |
-| `stream_close(handle)` | Close streaming connection |
-
-### Process Execution
-| Function | Description |
-|----------|-------------|
-| `exec(cmd, input)` | Execute command with stdin input, returns stdout |
-| `exec_async(cmd)` | Start async process, returns handle |
-| `proc_write(handle, data)` | Write to process stdin |
-| `proc_read(handle)` | Read from process stdout |
-| `proc_close(handle)` | Close process handle |
-
-### UUID & Hashing
-| Function | Description |
-|----------|-------------|
+| `time()` | Current timestamp (ms) |
+| `sleep(ms)` | Sleep |
 | `uuid()` | Generate UUID v4 |
-| `hash_md5(str)` | Compute MD5 hash |
-| `hash_sha256(str)` | Compute SHA256 hash |
+| `json_parse(str)` | Parse JSON |
+| `json_encode(val)` | Encode to JSON |
+| `random()` | Random float 0-1 |
 
-### Concurrency (Scheduler Mode)
-These functions require running with the scheduler (multi-block mode):
-| Function | Description |
-|----------|-------------|
-| `spawn(fn)` | Spawn a new block running `fn`, returns PID |
-| `send(pid, value)` | Send a message to block with `pid` |
-| `receive()` | Wait for and receive a message |
-| `self()` | Get current block's PID |
-| `yield()` | Yield execution to other blocks |
-
-Note: The CLI currently runs in single-block mode. Concurrency primitives are available for embedding Agim in applications that use the scheduler API.
+---
 
 ## Example Programs
 
-### Basics (01-10)
-| # | File | Description |
-|---|------|-------------|
-| 01 | `hello.im` | Hello World |
-| 02 | `fibonacci.im` | Recursive Fibonacci |
-| 03 | `fizzbuzz.im` | FizzBuzz 1-30 |
-| 04 | `primes.im` | Prime numbers up to 50 |
-| 05 | `factorial.im` | Factorial (recursive & iterative) |
-| 06 | `arrays.im` | Array operations (sum, max, min, avg) |
-| 07 | `maps.im` | Map operations and nested maps |
-| 08 | `calculator.im` | Calculator tools |
-| 09 | `strings.im` | String manipulation |
-| 10 | `sorting.im` | Bubble sort & selection sort |
+The `examples/` directory contains 55+ programs:
 
-### Data Structures (11-20)
-| # | File | Description |
-|---|------|-------------|
-| 11 | `file_io.im` | File read/write operations |
-| 12 | `types.im` | Type checking and conversion |
-| 13 | `stack.im` | Stack data structure |
-| 14 | `json_like.im` | Nested JSON-like structures |
-| 15 | `slicing.im` | String and array slicing |
-| 16 | `queue.im` | Queue data structure |
-| 17 | `word_tools.im` | Word processing utilities |
-| 18 | `math_tools.im` | Math utilities (gcd, lcm, sqrt) |
-| 19 | `config_parser.im` | Config file parser |
-| 20 | `todo_app.im` | Todo app with file persistence |
+| Range | Category |
+|-------|----------|
+| 01-10 | Basics: Hello World, Fibonacci, FizzBuzz, Primes, Arrays |
+| 11-20 | Data Structures: Stack, Queue, File I/O, JSON |
+| 21-25 | Networking: HTTP APIs, Shell Commands |
+| 26-35 | Agent Utilities: Parsing, Time, Base64, Validation |
+| 36-45 | Patterns: State Machine, Cache, Pipeline, Rate Limiter |
+| 46-55 | Advanced: WebSocket, SSE, Process Exec, LLM Client |
 
-### I/O & Network (21-25)
-| # | File | Description |
-|---|------|-------------|
-| 21 | `http_api.im` | HTTP API requests |
-| 22 | `shell_commands.im` | Shell command execution |
-| 23 | `json_api.im` | JSON parsing from APIs |
-| 24 | `web_scraper.im` | Simple web scraping |
-| 25 | `system_monitor.im` | System monitoring tool |
+---
 
-### Agent Utilities (26-35)
-| # | File | Description |
-|---|------|-------------|
-| 26 | `json_tools.im` | JSON parsing and encoding |
-| 27 | `string_utils.im` | Advanced string operations |
-| 28 | `time_date.im` | Timestamps and formatting |
-| 29 | `random.im` | Random number generation |
-| 30 | `math_advanced.im` | Advanced math functions |
-| 31 | `base64.im` | Base64 encoding/decoding |
-| 32 | `env_vars.im` | Environment variables |
-| 33 | `text_parser.im` | Parse CSV, key=value, query strings |
-| 34 | `data_transform.im` | Map, filter, reduce patterns |
-| 35 | `api_client.im` | HTTP client with retry logic |
+## Building
 
-### Patterns (36-45)
-| # | File | Description |
-|---|------|-------------|
-| 36 | `logging.im` | Structured logging system |
-| 37 | `task_runner.im` | Sequential/parallel task execution |
-| 38 | `state_machine.im` | Finite state machine pattern |
-| 39 | `prompt_builder.im` | Build prompts for LLMs |
-| 40 | `cache.im` | Caching patterns (TTL, LRU) |
-| 41 | `validation.im` | Input validation utilities |
-| 42 | `pipeline.im` | Data processing pipelines |
-| 43 | `retry_backoff.im` | Retry with exponential backoff |
-| 44 | `rate_limiter.im` | Token bucket rate limiting |
-| 45 | `event_system.im` | Pub/sub event handling |
+### Requirements
+- C11 compiler (GCC 7+ or Clang 5+)
+- CMake 3.16+
+- POSIX environment (Linux, macOS, WSL)
 
-### Tools (46-50)
-| # | File | Description |
-|---|------|-------------|
-| 46 | `markdown_gen.im` | Markdown document generator |
-| 47 | `cli_args.im` | CLI argument parsing |
-| 48 | `agent_tools.im` | Tool registry for AI agents |
-| 49 | `streaming.im` | Stream processing patterns |
-| 50 | `template_engine.im` | Template rendering engine |
+### Commands
+```bash
+# Release build
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
 
-### Networking & Advanced (51-55)
-| # | File | Description |
-|---|------|-------------|
-| 51 | `websocket.im` | WebSocket communication patterns |
-| 52 | `http_streaming.im` | HTTP streaming (SSE) patterns |
-| 53 | `process_exec.im` | Process execution, UUID, hashing |
-| 54 | `llm_client.im` | LLM API client patterns |
-| 55 | `safe_math_tools.im` | Safe math with Result types |
+# Debug with sanitizers
+cmake -B build -DCMAKE_BUILD_TYPE=Debug -DAGIM_ENABLE_ASAN=ON
+cmake --build build
 
-## Project Structure
-
-```
-agim/
-├── src/
-│   ├── vm/           # Core bytecode VM
-│   │   ├── value.c   # Value representation
-│   │   ├── bytecode.c# Bytecode format
-│   │   ├── vm.c      # Interpreter loop
-│   │   └── gc.c      # Garbage collector
-│   ├── lang/         # Agim compiler
-│   │   ├── lexer.c   # Tokenizer
-│   │   ├── parser.c  # Parser
-│   │   └── compiler.c# Bytecode compiler
-│   └── runtime/      # Process runtime
-├── bench/            # Benchmarks
-├── cmd/              # CLI entry point
-├── editor/           # Editor support (tree-sitter, zed)
-├── examples/         # Example programs (.im)
-├── scripts/          # Shell scripts
-└── tests/            # Test suite
+# Run tests
+cd build && ctest --output-on-failure
 ```
 
-## CLI Usage
+---
 
-```
-$ agim --help
-Agim - A language for building isolated AI agents
+## Roadmap
 
-Usage: agim [options] <file.im>
+See [ROADMAP.md](ROADMAP.md) for the full plan:
+- Self-hosting compiler (bootstrap in Agim)
+- Supervisor trees and process linking
+- AI agent framework (behaviors, memory, tool dispatch)
+- Distribution (multi-node clusters)
+- REPL, debugger, package manager
 
-File extensions:
-  .ag            Agent workflow (declarative) [planned]
-  .im            Implementation (imperative)
+## Contributing
 
-Options:
-  -h, --help     Show this help message
-  -v, --version  Show version information
-  -d, --disasm   Disassemble bytecode instead of running
-  -t, --tools    List registered tools
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 

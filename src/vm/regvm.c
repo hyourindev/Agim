@@ -15,6 +15,7 @@
 #include "types/closure.h"
 #include "util/alloc.h"
 
+#include <assert.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -322,8 +323,16 @@ RegVMResult regvm_run(RegVM *vm, RegChunk *chunk) {
         frame->regs[i] = NANBOX_NIL;
     }
 
-    /* Convenience macro for register access */
-    #define R(n) (frame->regs[n])
+    /* Convenience macro for register access.
+     * Note: Bytecode should be validated at load time to ensure register
+     * indices are within bounds. Runtime bounds checking would be too slow. */
+    #define R(n) frame->regs[n]
+    /* In debug builds, verify bounds before accessing */
+    #ifndef NDEBUG
+    #define CHECK_REG(n) assert((n) < REG_MAX_REGISTERS)
+    #else
+    #define CHECK_REG(n) ((void)0)
+    #endif
 
 #if USE_REG_COMPUTED_GOTO
     /* Computed goto dispatch */
@@ -369,7 +378,9 @@ RegVMResult regvm_run(RegVM *vm, RegChunk *chunk) {
         [ROP_HALT] = &&op_halt,
     };
 
-    #define DISPATCH() goto *dispatch_table[(frame->ip++)->op]
+    /* Pre-fetch instruction to avoid reading before buffer on first dispatch */
+    RegInstr cur_instr;
+    #define DISPATCH() do { cur_instr = *frame->ip++; goto *dispatch_table[cur_instr.op]; } while(0)
 
     DISPATCH();
 
@@ -377,13 +388,13 @@ RegVMResult regvm_run(RegVM *vm, RegChunk *chunk) {
         DISPATCH();
 
     op_mov: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         R(i.rd) = R(i.rs1);
         DISPATCH();
     }
 
     op_load_k: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         uint16_t idx = reg_get_imm(i);
         if (idx < chunk->constants_size) {
             R(i.rd) = value_to_nanbox(chunk->constants[idx]);
@@ -392,112 +403,112 @@ RegVMResult regvm_run(RegVM *vm, RegChunk *chunk) {
     }
 
     op_load_nil: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         R(i.rd) = NANBOX_NIL;
         DISPATCH();
     }
 
     op_load_true: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         R(i.rd) = nanbox_bool(true);
         DISPATCH();
     }
 
     op_load_false: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         R(i.rd) = nanbox_bool(false);
         DISPATCH();
     }
 
     op_load_int: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         R(i.rd) = nanbox_int((int16_t)reg_get_imm(i));
         DISPATCH();
     }
 
     op_add: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         R(i.rd) = nanbox_add(R(i.rs1), R(i.rs2));
         DISPATCH();
     }
 
     op_sub: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         R(i.rd) = nanbox_sub(R(i.rs1), R(i.rs2));
         DISPATCH();
     }
 
     op_mul: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         R(i.rd) = nanbox_mul(R(i.rs1), R(i.rs2));
         DISPATCH();
     }
 
     op_div: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         R(i.rd) = nanbox_div(R(i.rs1), R(i.rs2));
         DISPATCH();
     }
 
     op_mod: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         R(i.rd) = nanbox_mod(R(i.rs1), R(i.rs2));
         DISPATCH();
     }
 
     op_neg: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         R(i.rd) = nanbox_neg(R(i.rs1));
         DISPATCH();
     }
 
     op_eq: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         R(i.rd) = nanbox_eq(R(i.rs1), R(i.rs2));
         DISPATCH();
     }
 
     op_ne: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         NanValue eq = nanbox_eq(R(i.rs1), R(i.rs2));
         R(i.rd) = nanbox_bool(!nanbox_as_bool(eq));
         DISPATCH();
     }
 
     op_lt: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         R(i.rd) = nanbox_lt(R(i.rs1), R(i.rs2));
         DISPATCH();
     }
 
     op_le: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         R(i.rd) = nanbox_le(R(i.rs1), R(i.rs2));
         DISPATCH();
     }
 
     op_gt: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         /* a > b is equivalent to b < a */
         R(i.rd) = nanbox_lt(R(i.rs2), R(i.rs1));
         DISPATCH();
     }
 
     op_ge: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         /* a >= b is equivalent to b <= a */
         R(i.rd) = nanbox_le(R(i.rs2), R(i.rs1));
         DISPATCH();
     }
 
     op_not: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         R(i.rd) = nanbox_bool(!reg_nanbox_is_truthy(R(i.rs1)));
         DISPATCH();
     }
 
     op_and: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         if (!reg_nanbox_is_truthy(R(i.rs1))) {
             R(i.rd) = R(i.rs1);
         } else {
@@ -507,7 +518,7 @@ RegVMResult regvm_run(RegVM *vm, RegChunk *chunk) {
     }
 
     op_or: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         if (reg_nanbox_is_truthy(R(i.rs1))) {
             R(i.rd) = R(i.rs1);
         } else {
@@ -517,13 +528,13 @@ RegVMResult regvm_run(RegVM *vm, RegChunk *chunk) {
     }
 
     op_jmp: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         frame->ip += reg_get_offset(i);
         DISPATCH();
     }
 
     op_jmp_if: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         if (reg_nanbox_is_truthy(R(i.rd))) {
             frame->ip += reg_get_cond_offset(i);
         }
@@ -531,7 +542,7 @@ RegVMResult regvm_run(RegVM *vm, RegChunk *chunk) {
     }
 
     op_jmp_unless: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         if (!reg_nanbox_is_truthy(R(i.rd))) {
             frame->ip += reg_get_cond_offset(i);
         }
@@ -539,7 +550,7 @@ RegVMResult regvm_run(RegVM *vm, RegChunk *chunk) {
     }
 
     op_loop: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         frame->ip -= (-reg_get_offset(i)); /* Negative offset for backward jump */
         DISPATCH();
     }
@@ -553,7 +564,7 @@ RegVMResult regvm_run(RegVM *vm, RegChunk *chunk) {
          * The register VM uses a different function representation than the
          * stack-based VM. Function values are RegChunk pointers wrapped as objects.
          */
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         NanValue func_val = R(i.rs1);
         uint8_t first_arg_reg = i.rs2;
         uint8_t result_reg = i.rd;
@@ -614,7 +625,7 @@ RegVMResult regvm_run(RegVM *vm, RegChunk *chunk) {
     }
 
     op_ret: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         NanValue result = R(i.rd);
 
         vm->frame_count--;
@@ -628,13 +639,13 @@ RegVMResult regvm_run(RegVM *vm, RegChunk *chunk) {
     }
 
     op_array_new: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         R(i.rd) = value_to_nanbox(value_array());
         DISPATCH();
     }
 
     op_array_push: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         Value *arr = nanbox_to_value(R(i.rd));
         Value *val = nanbox_to_value(R(i.rs1));
         if (arr && value_is_array(arr)) {
@@ -645,7 +656,7 @@ RegVMResult regvm_run(RegVM *vm, RegChunk *chunk) {
     }
 
     op_array_get: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         Value *arr = nanbox_to_value(R(i.rs1));
         if (arr && value_is_array(arr) && nanbox_is_int(R(i.rs2))) {
             int64_t idx = nanbox_as_int(R(i.rs2));
@@ -662,13 +673,13 @@ RegVMResult regvm_run(RegVM *vm, RegChunk *chunk) {
     }
 
     op_map_new: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         R(i.rd) = value_to_nanbox(value_map());
         DISPATCH();
     }
 
     op_map_get: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         Value *map = nanbox_to_value(R(i.rs1));
         Value *key = nanbox_to_value(R(i.rs2));
         if (map && value_is_map(map) && key && value_is_string(key)) {
@@ -681,7 +692,7 @@ RegVMResult regvm_run(RegVM *vm, RegChunk *chunk) {
     }
 
     op_map_set: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         Value *map = nanbox_to_value(R(i.rs1));
         Value *key = nanbox_to_value(R(i.rs2));
         Value *val = nanbox_to_value(R(i.rd));
@@ -693,7 +704,7 @@ RegVMResult regvm_run(RegVM *vm, RegChunk *chunk) {
     }
 
     op_concat: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         Value *a = nanbox_to_value(R(i.rs1));
         Value *b = nanbox_to_value(R(i.rs2));
         /* Handle nil as empty string */
@@ -710,7 +721,7 @@ RegVMResult regvm_run(RegVM *vm, RegChunk *chunk) {
     }
 
     op_len: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         Value *v = nanbox_to_value(R(i.rs1));
         int64_t len = 0;
         if (v) {
@@ -727,7 +738,7 @@ RegVMResult regvm_run(RegVM *vm, RegChunk *chunk) {
     }
 
     op_print: {
-        RegInstr i = frame->ip[-1];
+        RegInstr i = cur_instr;
         Value *v = nanbox_to_value(R(i.rd));
         value_print(v);
         printf("\n");

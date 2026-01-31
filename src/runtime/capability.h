@@ -31,7 +31,10 @@ typedef enum Capability {
     CAP_TRAP_EXIT   = 1 << 12,
     CAP_MONITOR     = 1 << 13,
     CAP_SUPERVISE   = 1 << 14,
-    CAP_ALL         = 0x7FFF,
+    CAP_ENV         = 1 << 15,
+    CAP_WEBSOCKET   = 1 << 16,
+    /* Reserve bits 17-30 for future use */
+    CAP_ALL         = 0x7FFFFFFF,  /* All 31 bits (leave sign bit clear) */
 } Capability;
 
 typedef uint32_t CapabilitySet;

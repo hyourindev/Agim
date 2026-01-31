@@ -90,10 +90,11 @@ void *pool_alloc(MemoryPool *pool) {
     PoolFreeBlock *block = pool->free_list;
     pool->free_list = block->next;
 
-    pthread_mutex_unlock(&pool->lock);
-
+    /* Update statistics inside the lock to avoid race conditions */
     atomic_fetch_add(&pool->allocated_count, 1);
     atomic_fetch_sub(&pool->free_count, 1);
+
+    pthread_mutex_unlock(&pool->lock);
 
     return block;
 }
@@ -107,10 +108,11 @@ void pool_dealloc(MemoryPool *pool, void *ptr) {
     block->next = pool->free_list;
     pool->free_list = block;
 
-    pthread_mutex_unlock(&pool->lock);
-
+    /* Update statistics inside the lock to avoid race conditions */
     atomic_fetch_sub(&pool->allocated_count, 1);
     atomic_fetch_add(&pool->free_count, 1);
+
+    pthread_mutex_unlock(&pool->lock);
 }
 
 PoolStats pool_stats(const MemoryPool *pool) {

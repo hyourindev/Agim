@@ -1,81 +1,118 @@
-# Contributing to Tofu
+# Contributing to Agim
 
-Thank you for your interest in contributing to Tofu! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to Agim! This document provides guidelines and instructions for contributing.
 
 ## Code of Conduct
 
-Please be respectful and constructive in all interactions. We're building something together.
+Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md). We're building something together and expect respectful, constructive interactions.
 
 ## Getting Started
 
 1. Fork the repository
-2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/tofu.git`
+2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/agim.git`
 3. Create a branch: `git checkout -b feature/your-feature`
 4. Make your changes
-5. Run tests: `cd build && ctest`
+5. Run tests: `cd build && ctest --output-on-failure`
 6. Commit with a clear message
 7. Push and open a Pull Request
 
 ## Development Setup
 
 ```bash
-# Build in debug mode with sanitizers
-mkdir build && cd build
-cmake -DCMAKE_BUILD_TYPE=Debug -DTOFU_ENABLE_ASAN=ON ..
-make
+# Clone
+git clone https://github.com/YOUR_USERNAME/agim.git
+cd agim
+
+# Debug build with sanitizers
+cmake -B build -DCMAKE_BUILD_TYPE=Debug -DAGIM_ENABLE_ASAN=ON
+cmake --build build
 
 # Run tests
-ctest --output-on-failure
+cd build && ctest --output-on-failure
+
+# Run security tests
+./tests/security/test_security
+
+# Run benchmarks
+./bench/bench_vm
 
 # Format code
-clang-format -i src/**/*.c src/**/*.h
-```
-
-## Code Style
-
-- Follow the `.clang-format` configuration
-- Use 4 spaces for indentation (no tabs)
-- Keep lines under 100 characters
-- Use `snake_case` for functions and variables
-- Use `SCREAMING_SNAKE_CASE` for macros and constants
-- Prefix public API functions with `tofu_`
-- Prefix internal functions with module name (e.g., `vm_`, `gc_`)
-
-### Naming Conventions
-
-```c
-// Public API
-TofuValue *tofu_value_new_string(const char *str);
-
-// Internal function
-static Value *vm_stack_pop(VM *vm);
-
-// Constants
-#define TOFU_VERSION_MAJOR 0
-#define TOFU_MAX_STACK_SIZE 1024
-
-// Types
-typedef struct TofuVM TofuVM;
-typedef enum TofuOpcode TofuOpcode;
+find src -name "*.c" -o -name "*.h" | xargs clang-format -i
 ```
 
 ## Project Structure
 
 ```
 src/
-├── vm/           # Core bytecode VM
-├── runtime/      # Block scheduler, messaging
-├── soft/         # Soft Tofu compiler
-├── firm/         # Firm Tofu compiler
-└── builtin/      # Built-in tools
+├── vm/              # Virtual machine (stack + register based)
+├── lang/            # Lexer, parser, compiler, typechecker
+├── runtime/         # Scheduler, blocks, mailboxes, supervisors
+├── net/             # TCP, TLS, HTTP, WebSocket, SSE
+├── dist/            # Distributed node communication
+├── types/           # Array, map, string, vector, closure
+├── builtin/         # Tools, memory, inference
+├── util/            # Allocation, pools
+└── debug/           # Debugging utilities
+
+tests/
+├── vm/              # VM tests
+├── lang/            # Parser/compiler tests
+├── runtime/         # Scheduler/block tests
+├── types/           # Data type tests
+├── net/             # Network tests
+└── security/        # Security tests (IMPORTANT!)
+```
+
+## Code Style
+
+- Use 4 spaces (no tabs)
+- Lines under 100 characters
+- `snake_case` for functions/variables
+- `SCREAMING_SNAKE_CASE` for macros/constants
+- Prefix functions with module name (`vm_`, `gc_`, `scheduler_`)
+
+### Example
+
+```c
+/* Internal functions - prefix with module */
+static Value *vm_stack_pop(VM *vm);
+static void scheduler_run_block(Scheduler *sched, Block *block);
+
+/* Constants */
+#define VM_MAX_STACK_SIZE 1024
+#define CAP_HTTP (1 << 4)
+
+/* Types */
+typedef struct VM VM;
+typedef enum Capability Capability;
+```
+
+### Security-Sensitive Code
+
+```c
+/* GOOD: Bounds check */
+if (index >= array->length) {
+    return NULL;
+}
+
+/* GOOD: Overflow protection */
+if (capacity > SIZE_MAX / 2) {
+    return false;
+}
+capacity *= 2;
+
+/* GOOD: Capability check */
+if (!block_has_cap(vm->block, CAP_SHELL)) {
+    vm_set_error(vm, "requires CAP_SHELL");
+    return VM_ERROR_PERMISSION;
+}
 ```
 
 ## Testing
 
-- All new features must include tests
-- All bug fixes must include regression tests
-- Tests should be in the corresponding `tests/` subdirectory
-- Use the simple test macros in `tests/test_common.h`
+- **All new features need tests**
+- **All bug fixes need regression tests**
+- **Security changes need security tests**
 
 ```c
 #include "test_common.h"
@@ -94,51 +131,49 @@ int main(void) {
 
 ## Commit Messages
 
-Use clear, descriptive commit messages:
-
 ```
 component: short description
 
-Longer explanation if needed. Explain the why, not just the what.
+Longer explanation if needed.
 
 Fixes #123
 ```
 
+Components: `vm`, `lang`, `runtime`, `net`, `dist`, `types`, `builtin`, `util`, `security`, `docs`, `tests`, `bench`
+
 Examples:
 - `vm: add stack overflow detection`
-- `soft/parser: fix indentation handling in nested blocks`
-- `docs: update installation instructions`
+- `security: add CAP_ENV for environment access`
+- `tls: enable hostname verification`
 
-## Pull Request Process
+## Pull Requests
 
 1. Ensure all tests pass
-2. Update documentation if needed
-3. Add yourself to CONTRIBUTORS.md (optional)
-4. Request review from maintainers
-5. Address feedback
-6. Squash commits if requested
+2. Run security tests for security changes
+3. Update docs if needed
+4. Write clear PR description
+5. Address review feedback
 
-## Reporting Issues
+### Checklist
 
-When reporting bugs, please include:
+- [ ] Tests pass locally
+- [ ] Security tests pass (if applicable)
+- [ ] Code follows style guidelines
+- [ ] No new warnings
+- [ ] Documentation updated
 
-- Tofu version (`tofu --version`)
-- Operating system
-- Minimal reproduction case
-- Expected vs actual behavior
-- Any error messages
+## Security Vulnerabilities
 
-## Feature Requests
+If you discover a security issue:
 
-For feature requests, please:
-
-- Check existing issues first
-- Describe the use case
-- Explain why existing features don't suffice
-- Consider implementation complexity
+1. **DO NOT** open a public issue
+2. Email maintainers directly
+3. Allow time for a fix before disclosure
 
 ## Questions?
 
-Open a Discussion on GitHub or reach out to the maintainers.
+- Open a GitHub Discussion
+- Check existing issues
+- Read [ROADMAP.md](ROADMAP.md)
 
 Thank you for contributing!

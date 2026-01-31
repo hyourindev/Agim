@@ -319,12 +319,18 @@ static inline uint16_t read_short(CallFrame *frame) {
 
 static inline Value *read_constant(CallFrame *frame) {
     uint16_t index = read_short(frame);
+    if (index >= frame->chunk->constants_size) {
+        return NULL;  /* Invalid constant index */
+    }
     return frame->chunk->constants[index];
 }
 
 /* Read constant as NanValue */
 static inline NanValue read_constant_nan(CallFrame *frame) {
     uint16_t index = read_short(frame);
+    if (index >= frame->chunk->constants_size) {
+        return NANBOX_NIL;  /* Invalid constant index */
+    }
     return value_to_nanbox(frame->chunk->constants[index]);
 }
 
@@ -1878,6 +1884,11 @@ VMResult vm_run(VM *vm) {
         }
 
         case OP_HTTP_GET: {
+            Block *block = (Block *)vm->block;
+            if (block && !block_has_cap(block, CAP_HTTP)) {
+                vm_set_error(vm, "HTTP operations require CAP_HTTP capability");
+                return VM_ERROR_CAPABILITY;
+            }
             Value *url = vm_pop(vm);
             if (!url || !value_is_string(url)) {
                 vm_set_error(vm, "URL must be string");
@@ -1902,6 +1913,11 @@ VMResult vm_run(VM *vm) {
         }
 
         case OP_HTTP_POST: {
+            Block *block = (Block *)vm->block;
+            if (block && !block_has_cap(block, CAP_HTTP)) {
+                vm_set_error(vm, "HTTP operations require CAP_HTTP capability");
+                return VM_ERROR_CAPABILITY;
+            }
             Value *body = vm_pop(vm);
             Value *url = vm_pop(vm);
             if (!url || !body || !value_is_string(url) || !value_is_string(body)) {
@@ -1929,6 +1945,11 @@ VMResult vm_run(VM *vm) {
         }
 
         case OP_HTTP_PUT: {
+            Block *block = (Block *)vm->block;
+            if (block && !block_has_cap(block, CAP_HTTP)) {
+                vm_set_error(vm, "HTTP operations require CAP_HTTP capability");
+                return VM_ERROR_CAPABILITY;
+            }
             Value *body = vm_pop(vm);
             Value *url = vm_pop(vm);
             if (!url || !body || !value_is_string(url) || !value_is_string(body)) {
@@ -1954,6 +1975,11 @@ VMResult vm_run(VM *vm) {
         }
 
         case OP_HTTP_DELETE: {
+            Block *block = (Block *)vm->block;
+            if (block && !block_has_cap(block, CAP_HTTP)) {
+                vm_set_error(vm, "HTTP operations require CAP_HTTP capability");
+                return VM_ERROR_CAPABILITY;
+            }
             Value *url = vm_pop(vm);
             if (!url || !value_is_string(url)) {
                 vm_set_error(vm, "URL must be a string");
@@ -1976,6 +2002,11 @@ VMResult vm_run(VM *vm) {
         }
 
         case OP_HTTP_PATCH: {
+            Block *block = (Block *)vm->block;
+            if (block && !block_has_cap(block, CAP_HTTP)) {
+                vm_set_error(vm, "HTTP operations require CAP_HTTP capability");
+                return VM_ERROR_CAPABILITY;
+            }
             Value *body = vm_pop(vm);
             Value *url = vm_pop(vm);
             if (!url || !body || !value_is_string(url) || !value_is_string(body)) {
@@ -2001,6 +2032,11 @@ VMResult vm_run(VM *vm) {
         }
 
         case OP_HTTP_REQUEST: {
+            Block *block = (Block *)vm->block;
+            if (block && !block_has_cap(block, CAP_HTTP)) {
+                vm_set_error(vm, "HTTP operations require CAP_HTTP capability");
+                return VM_ERROR_CAPABILITY;
+            }
             Value *headers_val = vm_pop(vm);
             Value *body = vm_pop(vm);
             Value *url = vm_pop(vm);
@@ -2314,6 +2350,11 @@ VMResult vm_run(VM *vm) {
         }
 
         case OP_ENV_GET: {
+            Block *block = (Block *)vm->block;
+            if (block && !block_has_cap(block, CAP_ENV)) {
+                vm_set_error(vm, "env_get requires CAP_ENV capability");
+                return VM_ERROR_CAPABILITY;
+            }
             Value *name = vm_pop(vm);
             if (!name || !value_is_string(name)) {
                 vm_set_error(vm, "env_get requires string");
@@ -2325,6 +2366,11 @@ VMResult vm_run(VM *vm) {
         }
 
         case OP_ENV_SET: {
+            Block *block = (Block *)vm->block;
+            if (block && !block_has_cap(block, CAP_ENV)) {
+                vm_set_error(vm, "env_set requires CAP_ENV capability");
+                return VM_ERROR_CAPABILITY;
+            }
             Value *val = vm_pop(vm);
             Value *name = vm_pop(vm);
             if (!name || !value_is_string(name) || !val || !value_is_string(val)) {

@@ -29,6 +29,9 @@
  * Configuration
  */
 
+/* Maximum message size to prevent memory exhaustion attacks (16 MB) */
+#define DIST_MAX_MESSAGE_SIZE (16 * 1024 * 1024)
+
 NodeConfig node_config_default(void) {
     return (NodeConfig){
         .name = "node",
@@ -148,6 +151,11 @@ static void *receiver_thread_fn(void *arg) {
         uint8_t msg_type = header[0];
         uint32_t msg_len = ((uint32_t)header[1] << 24) | ((uint32_t)header[2] << 16) |
                           ((uint32_t)header[3] << 8) | header[4];
+
+        /* Reject messages that are too large (security: prevent memory exhaustion) */
+        if (msg_len > DIST_MAX_MESSAGE_SIZE) {
+            break;  /* Disconnect - message too large */
+        }
 
         /* Handle message by type */
         switch (msg_type) {
@@ -357,6 +365,12 @@ static void *accept_thread_fn(void *arg) {
 
 bool node_start(DistributedNode *node) {
     if (!node || node->running) return false;
+
+    /* Require non-zero cookie for security */
+    if (node->config.cookie == 0) {
+        fprintf(stderr, "Error: Node cookie must be configured (non-zero) for security\n");
+        return false;
+    }
 
     /* Create listening socket */
     node->listen_fd = socket(AF_INET, SOCK_STREAM, 0);

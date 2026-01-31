@@ -135,6 +135,7 @@ void test_node_start_stop(void)
 	NodeConfig cfg = node_config_default();
 	strncpy(cfg.name, "start_stop", NODE_NAME_MAX);
 	cfg.port = 9102;
+	cfg.cookie = 0x12345678;  /* Non-zero cookie required for security */
 
 	DistributedNode *node = node_new(&cfg);
 	ASSERT(!node->running);

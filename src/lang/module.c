@@ -98,9 +98,15 @@ void module_loading_pop(ModuleCache *cache) {
 /* Path Resolution */
 
 char *module_resolve_path(const char *path, const char *base_path) {
-    /* If path is absolute, return a copy */
+    /* Security: Reject paths containing ".." to prevent path traversal attacks */
+    if (strstr(path, "..") != NULL) {
+        return NULL;
+    }
+
+    /* If path is absolute, reject it for sandboxing unless explicitly allowed */
     if (path[0] == '/' || (strlen(path) > 1 && path[1] == ':')) {
-        return agim_strdup(path);
+        /* For now, reject absolute paths in sandboxed context */
+        return NULL;
     }
 
     /* Relative path - resolve against base_path */

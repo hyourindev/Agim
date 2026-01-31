@@ -10,12 +10,14 @@
 #include "types/array.h"
 #include "types/map.h"
 
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
 /* Serial Buffer Operations */
 
 #define INITIAL_CAPACITY 256
+#define MAX_SERIALIZE_DEPTH 100  /* Maximum recursion depth for deserialization */
 
 void serial_buffer_init(SerialBuffer *buf) {
     if (!buf) return;
@@ -52,6 +54,9 @@ bool serial_buffer_ensure(SerialBuffer *buf, size_t needed) {
 
     size_t new_capacity = buf->capacity ? buf->capacity : INITIAL_CAPACITY;
     while (new_capacity < required) {
+        if (new_capacity > SIZE_MAX / 2) {
+            return false;  /* Overflow protection */
+        }
         new_capacity *= 2;
     }
 
@@ -373,9 +378,22 @@ SerializeResult serialize_value(Value *value, SerialBuffer *buf) {
 
 /* Value Deserialization */
 
+/* Internal function with depth tracking */
+static Value *deserialize_value_internal(SerialBuffer *buf, SerializeResult *result, int depth);
+
 Value *deserialize_value(SerialBuffer *buf, SerializeResult *result) {
+    return deserialize_value_internal(buf, result, 0);
+}
+
+static Value *deserialize_value_internal(SerialBuffer *buf, SerializeResult *result, int depth) {
     if (!buf) {
         if (result) *result = SERIALIZE_ERROR_BUFFER;
+        return NULL;
+    }
+
+    /* Check recursion depth to prevent stack overflow */
+    if (depth > MAX_SERIALIZE_DEPTH) {
+        if (result) *result = SERIALIZE_ERROR_OVERFLOW;
         return NULL;
     }
 
@@ -459,7 +477,7 @@ Value *deserialize_value(SerialBuffer *buf, SerializeResult *result) {
         Value *arr = value_array();
         for (uint32_t i = 0; i < len; i++) {
             SerializeResult elem_result;
-            Value *elem = deserialize_value(buf, &elem_result);
+            Value *elem = deserialize_value_internal(buf, &elem_result, depth + 1);
             if (elem_result != SERIALIZE_OK) {
                 if (result) *result = elem_result;
                 return NULL;
@@ -484,7 +502,7 @@ Value *deserialize_value(SerialBuffer *buf, SerializeResult *result) {
                 return NULL;
             }
             SerializeResult val_result;
-            Value *val = deserialize_value(buf, &val_result);
+            Value *val = deserialize_value_internal(buf, &val_result, depth + 1);
             if (val_result != SERIALIZE_OK) {
                 free(key);
                 if (result) *result = val_result;
@@ -523,7 +541,7 @@ Value *deserialize_value(SerialBuffer *buf, SerializeResult *result) {
             return NULL;
         }
         SerializeResult val_result;
-        Value *val = deserialize_value(buf, &val_result);
+        Value *val = deserialize_value_internal(buf, &val_result, depth + 1);
         if (val_result != SERIALIZE_OK) {
             if (result) *result = val_result;
             return NULL;
@@ -543,7 +561,7 @@ Value *deserialize_value(SerialBuffer *buf, SerializeResult *result) {
             return value_none();
         }
         SerializeResult val_result;
-        Value *val = deserialize_value(buf, &val_result);
+        Value *val = deserialize_value_internal(buf, &val_result, depth + 1);
         if (val_result != SERIALIZE_OK) {
             if (result) *result = val_result;
             return NULL;
@@ -577,7 +595,7 @@ Value *deserialize_value(SerialBuffer *buf, SerializeResult *result) {
                 return NULL;
             }
             SerializeResult field_result;
-            Value *field_val = deserialize_value(buf, &field_result);
+            Value *field_val = deserialize_value_internal(buf, &field_result, depth + 1);
             if (field_result != SERIALIZE_OK) {
                 free(field_name);
                 if (result) *result = field_result;
@@ -612,7 +630,7 @@ Value *deserialize_value(SerialBuffer *buf, SerializeResult *result) {
         Value *e;
         if (has_payload) {
             SerializeResult payload_result;
-            Value *payload = deserialize_value(buf, &payload_result);
+            Value *payload = deserialize_value_internal(buf, &payload_result, depth + 1);
             if (payload_result != SERIALIZE_OK) {
                 free(type_name);
                 free(variant_name);

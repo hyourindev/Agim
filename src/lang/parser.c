@@ -8,6 +8,7 @@
 #include "lang/parser.h"
 #include "util/alloc.h"
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -303,6 +304,11 @@ static AstNode *parse_array_literal(Parser *parser) {
 
             AstNode *elem = parse_expression(parser);
             if (node->as.array.count >= capacity) {
+                if (capacity > SIZE_MAX / 2) {
+                    error(parser, "array literal too large");
+                    ast_free(node);
+                    return NULL;
+                }
                 capacity *= 2;
                 node->as.array.elements = agim_realloc(
                     node->as.array.elements,
@@ -361,6 +367,11 @@ static AstNode *parse_map_literal(Parser *parser) {
             AstNode *value = parse_expression(parser);
 
             if (node->as.map.count >= capacity) {
+                if (capacity > SIZE_MAX / 2) {
+                    error(parser, "map literal too large");
+                    ast_free(node);
+                    return NULL;
+                }
                 capacity *= 2;
                 node->as.map.keys = agim_realloc(node->as.map.keys, sizeof(char *) * capacity);
                 node->as.map.values = agim_realloc(node->as.map.values, sizeof(AstNode *) * capacity);
@@ -463,6 +474,11 @@ static AstNode *parse_call(Parser *parser, AstNode *callee) {
             skip_newlines(parser);
             AstNode *arg = parse_expression(parser);
             if (node->as.call.arg_count >= capacity) {
+                if (capacity > SIZE_MAX / 2) {
+                    error(parser, "too many function arguments");
+                    ast_free(node);
+                    return NULL;
+                }
                 capacity *= 2;
                 node->as.call.args = agim_realloc(
                     node->as.call.args,
@@ -664,13 +680,22 @@ static AstNode *parse_expression(Parser *parser) {
 
 /* Type Parsing */
 static AstNode *parse_type(Parser *parser) {
+    /* Check recursion depth to prevent stack overflow from deeply nested types */
+    if (++parser->depth > MAX_PARSE_DEPTH) {
+        error(parser, "type nesting too deep");
+        parser->depth--;
+        return NULL;
+    }
+
     int line = parser->current.line;
+    AstNode *result = NULL;
 
     /* Array type: [T] */
     if (match(parser, TOK_LBRACKET)) {
         AstNode *elem_type = parse_type(parser);
         consume(parser, TOK_RBRACKET, "expected ']' after array element type");
-        return ast_type_array(elem_type, line);
+        result = ast_type_array(elem_type, line);
+        goto done;
     }
 
     /* Function type: fn(A, B) -> C */
@@ -688,6 +713,11 @@ static AstNode *parse_type(Parser *parser) {
             do {
                 AstNode *ptype = parse_type(parser);
                 if (param_count >= capacity) {
+                    if (capacity > SIZE_MAX / 2) {
+                        error(parser, "too many function type parameters");
+                        result = NULL;
+                        goto done;
+                    }
                     capacity *= 2;
                     param_types = agim_realloc(param_types, sizeof(AstNode *) * capacity);
                 }
@@ -702,7 +732,8 @@ static AstNode *parse_type(Parser *parser) {
             return_type = parse_type(parser);
         }
 
-        return ast_type_func(param_types, param_count, return_type, line);
+        result = ast_type_func(param_types, param_count, return_type, line);
+        goto done;
     }
 
     /* Built-in type names or identifiers */
@@ -734,19 +765,22 @@ static AstNode *parse_type(Parser *parser) {
         /* Option<T> */
         if (!match(parser, TOK_LT)) {
             error(parser, "expected '<' after Option");
-            return NULL;
+            result = NULL;
+            goto done;
         }
         AstNode *inner = parse_type(parser);
         consume(parser, TOK_GT, "expected '>' after Option type parameter");
 
         AstNode **type_args = agim_alloc(sizeof(AstNode *));
         type_args[0] = inner;
-        return ast_type_generic("Option", type_args, 1, line);
+        result = ast_type_generic("Option", type_args, 1, line);
+        goto done;
     } else if (match(parser, TOK_TYPE_RESULT)) {
         /* Result<T, E> */
         if (!match(parser, TOK_LT)) {
             error(parser, "expected '<' after Result");
-            return NULL;
+            result = NULL;
+            goto done;
         }
         AstNode *ok_type = parse_type(parser);
         consume(parser, TOK_COMMA, "expected ',' in Result<T, E>");
@@ -756,19 +790,22 @@ static AstNode *parse_type(Parser *parser) {
         AstNode **type_args = agim_alloc(sizeof(AstNode *) * 2);
         type_args[0] = ok_type;
         type_args[1] = err_type;
-        return ast_type_generic("Result", type_args, 2, line);
+        result = ast_type_generic("Result", type_args, 2, line);
+        goto done;
     } else if (match(parser, TOK_TYPE_MAP)) {
         /* map<K, V> */
         if (!match(parser, TOK_LT)) {
             error(parser, "expected '<' after map");
-            return NULL;
+            result = NULL;
+            goto done;
         }
         AstNode *key_type = parse_type(parser);
         consume(parser, TOK_COMMA, "expected ',' in map<K, V>");
         AstNode *val_type = parse_type(parser);
         consume(parser, TOK_GT, "expected '>' after map type parameters");
 
-        return ast_type_map(key_type, val_type, line);
+        result = ast_type_map(key_type, val_type, line);
+        goto done;
     } else if (match(parser, TOK_IDENT)) {
         type_name = parser->previous.start;
         type_len = parser->previous.length;
@@ -787,6 +824,11 @@ static AstNode *parse_type(Parser *parser) {
             do {
                 AstNode *arg = parse_type(parser);
                 if (arg_count >= capacity) {
+                    if (capacity > SIZE_MAX / 2) {
+                        error(parser, "too many generic type arguments");
+                        result = NULL;
+                        goto done;
+                    }
                     capacity *= 2;
                     type_args = agim_realloc(type_args, sizeof(AstNode *) * capacity);
                 }
@@ -797,14 +839,20 @@ static AstNode *parse_type(Parser *parser) {
 
             AstNode *node = ast_type_generic(name, type_args, arg_count, line);
             agim_free(name);
-            return node;
+            result = node;
+            goto done;
         }
     } else {
         error_at_current(parser, "expected type");
-        return NULL;
+        result = NULL;
+        goto done;
     }
 
-    return ast_type_name(type_name, type_len, line);
+    result = ast_type_name(type_name, type_len, line);
+
+done:
+    parser->depth--;
+    return result;
 }
 
 /* Statement Parsing */
@@ -1022,6 +1070,11 @@ static AstNode *parse_match_expr(Parser *parser) {
         }
 
         if (node->as.match_expr.arm_count >= capacity) {
+            if (capacity > SIZE_MAX / 2) {
+                error(parser, "too many match arms");
+                ast_free(node);
+                return NULL;
+            }
             capacity *= 2;
             node->as.match_expr.arms = agim_realloc(
                 node->as.match_expr.arms,
@@ -1209,6 +1262,11 @@ static AstNode *parse_import(Parser *parser) {
             consume(parser, TOK_IDENT, "expected identifier in import list");
 
             if (node->as.import_from.name_count >= capacity) {
+                if (capacity > SIZE_MAX / 2) {
+                    error(parser, "too many import names");
+                    ast_free(node);
+                    return NULL;
+                }
                 capacity *= 2;
                 node->as.import_from.names = agim_realloc(
                     node->as.import_from.names,
@@ -1357,6 +1415,10 @@ static AstNode *parse_fn_decl(Parser *parser, bool is_tool) {
         do {
             AstNode *param = parse_param(parser);
             if (param_count >= param_capacity) {
+                if (param_capacity > SIZE_MAX / 2) {
+                    error(parser, "too many function parameters");
+                    return NULL;
+                }
                 param_capacity *= 2;
                 params = agim_realloc(params, sizeof(AstNode *) * param_capacity);
             }
