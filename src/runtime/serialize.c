@@ -13,9 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/*============================================================================
- * Serial Buffer Operations
- *============================================================================*/
+/* Serial Buffer Operations */
 
 #define INITIAL_CAPACITY 256
 
@@ -29,7 +27,7 @@ void serial_buffer_init(SerialBuffer *buf) {
 
 void serial_buffer_init_data(SerialBuffer *buf, const uint8_t *data, size_t size) {
     if (!buf) return;
-    buf->data = (uint8_t *)data;  /* Note: not copying, just referencing */
+    buf->data = (uint8_t *)data;
     buf->size = size;
     buf->capacity = size;
     buf->read_pos = 0;
@@ -52,7 +50,6 @@ bool serial_buffer_ensure(SerialBuffer *buf, size_t needed) {
         return true;
     }
 
-    /* Grow by doubling */
     size_t new_capacity = buf->capacity ? buf->capacity : INITIAL_CAPACITY;
     while (new_capacity < required) {
         new_capacity *= 2;
@@ -75,9 +72,7 @@ size_t serial_buffer_remaining(const SerialBuffer *buf) {
     return buf->size > buf->read_pos ? buf->size - buf->read_pos : 0;
 }
 
-/*============================================================================
- * Primitive Write Operations
- *============================================================================*/
+/* Primitive Write Operations */
 
 bool serial_write_u8(SerialBuffer *buf, uint8_t value) {
     if (!serial_buffer_ensure(buf, 1)) return false;
@@ -140,9 +135,7 @@ bool serial_write_string(SerialBuffer *buf, const char *str) {
     return serial_write_bytes(buf, (const uint8_t *)str, len);
 }
 
-/*============================================================================
- * Primitive Read Operations
- *============================================================================*/
+/* Primitive Read Operations */
 
 bool serial_read_u8(SerialBuffer *buf, uint8_t *value) {
     if (!buf || buf->read_pos >= buf->size) return false;
@@ -220,14 +213,11 @@ char *serial_read_string(SerialBuffer *buf) {
     return str;
 }
 
-/*============================================================================
- * Value Serialization
- *============================================================================*/
+/* Value Serialization */
 
 SerializeResult serialize_value(Value *value, SerialBuffer *buf) {
     if (!buf) return SERIALIZE_ERROR_BUFFER;
 
-    /* Handle NULL as nil */
     if (!value) {
         if (!serial_write_u8(buf, SERIAL_TAG_NIL)) return SERIALIZE_ERROR_BUFFER;
         return SERIALIZE_OK;
@@ -283,7 +273,6 @@ SerializeResult serialize_value(Value *value, SerialBuffer *buf) {
 
     case VAL_MAP: {
         if (!serial_write_u8(buf, SERIAL_TAG_MAP)) return SERIALIZE_ERROR_BUFFER;
-        /* Get map keys */
         Value *keys = map_keys(value);
         size_t len = keys ? array_length(keys) : 0;
         if (!serial_write_u32(buf, (uint32_t)len)) return SERIALIZE_ERROR_BUFFER;
@@ -291,10 +280,8 @@ SerializeResult serialize_value(Value *value, SerialBuffer *buf) {
             Value *key = array_get(keys, i);
             if (!key || !value_is_string(key)) continue;
 
-            /* Write key */
             if (!serial_write_string(buf, key->as.string->data)) return SERIALIZE_ERROR_BUFFER;
 
-            /* Write value */
             Value *val = map_get(value, key->as.string->data);
             SerializeResult res = serialize_value(val, buf);
             if (res != SERIALIZE_OK) return res;
@@ -333,17 +320,49 @@ SerializeResult serialize_value(Value *value, SerialBuffer *buf) {
 
     case VAL_FUNCTION:
     case VAL_CLOSURE:
-        /* Functions cannot be serialized (code references) */
         return SERIALIZE_ERROR_UNSUPPORTED;
 
     case VAL_VECTOR:
-        /* Vectors need special handling (persistent data structure) */
         return SERIALIZE_ERROR_UNSUPPORTED;
 
-    case VAL_STRUCT:
-    case VAL_ENUM:
-        /* TODO: Implement struct/enum serialization */
-        return SERIALIZE_ERROR_UNSUPPORTED;
+    case VAL_STRUCT: {
+        if (!serial_write_u8(buf, SERIAL_TAG_STRUCT)) return SERIALIZE_ERROR_BUFFER;
+        StructInstance *s = value->as.struct_val;
+        if (!s) {
+            if (!serial_write_string(buf, "")) return SERIALIZE_ERROR_BUFFER;
+            if (!serial_write_u32(buf, 0)) return SERIALIZE_ERROR_BUFFER;
+        } else {
+            if (!serial_write_string(buf, s->type_name ? s->type_name : "")) return SERIALIZE_ERROR_BUFFER;
+            if (!serial_write_u32(buf, (uint32_t)s->field_count)) return SERIALIZE_ERROR_BUFFER;
+            for (size_t i = 0; i < s->field_count; i++) {
+                if (!serial_write_string(buf, s->field_names[i] ? s->field_names[i] : ""))
+                    return SERIALIZE_ERROR_BUFFER;
+                SerializeResult res = serialize_value(s->fields[i], buf);
+                if (res != SERIALIZE_OK) return res;
+            }
+        }
+        break;
+    }
+
+    case VAL_ENUM: {
+        if (!serial_write_u8(buf, SERIAL_TAG_ENUM)) return SERIALIZE_ERROR_BUFFER;
+        EnumInstance *e = value->as.enum_val;
+        if (!e) {
+            if (!serial_write_string(buf, "")) return SERIALIZE_ERROR_BUFFER;
+            if (!serial_write_string(buf, "")) return SERIALIZE_ERROR_BUFFER;
+            if (!serial_write_u8(buf, 0)) return SERIALIZE_ERROR_BUFFER;
+        } else {
+            if (!serial_write_string(buf, e->type_name ? e->type_name : "")) return SERIALIZE_ERROR_BUFFER;
+            if (!serial_write_string(buf, e->variant_name ? e->variant_name : "")) return SERIALIZE_ERROR_BUFFER;
+            bool has_payload = e->payload != NULL;
+            if (!serial_write_u8(buf, has_payload ? 1 : 0)) return SERIALIZE_ERROR_BUFFER;
+            if (has_payload) {
+                SerializeResult res = serialize_value(e->payload, buf);
+                if (res != SERIALIZE_OK) return res;
+            }
+        }
+        break;
+    }
 
     default:
         return SERIALIZE_ERROR_UNSUPPORTED;
@@ -352,9 +371,7 @@ SerializeResult serialize_value(Value *value, SerialBuffer *buf) {
     return SERIALIZE_OK;
 }
 
-/*============================================================================
- * Value Deserialization
- *============================================================================*/
+/* Value Deserialization */
 
 Value *deserialize_value(SerialBuffer *buf, SerializeResult *result) {
     if (!buf) {
@@ -533,6 +550,83 @@ Value *deserialize_value(SerialBuffer *buf, SerializeResult *result) {
         }
         if (result) *result = SERIALIZE_OK;
         return value_some(val);
+    }
+
+    case SERIAL_TAG_STRUCT: {
+        char *type_name = serial_read_string(buf);
+        if (!type_name) {
+            if (result) *result = SERIALIZE_ERROR_CORRUPT;
+            return NULL;
+        }
+        uint32_t field_count;
+        if (!serial_read_u32(buf, &field_count)) {
+            free(type_name);
+            if (result) *result = SERIALIZE_ERROR_CORRUPT;
+            return NULL;
+        }
+        Value *s = value_struct_new(type_name, field_count);
+        free(type_name);
+        if (!s) {
+            if (result) *result = SERIALIZE_ERROR_BUFFER;
+            return NULL;
+        }
+        for (uint32_t i = 0; i < field_count; i++) {
+            char *field_name = serial_read_string(buf);
+            if (!field_name) {
+                if (result) *result = SERIALIZE_ERROR_CORRUPT;
+                return NULL;
+            }
+            SerializeResult field_result;
+            Value *field_val = deserialize_value(buf, &field_result);
+            if (field_result != SERIALIZE_OK) {
+                free(field_name);
+                if (result) *result = field_result;
+                return NULL;
+            }
+            value_struct_set_field(s, i, field_name, field_val);
+            free(field_name);
+        }
+        if (result) *result = SERIALIZE_OK;
+        return s;
+    }
+
+    case SERIAL_TAG_ENUM: {
+        char *type_name = serial_read_string(buf);
+        if (!type_name) {
+            if (result) *result = SERIALIZE_ERROR_CORRUPT;
+            return NULL;
+        }
+        char *variant_name = serial_read_string(buf);
+        if (!variant_name) {
+            free(type_name);
+            if (result) *result = SERIALIZE_ERROR_CORRUPT;
+            return NULL;
+        }
+        uint8_t has_payload;
+        if (!serial_read_u8(buf, &has_payload)) {
+            free(type_name);
+            free(variant_name);
+            if (result) *result = SERIALIZE_ERROR_CORRUPT;
+            return NULL;
+        }
+        Value *e;
+        if (has_payload) {
+            SerializeResult payload_result;
+            Value *payload = deserialize_value(buf, &payload_result);
+            if (payload_result != SERIALIZE_OK) {
+                free(type_name);
+                free(variant_name);
+                if (result) *result = payload_result;
+                return NULL;
+            }
+            e = value_enum_with_payload(type_name, variant_name, payload);
+        } else {
+            e = value_enum_unit(type_name, variant_name);
+        }
+        free(type_name);
+        free(variant_name);
+        if (result) *result = SERIALIZE_OK;
+        return e;
     }
 
     default:

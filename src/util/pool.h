@@ -1,8 +1,7 @@
 /*
  * Agim - Memory Pool
  *
- * Fixed-size block allocator for reducing fragmentation and
- * improving allocation performance for small objects.
+ * Fixed-size block allocator for reducing fragmentation.
  *
  * Copyright (c) 2025 Agim Language Contributors
  * SPDX-License-Identifier: MIT
@@ -16,75 +15,44 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-/*============================================================================
- * Memory Pool Configuration
- *============================================================================*/
+/* Configuration */
 
-#define POOL_DEFAULT_CHUNK_SIZE 4096  /* 4KB chunks */
-#define POOL_DEFAULT_ALIGNMENT 8      /* 8-byte alignment */
+#define POOL_DEFAULT_CHUNK_SIZE 4096
+#define POOL_DEFAULT_ALIGNMENT 8
 
-/*============================================================================
- * Pool Structures
- *============================================================================*/
+/* Pool Structures */
 
-/* Free block in the pool (stored in the block itself) */
 typedef struct PoolFreeBlock {
     struct PoolFreeBlock *next;
 } PoolFreeBlock;
 
-/* Memory chunk (holds multiple blocks) */
 typedef struct PoolChunk {
     struct PoolChunk *next;
-    char data[];  /* Flexible array of blocks */
+    char data[];
 } PoolChunk;
 
-/* Memory pool for fixed-size allocations */
 typedef struct MemoryPool {
-    size_t block_size;          /* Size of each block (aligned) */
-    size_t blocks_per_chunk;    /* Number of blocks per chunk */
-    size_t chunk_size;          /* Total size of each chunk */
+    size_t block_size;
+    size_t blocks_per_chunk;
+    size_t chunk_size;
 
-    PoolFreeBlock *free_list;   /* List of free blocks */
-    PoolChunk *chunks;          /* List of allocated chunks */
+    PoolFreeBlock *free_list;
+    PoolChunk *chunks;
 
-    /* Statistics */
     _Atomic(size_t) allocated_count;
     _Atomic(size_t) free_count;
     size_t chunk_count;
 
-    /* Thread safety */
     pthread_mutex_t lock;
 } MemoryPool;
 
-/*============================================================================
- * Pool API
- *============================================================================*/
+/* Pool API */
 
-/**
- * Initialize a memory pool for fixed-size blocks.
- * block_size: Size of each allocation (will be aligned)
- */
 void pool_init(MemoryPool *pool, size_t block_size);
-
-/**
- * Free all memory in a pool.
- */
 void pool_free(MemoryPool *pool);
-
-/**
- * Allocate a block from the pool.
- * Returns NULL if allocation fails.
- */
 void *pool_alloc(MemoryPool *pool);
-
-/**
- * Return a block to the pool.
- */
 void pool_dealloc(MemoryPool *pool, void *ptr);
 
-/**
- * Get pool statistics.
- */
 typedef struct PoolStats {
     size_t block_size;
     size_t allocated;
@@ -95,31 +63,11 @@ typedef struct PoolStats {
 
 PoolStats pool_stats(const MemoryPool *pool);
 
-/*============================================================================
- * Global Pools (for common allocation sizes)
- *============================================================================*/
+/* Global Pools */
 
-/**
- * Initialize global memory pools.
- * Call once at startup.
- */
 void pools_init(void);
-
-/**
- * Free global memory pools.
- * Call at shutdown.
- */
 void pools_free(void);
-
-/**
- * Allocate from appropriate global pool.
- * Falls back to malloc for sizes > max pool size.
- */
 void *pools_alloc(size_t size);
-
-/**
- * Free memory allocated from global pools.
- */
 void pools_dealloc(void *ptr, size_t size);
 
 #endif /* AGIM_UTIL_POOL_H */

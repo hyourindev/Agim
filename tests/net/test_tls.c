@@ -43,9 +43,7 @@ static int tests_skipped = 0;
 /* Maximum retries for flaky network tests */
 #define MAX_RETRIES 3
 
-/*============================================================================
- * TLS Tests
- *============================================================================*/
+/* TLS Tests */
 
 static void test_tls_init(void) {
     TEST("tls_init");
@@ -119,9 +117,7 @@ static void test_tls_connect_invalid_host(void) {
     PASS();
 }
 
-/*============================================================================
- * HTTP/HTTPS Tests
- *============================================================================*/
+/* HTTP/HTTPS Tests */
 
 static void test_https_get(void) {
     TEST("http_get (HTTPS)");
@@ -272,9 +268,7 @@ static void test_http_still_works(void) {
     PASS();
 }
 
-/*============================================================================
- * Main
- *============================================================================*/
+/* Main */
 
 int main(void) {
     printf("=== TLS/HTTPS Tests ===\n\n");

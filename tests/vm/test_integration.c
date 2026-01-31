@@ -14,9 +14,7 @@
 #include "types/map.h"
 #include "types/string.h"
 
-/*============================================================================
- * Helper: Write a constant instruction
- *============================================================================*/
+/* Helpers */
 static void emit_const(Chunk *chunk, size_t index, int line) {
     chunk_write_opcode(chunk, OP_CONST, line);
     chunk_write_byte(chunk, (index >> 8) & 0xFF, line);
@@ -41,9 +39,7 @@ static void emit_call(Chunk *chunk, uint16_t arity, int line) {
     chunk_write_byte(chunk, arity & 0xFF, line);
 }
 
-/*============================================================================
- * Test: Countdown loop (100000 iterations)
- *============================================================================*/
+/* Test: Countdown loop */
 void test_countdown_loop(void) {
     printf("  Program: countdown from 1000 to 0\n");
 
@@ -104,9 +100,7 @@ void test_countdown_loop(void) {
     bytecode_free(code);
 }
 
-/*============================================================================
- * Test: Function call and return
- *============================================================================*/
+/* Test: Function call and return */
 void test_function_call(void) {
     printf("  Program: function that adds two numbers\n");
 
@@ -151,9 +145,7 @@ void test_function_call(void) {
     bytecode_free(code);
 }
 
-/*============================================================================
- * Test: Recursive factorial
- *============================================================================*/
+/* Test: Recursive factorial */
 void test_recursive_factorial(void) {
     printf("  Program: factorial(5) using recursion\n");
 
@@ -220,9 +212,7 @@ void test_recursive_factorial(void) {
     bytecode_free(code);
 }
 
-/*============================================================================
- * Test: Fibonacci sequence
- *============================================================================*/
+/* Test: Fibonacci sequence */
 void test_fibonacci(void) {
     printf("  Program: fibonacci(10) using recursion\n");
 
@@ -298,9 +288,7 @@ void test_fibonacci(void) {
     bytecode_free(code);
 }
 
-/*============================================================================
- * Test: Build and iterate array
- *============================================================================*/
+/* Test: Build and iterate array */
 void test_array_operations(void) {
     printf("  Program: build array [1,2,3,4,5], sum all elements\n");
 
@@ -396,9 +384,7 @@ void test_array_operations(void) {
     bytecode_free(code);
 }
 
-/*============================================================================
- * Test: Map operations
- *============================================================================*/
+/* Test: Map operations */
 void test_map_operations(void) {
     printf("  Program: build map {a: 10, b: 20}, get a + b\n");
 
@@ -452,9 +438,7 @@ void test_map_operations(void) {
     bytecode_free(code);
 }
 
-/*============================================================================
- * Test: String operations
- *============================================================================*/
+/* Test: String operations */
 void test_string_operations(void) {
     printf("  Program: \"Hello\" + \", \" + \"World\" + \"!\"\n");
 
@@ -489,9 +473,7 @@ void test_string_operations(void) {
     bytecode_free(code);
 }
 
-/*============================================================================
- * Test: Nested function calls
- *============================================================================*/
+/* Test: Nested function calls */
 void test_nested_calls(void) {
     printf("  Program: outer(inner(5)) where inner(x)=x*2, outer(x)=x+10\n");
 
@@ -554,9 +536,7 @@ void test_nested_calls(void) {
     bytecode_free(code);
 }
 
-/*============================================================================
- * Test: Complex expression
- *============================================================================*/
+/* Test: Complex expression */
 void test_complex_expression(void) {
     printf("  Program: ((10 + 5) * 2 - 4) / 2\n");
 
@@ -602,9 +582,7 @@ void test_complex_expression(void) {
     bytecode_free(code);
 }
 
-/*============================================================================
- * Main
- *============================================================================*/
+/* Main */
 
 int main(void) {
     printf("\n");

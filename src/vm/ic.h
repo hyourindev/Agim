@@ -1,9 +1,7 @@
 /*
  * Agim - Inline Cache
  *
- * Inline caching optimizes property lookups by caching the result of
- * expensive hash table searches. When the same object shape is accessed
- * repeatedly, the cache provides O(1) lookup instead of O(1) hash lookup.
+ * Caches property lookups for O(1) access on repeated map accesses.
  *
  * Copyright (c) 2025 Agim Language Contributors
  * SPDX-License-Identifier: MIT
@@ -16,87 +14,47 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-/* Forward declarations */
 typedef struct Value Value;
 typedef struct Map Map;
 
-/*============================================================================
- * Inline Cache States
- *============================================================================*/
+/* Inline Cache States */
 
 typedef enum ICState {
-    IC_UNINITIALIZED,  /* Never used */
-    IC_MONO,           /* Single shape cached (monomorphic) */
-    IC_POLY,           /* Multiple shapes cached (polymorphic) */
-    IC_MEGA,           /* Too many shapes, use slow path */
+    IC_UNINITIALIZED,
+    IC_MONO,
+    IC_POLY,
+    IC_MEGA,
 } ICState;
 
-/*============================================================================
- * Inline Cache Entry
- *============================================================================*/
+/* Inline Cache Entry */
 
-#define IC_MAX_ENTRIES 4  /* Max polymorphic entries before megamorphic */
+#define IC_MAX_ENTRIES 4
 
 typedef struct ICEntry {
-    uint64_t shape_id;  /* Map identity (address or hash) */
-    size_t bucket;      /* Cached bucket index for hash table */
+    uint64_t shape_id;
+    size_t bucket;
 } ICEntry;
 
-/*============================================================================
- * Inline Cache
- *============================================================================*/
+/* Inline Cache */
 
 typedef struct InlineCache {
     ICState state;
-    uint8_t count;                 /* Number of entries (for polymorphic) */
+    uint8_t count;
     ICEntry entries[IC_MAX_ENTRIES];
 } InlineCache;
 
-/*============================================================================
- * Inline Cache API
- *============================================================================*/
+/* Inline Cache API */
 
-/**
- * Initialize an inline cache.
- */
 void ic_init(InlineCache *ic);
-
-/**
- * Look up a value in the map using the inline cache.
- *
- * @param ic      The inline cache
- * @param map     The map value to look up in
- * @param key     The key to look up
- * @param result  Output: the found value (or NULL if not found)
- * @return        true if cache hit (result is valid), false if cache miss
- */
 bool ic_lookup(InlineCache *ic, Value *map, const char *key, Value **result);
-
-/**
- * Update the inline cache after a cache miss.
- *
- * @param ic        The inline cache
- * @param map       The map that was looked up
- * @param bucket    The bucket index where the key was found
- */
 void ic_update(InlineCache *ic, Value *map, size_t bucket);
-
-/**
- * Get the shape ID for a map value.
- * Currently uses the map's address as a simple identity.
- */
 uint64_t ic_shape_id(Value *map);
 
-/**
- * Check if the cache is in megamorphic state (too many shapes).
- */
 static inline bool ic_is_mega(const InlineCache *ic) {
     return ic->state == IC_MEGA;
 }
 
-/*============================================================================
- * Statistics (for debugging/profiling)
- *============================================================================*/
+/* Statistics (Debug) */
 
 #ifdef AGIM_DEBUG
 typedef struct ICStats {

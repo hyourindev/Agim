@@ -9,47 +9,35 @@
 
 #include "runtime/block.h"
 #include "runtime/mailbox.h"
+#include "runtime/supervisor.h"
+#include "runtime/telemetry.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-/*============================================================================
- * Default Limits
- *============================================================================*/
+/* Default Limits */
 
 BlockLimits block_limits_default(void) {
     return (BlockLimits){
-        .max_heap_size = 1 * 1024 * 1024,    /* 1 MB (was 64 MB) - enables 1M agents */
-        .max_stack_depth = 256,               /* Was 1024 */
-        .max_call_depth = 64,                 /* Was 256 */
+        .max_heap_size = 1 * 1024 * 1024,
+        .max_stack_depth = 256,
+        .max_call_depth = 64,
         .max_reductions = 10000,
-        .max_mailbox_size = 100,              /* Was 1000 */
+        .max_mailbox_size = 100,
     };
 }
 
-/*============================================================================
- * Block Message Passing
- *============================================================================*/
+/* Message Passing */
 
 bool block_send(Block *target, Pid sender, Value *value) {
     if (!target || !block_is_alive(target)) return false;
 
     /*
-     * Message passing with COW (Copy-on-Write) optimization:
-     *
-     * - Immutable types (nil, bool, int, float, string, pid, function, vector):
-     *   Share directly with reference counting - these can never be modified.
-     *
-     * - Mutable types (array, map, bytes):
-     *   Use COW sharing - the value is marked as shared and will be copied
-     *   only if either party attempts to mutate it.
-     *
-     * - Unsafe types (closure):
-     *   Must deep copy because closures capture mutable state.
-     *
-     * This optimization avoids expensive deep copies for immutable data
-     * and defers copying of mutable data until actually needed.
+     * Message passing with COW optimization:
+     * - Immutable types: share directly with refcounting
+     * - Mutable types (array, map): COW sharing
+     * - Unsafe types (closure): deep copy
      */
     Value *msg_value;
 
@@ -57,7 +45,6 @@ bool block_send(Block *target, Pid sender, Value *value) {
         msg_value = value_nil();
     } else {
         switch (value->type) {
-        /* Immutable types - share directly with refcount */
         case VAL_NIL:
         case VAL_BOOL:
         case VAL_INT:
@@ -69,21 +56,15 @@ bool block_send(Block *target, Pid sender, Value *value) {
             msg_value = value_retain(value);
             break;
 
-        /* Mutable types - use COW semantics for efficient sharing.
-         * The array_ensure_writable/map_ensure_writable functions will
-         * create a new Value when the receiver modifies the shared data.
-         */
         case VAL_ARRAY:
         case VAL_MAP:
             msg_value = value_cow_share(value);
             break;
 
-        /* Bytes still need deep copy (no COW implementation yet) */
         case VAL_BYTES:
             msg_value = value_copy(value);
             break;
 
-        /* Unsafe types - must deep copy */
         case VAL_CLOSURE:
         default:
             msg_value = value_copy(value);
@@ -93,20 +74,17 @@ bool block_send(Block *target, Pid sender, Value *value) {
 
     if (!msg_value) return false;
 
-    /* Create message */
     Message *msg = message_new(sender, msg_value);
     if (!msg) {
         value_release(msg_value);
         return false;
     }
 
-    /* Push to mailbox */
     if (!mailbox_push(&target->mailbox, msg, target->limits.max_mailbox_size)) {
         message_free(msg);
         return false;
     }
 
-    /* Update counters */
     target->counters.messages_received++;
 
     return true;
@@ -121,24 +99,19 @@ bool block_has_messages(const Block *block) {
     return block && !mailbox_empty(&block->mailbox);
 }
 
-/*============================================================================
- * Lifecycle
- *============================================================================*/
+/* Lifecycle */
 
 Block *block_new(Pid pid, const char *name, const BlockLimits *limits) {
     Block *block = malloc(sizeof(Block));
     if (!block) return NULL;
 
-    /* Identity */
     block->pid = pid;
     block->name = name ? strdup(name) : NULL;
 
-    /* State (atomic) */
     atomic_store(&block->state, BLOCK_RUNNABLE);
     block->u.exit.exit_code = 0;
     block->u.exit.exit_reason = NULL;
 
-    /* Create VM */
     block->vm = vm_new();
     if (!block->vm) {
         free((void *)block->name);
@@ -146,7 +119,6 @@ Block *block_new(Pid pid, const char *name, const BlockLimits *limits) {
         return NULL;
     }
 
-    /* Create heap with limits */
     GCConfig gc_config = gc_config_default();
     if (limits) {
         gc_config.max_heap_size = limits->max_heap_size;
@@ -161,32 +133,25 @@ Block *block_new(Pid pid, const char *name, const BlockLimits *limits) {
 
     block->code = NULL;
 
-    /* Message passing */
     mailbox_init(&block->mailbox);
 
-    /* Security - no capabilities by default */
     block->capabilities = CAP_NONE;
 
-    /* Limits */
     if (limits) {
         block->limits = *limits;
     } else {
         block->limits = block_limits_default();
     }
 
-    /* Counters */
     memset(&block->counters, 0, sizeof(BlockCounters));
 
-    /* Linking */
     block->links = NULL;
     block->link_count = 0;
     block->link_capacity = 0;
 
-    /* Supervision */
     block->parent = PID_INVALID;
     block->supervisor = NULL;
 
-    /* Monitoring */
     block->monitors = NULL;
     block->monitor_count = 0;
     block->monitor_capacity = 0;
@@ -194,11 +159,20 @@ Block *block_new(Pid pid, const char *name, const BlockLimits *limits) {
     block->monitored_by_count = 0;
     block->monitored_by_capacity = 0;
 
-    /* Scheduler */
     block->next = NULL;
     block->prev = NULL;
 
-    /* Link VM to block for runtime operations */
+    block->pending_timer = NULL;
+    block->timeout_fired = false;
+
+    block->save_queue_head = NULL;
+    block->save_queue_tail = NULL;
+
+    block->tracer = NULL;
+
+    block->module_name = NULL;
+    block->pending_upgrade = false;
+
     block->vm->block = block;
 
     return block;
@@ -207,37 +181,40 @@ Block *block_new(Pid pid, const char *name, const BlockLimits *limits) {
 void block_free(Block *block) {
     if (!block) return;
 
-    /* Free VM */
     if (block->vm) {
         vm_free(block->vm);
     }
 
-    /* Free heap */
     if (block->heap) {
         heap_free(block->heap);
     }
 
-    /* Free mailbox */
     mailbox_free(&block->mailbox);
 
-    /* Free links array */
     free(block->links);
 
-    /* Free monitors arrays */
     free(block->monitors);
     free(block->monitored_by);
 
-    /* Free supervisor if present */
     if (block->supervisor) {
-        /* Note: supervisor_free is declared in supervisor.h */
-        /* We just free the struct here; full cleanup should be done via supervisor_shutdown */
-        free(block->supervisor);
+        supervisor_free(block->supervisor);
     }
 
-    /* Free name */
+    Message *save_msg = block->save_queue_head;
+    while (save_msg) {
+        Message *next = save_msg->next;
+        message_free(save_msg);
+        save_msg = next;
+    }
+
+    if (block->tracer) {
+        tracer_free(block->tracer);
+    }
+
+    free(block->module_name);
+
     free((void *)block->name);
 
-    /* Free exit reason if allocated */
     free((void *)block->u.exit.exit_reason);
 
     free(block);
@@ -253,9 +230,7 @@ bool block_load(Block *block, Bytecode *code) {
     return true;
 }
 
-/*============================================================================
- * Execution
- *============================================================================*/
+/* Execution */
 
 BlockRunResult block_run(Block *block) {
     if (!block) return BLOCK_RUN_ERROR;
@@ -269,23 +244,17 @@ BlockRunResult block_run(Block *block) {
         return BLOCK_RUN_WAITING;
     }
 
-    /* Atomically transition to running state */
     if (!block_try_transition(block, BLOCK_RUNNABLE, BLOCK_RUNNING)) {
-        /* State changed unexpectedly - retry or report error */
         return BLOCK_RUN_ERROR;
     }
 
-    /* Configure reduction limit */
     block->vm->reduction_limit = block->limits.max_reductions;
     block->vm->reductions = 0;
 
-    /* Execute */
     VMResult result = vm_run(block->vm);
 
-    /* Update counters */
     block->counters.reductions += block->vm->reductions;
 
-    /* Translate result */
     switch (result) {
     case VM_OK:
         atomic_store(&block->state, BLOCK_DEAD);
@@ -302,7 +271,6 @@ BlockRunResult block_run(Block *block) {
         return BLOCK_RUN_YIELD;
 
     case VM_WAITING:
-        /* Block is waiting for a message, state already set by VM */
         return BLOCK_RUN_WAITING;
 
     case VM_ERROR_RUNTIME:
@@ -339,9 +307,7 @@ bool block_try_transition(Block *block, BlockState from, BlockState to) {
     return atomic_compare_exchange_strong(&block->state, &from, to);
 }
 
-/*============================================================================
- * Capabilities
- *============================================================================*/
+/* Capabilities */
 
 void block_grant(Block *block, CapabilitySet caps) {
     if (block) {
@@ -368,21 +334,17 @@ bool block_check_cap(Block *block, Capability cap) {
     return true;
 }
 
-/*============================================================================
- * Linking
- *============================================================================*/
+/* Linking */
 
 bool block_link(Block *block, Pid other) {
     if (!block || other == PID_INVALID) return false;
 
-    /* Check if already linked */
     for (size_t i = 0; i < block->link_count; i++) {
         if (block->links[i] == other) {
-            return true; /* Already linked */
+            return true;
         }
     }
 
-    /* Grow array if needed */
     if (block->link_count >= block->link_capacity) {
         uint32_t new_cap = block->link_capacity == 0 ? 4 : block->link_capacity * 2;
         Pid *new_links = realloc(block->links, sizeof(Pid) * new_cap);
@@ -400,7 +362,6 @@ void block_unlink(Block *block, Pid other) {
 
     for (size_t i = 0; i < block->link_count; i++) {
         if (block->links[i] == other) {
-            /* Swap with last and shrink */
             block->links[i] = block->links[--block->link_count];
             return;
         }
@@ -416,21 +377,17 @@ const Pid *block_get_links(const Block *block, size_t *count) {
     return block->links;
 }
 
-/*============================================================================
- * Monitoring
- *============================================================================*/
+/* Monitoring */
 
 bool block_monitor(Block *block, Pid target) {
     if (!block || target == PID_INVALID) return false;
 
-    /* Check if already monitoring */
     for (size_t i = 0; i < block->monitor_count; i++) {
         if (block->monitors[i] == target) {
-            return true; /* Already monitoring */
+            return true;
         }
     }
 
-    /* Grow array if needed */
     if (block->monitor_count >= block->monitor_capacity) {
         uint32_t new_cap = block->monitor_capacity == 0 ? 4 : block->monitor_capacity * 2;
         Pid *new_monitors = realloc(block->monitors, sizeof(Pid) * new_cap);
@@ -448,7 +405,6 @@ void block_demonitor(Block *block, Pid target) {
 
     for (size_t i = 0; i < block->monitor_count; i++) {
         if (block->monitors[i] == target) {
-            /* Swap with last and shrink */
             block->monitors[i] = block->monitors[--block->monitor_count];
             return;
         }
@@ -458,14 +414,12 @@ void block_demonitor(Block *block, Pid target) {
 bool block_add_monitored_by(Block *block, Pid monitor_pid) {
     if (!block || monitor_pid == PID_INVALID) return false;
 
-    /* Check if already monitored by this PID */
     for (size_t i = 0; i < block->monitored_by_count; i++) {
         if (block->monitored_by[i] == monitor_pid) {
             return true;
         }
     }
 
-    /* Grow array if needed */
     if (block->monitored_by_count >= block->monitored_by_capacity) {
         uint32_t new_cap = block->monitored_by_capacity == 0 ? 4 : block->monitored_by_capacity * 2;
         Pid *new_monitored = realloc(block->monitored_by, sizeof(Pid) * new_cap);
@@ -498,9 +452,7 @@ const Pid *block_get_monitors(const Block *block, size_t *count) {
     return block->monitors;
 }
 
-/*============================================================================
- * Termination
- *============================================================================*/
+/* Termination */
 
 void block_exit(Block *block, int exit_code) {
     if (!block) return;
@@ -522,9 +474,7 @@ bool block_is_alive(const Block *block) {
     return block && atomic_load(&block->state) != BLOCK_DEAD;
 }
 
-/*============================================================================
- * Debug
- *============================================================================*/
+/* Debug */
 
 const char *block_state_name(BlockState state) {
     switch (state) {

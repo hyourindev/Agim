@@ -14,9 +14,7 @@
 #include "vm/vm.h"
 #include "vm/value.h"
 
-/*============================================================================
- * Test Helpers
- *============================================================================*/
+/* Test Helpers */
 
 static int64_t run_and_get_int(const char *source) {
     const char *error = NULL;
@@ -123,9 +121,7 @@ static bool compiles(const char *source) {
     return true;
 }
 
-/*============================================================================
- * Module/Import Tests
- *============================================================================*/
+/* Module/Import Tests */
 
 void test_import_lexer(void) {
     printf("  Testing import/export tokens...\n");
@@ -167,9 +163,7 @@ void test_export_parsing(void) {
     ASSERT(compiles("export fn add(a, b) { return a + b }"));
 }
 
-/*============================================================================
- * Result Type Tests
- *============================================================================*/
+/* Result Type Tests */
 
 void test_result_ok(void) {
     printf("  Testing ok() creation...\n");
@@ -248,9 +242,7 @@ void test_result_chaining(void) {
     ASSERT_EQ(5, run_and_get_int(source));
 }
 
-/*============================================================================
- * Match Expression Tests
- *============================================================================*/
+/* Match Expression Tests */
 
 void test_match_parsing(void) {
     printf("  Testing match expression parsing...\n");
@@ -296,9 +288,7 @@ void test_match_with_function(void) {
     ASSERT_EQ(10, run_and_get_int(source));
 }
 
-/*============================================================================
- * Value-Level Result Tests
- *============================================================================*/
+/* Value-Level Result Tests */
 
 void test_value_result_ok(void) {
     printf("  Testing value_result_ok...\n");
@@ -352,9 +342,7 @@ void test_value_result_unwrap_or(void) {
     value_free(default_val2);
 }
 
-/*============================================================================
- * Tool System Tests
- *============================================================================*/
+/* Tool System Tests */
 
 void test_list_tools(void) {
     printf("  Testing list_tools...\n");
@@ -364,9 +352,7 @@ void test_list_tools(void) {
     ASSERT_STR_EQ("array", run_and_get_string(source));
 }
 
-/*============================================================================
- * Main
- *============================================================================*/
+/* Main */
 
 int main(void) {
     printf("Running feature tests...\n\n");

@@ -9,9 +9,7 @@
 #include "vm/regvm.h"
 #include "vm/value.h"
 
-/*============================================================================
- * Basic Tests
- *============================================================================*/
+/* Basic Tests */
 
 void test_regvm_create(void) {
     RegVM *vm = regvm_new();
@@ -29,9 +27,7 @@ void test_regchunk_create(void) {
     regchunk_free(chunk);
 }
 
-/*============================================================================
- * Arithmetic Tests
- *============================================================================*/
+/* Arithmetic Tests */
 
 void test_regvm_add(void) {
     RegVM *vm = regvm_new();
@@ -108,9 +104,7 @@ void test_regvm_div(void) {
     regvm_free(vm);
 }
 
-/*============================================================================
- * Comparison Tests
- *============================================================================*/
+/* Comparison Tests */
 
 void test_regvm_eq(void) {
     RegVM *vm = regvm_new();
@@ -149,9 +143,7 @@ void test_regvm_lt(void) {
     regvm_free(vm);
 }
 
-/*============================================================================
- * Control Flow Tests
- *============================================================================*/
+/* Control Flow Tests */
 
 void test_regvm_loop(void) {
     RegVM *vm = regvm_new();
@@ -190,9 +182,7 @@ void test_regvm_loop(void) {
     regvm_free(vm);
 }
 
-/*============================================================================
- * Data Structure Tests
- *============================================================================*/
+/* Data Structure Tests */
 
 void test_regvm_array(void) {
     RegVM *vm = regvm_new();
@@ -230,9 +220,7 @@ void test_regvm_map(void) {
     regvm_free(vm);
 }
 
-/*============================================================================
- * Constant Loading Tests
- *============================================================================*/
+/* Constant Loading Tests */
 
 void test_regvm_load_constant(void) {
     RegVM *vm = regvm_new();
@@ -256,9 +244,7 @@ void test_regvm_load_constant(void) {
     regvm_free(vm);
 }
 
-/*============================================================================
- * Main
- *============================================================================*/
+/* Main */
 
 int main(void) {
     /* Basic tests */

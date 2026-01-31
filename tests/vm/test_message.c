@@ -10,9 +10,7 @@
 #include "runtime/scheduler.h"
 #include "vm/primitives.h"
 
-/*============================================================================
- * Mailbox Unit Tests
- *============================================================================*/
+/* Mailbox Unit Tests */
 
 void test_mailbox_init(void) {
     Mailbox mailbox;
@@ -83,9 +81,7 @@ void test_mailbox_limit(void) {
     mailbox_free(&mailbox);
 }
 
-/*============================================================================
- * Block Message Tests
- *============================================================================*/
+/* Block Message Tests */
 
 void test_block_send_receive(void) {
     BlockLimits limits = block_limits_default();
@@ -145,9 +141,7 @@ void test_block_deep_copy_isolation(void) {
     block_free(receiver);
 }
 
-/*============================================================================
- * VM Opcode Tests
- *============================================================================*/
+/* VM Opcode Tests */
 
 /* Helper: create bytecode that pushes SELF */
 static Bytecode *make_self_code(void) {
@@ -320,9 +314,7 @@ void test_send_without_capability(void) {
     bytecode_free(send_code);
 }
 
-/*============================================================================
- * Primitives Tests
- *============================================================================*/
+/* Primitives Tests */
 
 void test_primitives_memory(void) {
     PrimitivesRuntime *rt = primitives_new();
@@ -420,9 +412,7 @@ void test_primitives_infer(void) {
     primitives_free(rt);
 }
 
-/*============================================================================
- * Main
- *============================================================================*/
+/* Main */
 
 int main(void) {
     /* Mailbox tests */

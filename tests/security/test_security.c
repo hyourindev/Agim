@@ -34,9 +34,7 @@
 #include "types/map.h"
 #include "types/string.h"
 
-/*============================================================================
- * Test Helpers
- *============================================================================*/
+/* Test Helpers */
 
 static int tests_run = 0;
 static int tests_passed = 0;
@@ -57,9 +55,7 @@ static int tests_passed = 0;
     } \
 } while(0)
 
-/*============================================================================
- * Sandbox Tests
- *============================================================================*/
+/* Sandbox Tests */
 
 TEST(test_sandbox_basic) {
     Sandbox *sb = sandbox_new();
@@ -151,9 +147,7 @@ TEST(test_sandbox_cwd) {
     sandbox_free(sb);
 }
 
-/*============================================================================
- * HTTP URL Validation Tests
- *============================================================================*/
+/* HTTP URL Validation Tests */
 
 TEST(test_http_url_valid) {
     /* Valid URLs */
@@ -262,9 +256,7 @@ TEST(test_http_url_encode) {
     free(encoded);
 }
 
-/*============================================================================
- * VM Bounds Checking Tests
- *============================================================================*/
+/* VM Bounds Checking Tests */
 
 TEST(test_bounds_negative_index) {
     /* Test that negative array indices are rejected */
@@ -299,9 +291,7 @@ TEST(test_slice_negative_indices) {
     ASSERT(result == AGIM_OK);
 }
 
-/*============================================================================
- * Parser Recursion Limit Tests
- *============================================================================*/
+/* Parser Recursion Limit Tests */
 
 TEST(test_recursion_limit) {
     /* Generate deeply nested expression */
@@ -325,9 +315,7 @@ TEST(test_recursion_limit) {
     free(source);
 }
 
-/*============================================================================
- * HTTP Injection Prevention Tests
- *============================================================================*/
+/* HTTP Injection Prevention Tests */
 
 TEST(test_http_no_command_injection) {
     /*
@@ -362,9 +350,7 @@ TEST(test_http_no_command_injection) {
     ASSERT(marker_exists);
 }
 
-/*============================================================================
- * Path Traversal in VM File Operations Tests
- *============================================================================*/
+/* Path Traversal in VM File Operations Tests */
 
 TEST(test_file_read_traversal) {
     /* Test that path traversal is blocked in file operations */
@@ -386,9 +372,7 @@ TEST(test_file_read_traversal) {
     sandbox_set_global(sandbox_new_permissive());
 }
 
-/*============================================================================
- * Capability Enforcement Tests
- *============================================================================*/
+/* Capability Enforcement Tests */
 
 TEST(test_capability_shell_denied) {
     /*
@@ -484,9 +468,7 @@ TEST(test_capability_names) {
     ASSERT(strcmp(exec_name, "EXEC") == 0);
 }
 
-/*============================================================================
- * Integer Overflow Protection Tests
- *============================================================================*/
+/* Integer Overflow Protection Tests */
 
 TEST(test_array_overflow_protection) {
     /*
@@ -612,9 +594,7 @@ TEST(test_value_retain_freeing_object) {
     value_free(val);
 }
 
-/*============================================================================
- * Main
- *============================================================================*/
+/* Main */
 
 int main(void) {
     printf("Running security tests...\n\n");

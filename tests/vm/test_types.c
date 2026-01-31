@@ -11,9 +11,7 @@
 #include "vm/value.h"
 #include <string.h>
 
-/*============================================================================
- * Option Type Tests
- *============================================================================*/
+/* Option Type Tests */
 
 void test_option_some_basic(void) {
     Value *inner = value_int(42);
@@ -152,9 +150,7 @@ void test_option_some_wrapping_nil(void) {
     value_free(opt);
 }
 
-/*============================================================================
- * Result Type Tests
- *============================================================================*/
+/* Result Type Tests */
 
 void test_result_ok_basic(void) {
     Value *inner = value_int(42);
@@ -309,9 +305,7 @@ void test_result_ok_wrapping_nil(void) {
     value_free(result);
 }
 
-/*============================================================================
- * Struct Type Tests
- *============================================================================*/
+/* Struct Type Tests */
 
 void test_struct_new_basic(void) {
     Value *s = value_struct_new("Point", 2);
@@ -465,9 +459,7 @@ void test_struct_index_out_of_bounds(void) {
     value_free(s);
 }
 
-/*============================================================================
- * Enum Type Tests
- *============================================================================*/
+/* Enum Type Tests */
 
 void test_enum_unit_basic(void) {
     Value *e = value_enum_unit("Color", "Red");
@@ -610,9 +602,7 @@ void test_enum_payload_with_nil(void) {
     value_free(e);
 }
 
-/*============================================================================
- * Memory Management Tests
- *============================================================================*/
+/* Memory Management Tests */
 
 void test_value_free_option(void) {
     /* Test that freeing Option doesn't leak */
@@ -713,9 +703,7 @@ void test_value_copy_enum(void) {
     value_free(copy);
 }
 
-/*============================================================================
- * Type Predicate Tests
- *============================================================================*/
+/* Type Predicate Tests */
 
 void test_value_is_option(void) {
     Value *opt_some = value_some(value_int(1));
@@ -771,9 +759,7 @@ void test_value_is_enum(void) {
     value_free(not_e);
 }
 
-/*============================================================================
- * Nested Type Tests
- *============================================================================*/
+/* Nested Type Tests */
 
 void test_option_nested(void) {
     /* Some(Some(42)) */
@@ -842,9 +828,7 @@ void test_enum_with_struct_payload(void) {
     value_free(e);
 }
 
-/*============================================================================
- * Main
- *============================================================================*/
+/* Main */
 
 int main(void) {
     printf("Running type system tests...\n\n");

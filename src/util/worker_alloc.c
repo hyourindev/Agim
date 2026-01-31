@@ -6,30 +6,17 @@
  */
 
 #include "util/worker_alloc.h"
+#include "util/alloc.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-/*============================================================================
- * Pool Size Configuration
- *============================================================================*/
+/* Pool Size Configuration */
 
 static const size_t pool_sizes[WORKER_ALLOC_NUM_POOLS] = {
     16, 32, 64, 128, 256, 512
 };
 
-/*============================================================================
- * Helper Functions
- *============================================================================*/
-
-static inline size_t align_size(size_t size, size_t alignment) {
-    return (size + alignment - 1) & ~(alignment - 1);
-}
-
-/**
- * Find the pool index for a given size.
- * Returns -1 if size is too large for any pool.
- */
 static inline int find_pool_index(size_t size) {
     for (int i = 0; i < WORKER_ALLOC_NUM_POOLS; i++) {
         if (size <= pool_sizes[i]) {
@@ -39,17 +26,14 @@ static inline int find_pool_index(size_t size) {
     return -1;
 }
 
-/*============================================================================
- * Pool Operations
- *============================================================================*/
+/* Pool Operations */
 
 static void pool_init(WorkerPool *pool, size_t block_size) {
-    /* Ensure minimum size for free list pointer */
     if (block_size < sizeof(WorkerFreeBlock)) {
         block_size = sizeof(WorkerFreeBlock);
     }
 
-    pool->block_size = align_size(block_size, 8);  /* 8-byte alignment */
+    pool->block_size = align_size(block_size, 8);
     pool->blocks_per_chunk = (WORKER_ALLOC_CHUNK_SIZE - sizeof(WorkerChunk)) / pool->block_size;
     pool->free_list = NULL;
     pool->chunks = NULL;
@@ -58,7 +42,6 @@ static void pool_init(WorkerPool *pool, size_t block_size) {
 }
 
 static void pool_free_all(WorkerPool *pool) {
-    /* Free all chunks */
     WorkerChunk *chunk = pool->chunks;
     while (chunk) {
         WorkerChunk *next = chunk->next;
@@ -71,20 +54,14 @@ static void pool_free_all(WorkerPool *pool) {
     pool->free_count = 0;
 }
 
-/**
- * Grow the pool by allocating a new chunk.
- * Returns true on success.
- */
 static bool pool_grow(WorkerPool *pool) {
     size_t chunk_size = sizeof(WorkerChunk) + pool->block_size * pool->blocks_per_chunk;
     WorkerChunk *chunk = malloc(chunk_size);
     if (!chunk) return false;
 
-    /* Link into chunk list */
     chunk->next = pool->chunks;
     pool->chunks = chunk;
 
-    /* Add all blocks to free list */
     char *block = chunk->data;
     for (size_t i = 0; i < pool->blocks_per_chunk; i++) {
         WorkerFreeBlock *free_block = (WorkerFreeBlock *)block;
@@ -98,14 +75,12 @@ static bool pool_grow(WorkerPool *pool) {
 }
 
 static void *pool_alloc(WorkerPool *pool) {
-    /* Grow if needed */
     if (!pool->free_list) {
         if (!pool_grow(pool)) {
             return NULL;
         }
     }
 
-    /* Pop from free list */
     WorkerFreeBlock *block = pool->free_list;
     pool->free_list = block->next;
 
@@ -116,7 +91,6 @@ static void *pool_alloc(WorkerPool *pool) {
 }
 
 static void pool_dealloc(WorkerPool *pool, void *ptr) {
-    /* Push onto free list */
     WorkerFreeBlock *block = (WorkerFreeBlock *)ptr;
     block->next = pool->free_list;
     pool->free_list = block;
@@ -125,9 +99,7 @@ static void pool_dealloc(WorkerPool *pool, void *ptr) {
     pool->free_count++;
 }
 
-/*============================================================================
- * Worker Allocator Implementation
- *============================================================================*/
+/* Worker Allocator Implementation */
 
 void worker_alloc_init(WorkerAllocator *alloc, int worker_id) {
     if (!alloc) return;
@@ -157,7 +129,6 @@ void *worker_alloc_alloc(WorkerAllocator *alloc, size_t size) {
         return pool_alloc(&alloc->pools[idx]);
     }
 
-    /* Too large for pools, use malloc */
     return malloc(size);
 }
 
@@ -175,13 +146,10 @@ void worker_alloc_dealloc(WorkerAllocator *alloc, void *ptr, size_t size) {
         return;
     }
 
-    /* Was allocated with malloc */
     free(ptr);
 }
 
-/*============================================================================
- * Thread-Local Storage
- *============================================================================*/
+/* Thread-Local Storage */
 
 static _Thread_local WorkerAllocator *tls_current_alloc = NULL;
 
@@ -212,9 +180,7 @@ void worker_dealloc(void *ptr, size_t size) {
     free(ptr);
 }
 
-/*============================================================================
- * Statistics
- *============================================================================*/
+/* Statistics */
 
 WorkerAllocStats worker_alloc_stats(const WorkerAllocator *alloc) {
     WorkerAllocStats stats = {0};
@@ -230,7 +196,6 @@ WorkerAllocStats worker_alloc_stats(const WorkerAllocator *alloc) {
         stats.pool_allocated[i] = pool->allocated_count;
         stats.pool_free[i] = pool->free_count;
 
-        /* Count chunks */
         WorkerChunk *chunk = pool->chunks;
         while (chunk) {
             total_chunks++;

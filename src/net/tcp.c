@@ -41,9 +41,7 @@
     #define sock_errno errno
 #endif
 
-/*============================================================================
- * Socket Structure
- *============================================================================*/
+/* Socket Structure */
 
 struct TCPSocket {
     socket_t fd;
@@ -51,9 +49,7 @@ struct TCPSocket {
     int timeout_ms;
 };
 
-/*============================================================================
- * Global State
- *============================================================================*/
+/* Global State */
 
 static bool g_tcp_initialized = false;
 
@@ -82,9 +78,7 @@ void tcp_cleanup(void) {
     g_tcp_initialized = false;
 }
 
-/*============================================================================
- * Connection
- *============================================================================*/
+/* Connection */
 
 /**
  * Set socket to non-blocking mode (internal).
@@ -251,9 +245,7 @@ void tcp_close(TCPSocket *sock) {
     free(sock);
 }
 
-/*============================================================================
- * I/O
- *============================================================================*/
+/* I/O */
 
 ssize_t tcp_write(TCPSocket *sock, const void *data, size_t len) {
     if (!sock || sock->fd == INVALID_SOCKET_VAL || !data || len == 0) {
@@ -320,9 +312,7 @@ ssize_t tcp_read(TCPSocket *sock, void *buf, size_t len) {
     return result;
 }
 
-/*============================================================================
- * Options
- *============================================================================*/
+/* Options */
 
 bool tcp_set_timeout(TCPSocket *sock, int timeout_ms) {
     if (!sock || sock->fd == INVALID_SOCKET_VAL) return false;
@@ -358,9 +348,7 @@ bool tcp_set_nonblocking(TCPSocket *sock, bool nonblocking) {
     return set_nonblocking_internal(sock->fd, nonblocking);
 }
 
-/*============================================================================
- * Info
- *============================================================================*/
+/* Info */
 
 int tcp_get_fd(TCPSocket *sock) {
     if (!sock) return -1;

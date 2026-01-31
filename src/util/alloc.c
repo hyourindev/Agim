@@ -36,3 +36,13 @@ char *agim_strdup(const char *str) {
     }
     return dup;
 }
+
+char *agim_strndup(const char *str, size_t n) {
+    if (!str) return NULL;
+    char *dup = agim_alloc(n + 1);
+    if (dup) {
+        memcpy(dup, str, n);
+        dup[n] = '\0';
+    }
+    return dup;
+}

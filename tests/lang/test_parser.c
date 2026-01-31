@@ -24,9 +24,7 @@ static AstNode *parse(const char *source) {
     return ast;
 }
 
-/*============================================================================
- * Basic Expression Tests
- *============================================================================*/
+/* Basic Expression Tests */
 
 void test_parse_literals(void) {
     printf("  Testing literal parsing...\n");
@@ -104,9 +102,7 @@ void test_parse_ternary(void) {
     ast_free(ast);
 }
 
-/*============================================================================
- * Statement Tests
- *============================================================================*/
+/* Statement Tests */
 
 void test_parse_let(void) {
     printf("  Testing let statement parsing...\n");
@@ -164,9 +160,7 @@ void test_parse_for(void) {
     ast_free(ast);
 }
 
-/*============================================================================
- * Function Tests
- *============================================================================*/
+/* Function Tests */
 
 void test_parse_fn(void) {
     printf("  Testing function declaration parsing...\n");
@@ -197,9 +191,7 @@ void test_parse_call(void) {
     ast_free(ast);
 }
 
-/*============================================================================
- * Collection Tests
- *============================================================================*/
+/* Collection Tests */
 
 void test_parse_array(void) {
     printf("  Testing array literal parsing...\n");
@@ -251,9 +243,7 @@ void test_parse_member(void) {
     ast_free(ast);
 }
 
-/*============================================================================
- * Error Handling Tests
- *============================================================================*/
+/* Error Handling Tests */
 
 void test_parse_errors(void) {
     printf("  Testing parse error handling...\n");
@@ -269,9 +259,7 @@ void test_parse_errors(void) {
     lexer_free(lexer);
 }
 
-/*============================================================================
- * Main
- *============================================================================*/
+/* Main */
 
 int main(void) {
     printf("\n");

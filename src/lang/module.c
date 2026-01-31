@@ -23,9 +23,7 @@
 #define PATH_SEP '/'
 #endif
 
-/*============================================================================
- * Module Cache Implementation
- *============================================================================*/
+/* Module Cache Implementation */
 
 ModuleCache *module_cache_new(void) {
     ModuleCache *cache = agim_alloc(sizeof(ModuleCache));
@@ -97,9 +95,7 @@ void module_loading_pop(ModuleCache *cache) {
     }
 }
 
-/*============================================================================
- * Path Resolution
- *============================================================================*/
+/* Path Resolution */
 
 char *module_resolve_path(const char *path, const char *base_path) {
     /* If path is absolute, return a copy */
@@ -155,9 +151,7 @@ char *module_resolve_path(const char *path, const char *base_path) {
     return result;
 }
 
-/*============================================================================
- * File Reading
- *============================================================================*/
+/* File Reading */
 
 static char *read_file(const char *path, char **error) {
     FILE *file = fopen(path, "rb");
@@ -196,9 +190,7 @@ static char *read_file(const char *path, char **error) {
     return source;
 }
 
-/*============================================================================
- * Export Collection
- *============================================================================*/
+/* Export Collection */
 
 static void collect_exports(Module *mod) {
     if (!mod->ast || mod->ast->type != NODE_PROGRAM) return;
@@ -258,9 +250,7 @@ static void collect_exports(Module *mod) {
     }
 }
 
-/*============================================================================
- * Module Loading
- *============================================================================*/
+/* Module Loading */
 
 Module *module_load(const char *path, const char *base_path, ModuleCache *cache, char **error) {
     *error = NULL;

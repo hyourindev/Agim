@@ -13,24 +13,32 @@
 #include <stdlib.h>
 #include <string.h>
 
-/*============================================================================
- * Default Configuration
- *============================================================================*/
+/* Thread-local heap for write barriers */
+
+static _Thread_local Heap *tls_current_heap = NULL;
+
+void gc_set_current_heap(Heap *heap) {
+    tls_current_heap = heap;
+}
+
+Heap *gc_get_current_heap(void) {
+    return tls_current_heap;
+}
+
+/* Default Configuration */
 
 GCConfig gc_config_default(void) {
     return (GCConfig){
-        .initial_heap_size = 16 * 1024,        /* 16 KB (was 1 MB) - enables 1M agents */
-        .max_heap_size = 1 * 1024 * 1024,      /* 1 MB (was 256 MB) */
-        .growth_factor = 1.5f,                 /* Was 2.0 - slower growth for stability */
+        .initial_heap_size = 16 * 1024,
+        .max_heap_size = 1 * 1024 * 1024,
+        .growth_factor = 1.5f,
         .gc_threshold = 0.75f,
-        .incremental_step = 100,               /* Process 100 objects per step */
-        .max_remember_size = 1024,             /* Max 1024 remembered refs before full GC */
+        .incremental_step = 100,
+        .max_remember_size = 1024,
     };
 }
 
-/*============================================================================
- * Heap Lifecycle
- *============================================================================*/
+/* Heap Lifecycle */
 
 Heap *heap_new(const GCConfig *config) {
     Heap *heap = malloc(sizeof(Heap));
@@ -41,15 +49,13 @@ Heap *heap_new(const GCConfig *config) {
     heap->next_gc = config ? config->initial_heap_size : gc_config_default().initial_heap_size;
     heap->max_size = config ? config->max_heap_size : gc_config_default().max_heap_size;
 
-    /* Incremental GC state */
     heap->gc_phase = GC_IDLE;
     heap->mark_cursor = NULL;
     heap->sweep_cursor = NULL;
     heap->sweep_prev = NULL;
     heap->step_budget = config ? config->incremental_step : 100;
 
-    /* Generational GC state */
-    heap->generational_enabled = true;  /* Enable by default */
+    heap->generational_enabled = true;
     heap->young_count = 0;
     heap->old_count = 0;
     heap->young_bytes = 0;
@@ -59,8 +65,8 @@ Heap *heap_new(const GCConfig *config) {
     heap->remember_capacity = 0;
     heap->max_remember_size = config ? config->max_remember_size : 1024;
     heap->needs_full_gc = false;
-    heap->promotion_threshold = 2;  /* Promote after 2 survivals */
-    heap->young_gc_threshold = config ? config->initial_heap_size / 4 : 4096;  /* 25% of initial heap */
+    heap->promotion_threshold = 2;
+    heap->young_gc_threshold = config ? config->initial_heap_size / 4 : 4096;
     heap->minor_gc_count = 0;
     heap->major_gc_count = 0;
 
@@ -74,7 +80,6 @@ Heap *heap_new(const GCConfig *config) {
 void heap_free(Heap *heap) {
     if (!heap) return;
 
-    /* Free all objects */
     Value *object = heap->objects;
     while (object) {
         Value *next = object->next;
@@ -82,18 +87,13 @@ void heap_free(Heap *heap) {
         object = next;
     }
 
-    /* Free remember set */
     free(heap->remember_set);
-
     free(heap);
 }
 
-/*============================================================================
- * Allocation
- *============================================================================*/
+/* Allocation */
 
 static size_t value_size(ValueType type) {
-    /* Estimate size for tracking purposes */
     switch (type) {
     case VAL_NIL:
     case VAL_BOOL:
@@ -102,7 +102,7 @@ static size_t value_size(ValueType type) {
     case VAL_PID:
         return sizeof(Value);
     case VAL_STRING:
-        return sizeof(Value) + sizeof(String) + 64; /* Average string */
+        return sizeof(Value) + sizeof(String) + 64;
     case VAL_ARRAY:
         return sizeof(Value) + sizeof(Array) + 8 * sizeof(Value *);
     case VAL_MAP:
@@ -119,29 +119,24 @@ static size_t value_size(ValueType type) {
 Value *heap_alloc_with_gc(Heap *heap, ValueType type, VM *vm) {
     size_t size = value_size(type);
 
-    /* Check if remember set overflow triggered full GC request */
     if (heap->needs_full_gc && vm) {
         gc_collect_full(heap, vm);
         heap->needs_full_gc = false;
     }
 
-    /* Generational GC: check if minor collection needed */
     if (heap->generational_enabled && vm &&
         heap->young_bytes + size > heap->young_gc_threshold) {
         gc_collect_young(heap, vm);
     }
 
-    /* Check if we need a full collection */
     if (heap->bytes_allocated + size > heap->next_gc) {
         if (vm) {
-            /* We have VM context - run full GC */
             if (heap->generational_enabled) {
                 gc_collect_full(heap, vm);
             } else {
                 gc_collect(heap, vm);
             }
         } else {
-            /* No VM context - grow the heap instead */
             if (heap->next_gc < heap->max_size) {
                 heap->next_gc = (size_t)(heap->next_gc * 1.5f);
                 if (heap->next_gc > heap->max_size) {
@@ -151,9 +146,7 @@ Value *heap_alloc_with_gc(Heap *heap, ValueType type, VM *vm) {
         }
     }
 
-    /* Check hard limit */
     if (heap->bytes_allocated + size > heap->max_size) {
-        /* Try one more full GC if we can */
         if (vm) {
             if (heap->generational_enabled) {
                 gc_collect_full(heap, vm);
@@ -167,7 +160,6 @@ Value *heap_alloc_with_gc(Heap *heap, ValueType type, VM *vm) {
         }
     }
 
-    /* Allocate based on type */
     Value *value = NULL;
     switch (type) {
     case VAL_NIL:
@@ -204,27 +196,19 @@ Value *heap_alloc_with_gc(Heap *heap, ValueType type, VM *vm) {
         value = value_vector(1);
         break;
     case VAL_CLOSURE:
-        /* Closures are created via closure_new(), not heap_alloc */
-        return NULL;
     case VAL_RESULT:
-        /* Results are created via value_result_ok/err(), not heap_alloc */
         return NULL;
     }
 
     if (!value) return NULL;
 
-    /* Initialize gc_state for new object */
-    value->gc_state = 0;  /* Young generation, not marked, survival count 0 */
-
-    /* Add to object list */
+    value->gc_state = 0;
     value->next = heap->objects;
     heap->objects = value;
 
-    /* Update stats */
     heap->bytes_allocated += size;
     heap->total_allocated += size;
 
-    /* Track young generation */
     if (heap->generational_enabled) {
         heap->young_count++;
         heap->young_bytes += size;
@@ -234,10 +218,8 @@ Value *heap_alloc_with_gc(Heap *heap, ValueType type, VM *vm) {
 }
 
 Value *heap_alloc(Heap *heap, ValueType type) {
-    /* Legacy version without GC - just grows heap */
     size_t size = value_size(type);
 
-    /* Check if we need to grow */
     if (heap->bytes_allocated + size > heap->next_gc) {
         if (heap->next_gc < heap->max_size) {
             heap->next_gc = (size_t)(heap->next_gc * 1.5f);
@@ -247,13 +229,11 @@ Value *heap_alloc(Heap *heap, ValueType type) {
         }
     }
 
-    /* Check hard limit */
     if (heap->bytes_allocated + size > heap->max_size) {
         fprintf(stderr, "agim: heap limit exceeded\n");
         return NULL;
     }
 
-    /* Allocate based on type */
     Value *value = NULL;
     switch (type) {
     case VAL_NIL:
@@ -290,27 +270,19 @@ Value *heap_alloc(Heap *heap, ValueType type) {
         value = value_vector(1);
         break;
     case VAL_CLOSURE:
-        /* Closures are created via closure_new(), not heap_alloc */
-        return NULL;
     case VAL_RESULT:
-        /* Results are created via value_result_ok/err(), not heap_alloc */
         return NULL;
     }
 
     if (!value) return NULL;
 
-    /* Initialize gc_state for new object */
-    value->gc_state = 0;  /* Young generation, not marked, survival count 0 */
-
-    /* Add to object list */
+    value->gc_state = 0;
     value->next = heap->objects;
     heap->objects = value;
 
-    /* Update stats */
     heap->bytes_allocated += size;
     heap->total_allocated += size;
 
-    /* Track young generation */
     if (heap->generational_enabled) {
         heap->young_count++;
         heap->young_bytes += size;
@@ -319,16 +291,13 @@ Value *heap_alloc(Heap *heap, ValueType type) {
     return value;
 }
 
-/*============================================================================
- * Marking
- *============================================================================*/
+/* Marking */
 
 void gc_mark_value(Value *value) {
     if (!value || value_is_marked(value)) return;
 
     value_set_marked(value, true);
 
-    /* Recursively mark referenced objects */
     switch (value->type) {
     case VAL_ARRAY: {
         Array *arr = value->as.array;
@@ -350,13 +319,10 @@ void gc_mark_value(Value *value) {
     }
     case VAL_CLOSURE: {
         Closure *closure = (Closure *)value->as.closure;
-        /* Mark upvalue contents */
         for (size_t i = 0; i < closure->upvalue_count; i++) {
             Upvalue *upvalue = closure->upvalues[i];
             if (upvalue) {
-                /* Mark the closed-over value if the upvalue is closed */
                 if (!upvalue_is_open(upvalue)) {
-                    /* upvalue->closed is now NanValue, extract object if present */
                     NanValue closed = upvalue->closed;
                     if (nanbox_is_obj(closed)) {
                         gc_mark_value((Value *)nanbox_as_obj(closed));
@@ -371,10 +337,6 @@ void gc_mark_value(Value *value) {
     }
 }
 
-/**
- * Mark a NaN-boxed value for GC.
- * Only marks heap objects (primitives don't need marking).
- */
 static void gc_mark_nanvalue(NanValue v) {
     if (nanbox_is_obj(v)) {
         gc_mark_value((Value *)nanbox_as_obj(v));
@@ -382,26 +344,20 @@ static void gc_mark_nanvalue(NanValue v) {
 }
 
 void gc_mark_roots(VM *vm) {
-    /* Mark stack (now uses NanValue) */
     for (NanValue *slot = vm->stack; slot < vm->stack_top; slot++) {
         gc_mark_nanvalue(*slot);
     }
 
-    /* Mark globals */
     gc_mark_value(vm->globals);
 
-    /* Mark open upvalues */
     Upvalue *upvalue = vm->open_upvalues;
     while (upvalue) {
-        /* Open upvalues point to stack, which is already marked */
-        /* But mark the closed value if upvalue is closed */
         if (!upvalue_is_open(upvalue)) {
             gc_mark_nanvalue(upvalue->closed);
         }
         upvalue = upvalue->next;
     }
 
-    /* Mark constants in bytecode */
     if (vm->code) {
         Chunk *chunk = vm->code->main;
         for (size_t i = 0; i < chunk->constants_size; i++) {
@@ -417,9 +373,7 @@ void gc_mark_roots(VM *vm) {
     }
 }
 
-/*============================================================================
- * Sweeping
- *============================================================================*/
+/* Sweeping */
 
 static void sweep(Heap *heap) {
     Value **object = &heap->objects;
@@ -427,14 +381,11 @@ static void sweep(Heap *heap) {
     while (*object) {
         Value *obj = *object;
         if (value_is_marked(obj)) {
-            /* Survived - unmark for next GC cycle */
             value_set_marked(obj, false);
 
-            /* Generational: increment survival count, possibly promote to old gen */
             if (heap->generational_enabled && !value_is_old_gen(obj)) {
                 value_inc_survival(obj);
                 if (value_survival_count(obj) >= heap->promotion_threshold) {
-                    /* Promote to old generation */
                     size_t size = value_size(obj->type);
                     heap->young_count--;
                     heap->young_bytes -= size;
@@ -446,36 +397,21 @@ static void sweep(Heap *heap) {
 
             object = &obj->next;
         } else {
-            /*
-             * Object is unreachable. Use CAS to atomically claim it for freeing.
-             * This prevents a race where another thread increments refcount
-             * between our check and free.
-             *
-             * We try to change refcount from 0 to REFCOUNT_FREEING.
-             * If this fails, someone has obtained a reference - keep the object.
-             */
             uint32_t expected = 0;
             if (!atomic_compare_exchange_strong_explicit(
                     &obj->refcount, &expected, REFCOUNT_FREEING,
                     memory_order_acq_rel, memory_order_acquire)) {
-                /*
-                 * CAS failed - refcount is no longer 0.
-                 * Someone has a reference, keep the object alive.
-                 * Unmark in case it becomes reachable again.
-                 */
                 value_set_marked(obj, false);
                 object = &obj->next;
                 continue;
             }
 
-            /* Successfully claimed for freeing - safe to free */
             *object = obj->next;
 
             size_t size = value_size(obj->type);
             heap->bytes_allocated -= size;
             heap->total_freed += size;
 
-            /* Update generational counters */
             if (heap->generational_enabled) {
                 if (value_is_old_gen(obj)) {
                     heap->old_count--;
@@ -491,9 +427,7 @@ static void sweep(Heap *heap) {
     }
 }
 
-/*============================================================================
- * Collection
- *============================================================================*/
+/* Collection */
 
 void gc_collect(Heap *heap, VM *vm) {
 #ifdef AGIM_DEBUG
@@ -501,13 +435,9 @@ void gc_collect(Heap *heap, VM *vm) {
     size_t before = heap->bytes_allocated;
 #endif
 
-    /* Mark phase */
     gc_mark_roots(vm);
-
-    /* Sweep phase */
     sweep(heap);
 
-    /* Update next GC threshold */
     heap->next_gc = (size_t)(heap->bytes_allocated * 2.0f);
     if (heap->next_gc > heap->max_size) {
         heap->next_gc = heap->max_size;
@@ -521,16 +451,13 @@ void gc_collect(Heap *heap, VM *vm) {
 #endif
 }
 
-/*============================================================================
- * Statistics
- *============================================================================*/
+/* Statistics */
 
 size_t heap_used(const Heap *heap) {
     return heap->bytes_allocated;
 }
 
 HeapStats heap_stats(const Heap *heap) {
-    /* Count objects */
     size_t object_count = 0;
     Value *obj = heap->objects;
     while (obj) {
@@ -542,7 +469,7 @@ HeapStats heap_stats(const Heap *heap) {
         .bytes_allocated = heap->bytes_allocated,
         .bytes_freed = heap->total_freed,
         .objects_allocated = object_count,
-        .objects_freed = 0, /* Not tracked per-object */
+        .objects_freed = 0,
         .gc_runs = heap->gc_count,
     };
 }
@@ -558,34 +485,22 @@ void heap_print_stats(const Heap *heap) {
     printf("  Max size:     %zu bytes\n", heap->max_size);
 }
 
-/*============================================================================
- * Incremental GC
- *============================================================================*/
+/* Incremental GC */
 
 bool gc_start_incremental(Heap *heap, VM *vm) {
     if (!heap || !vm) return false;
 
-    /* Don't start if already in progress */
     if (heap->gc_phase != GC_IDLE) {
         return false;
     }
 
-    /* Start marking phase */
     heap->gc_phase = GC_MARKING;
-
-    /* Mark roots first (this is quick) */
     gc_mark_roots(vm);
-
-    /* Set up for incremental marking of transitive references */
     heap->mark_cursor = heap->objects;
 
     return true;
 }
 
-/**
- * Perform incremental marking step.
- * Returns true if more marking work remains.
- */
 static bool gc_step_marking(Heap *heap) {
     size_t processed = 0;
 
@@ -593,7 +508,6 @@ static bool gc_step_marking(Heap *heap) {
         Value *obj = heap->mark_cursor;
         heap->mark_cursor = obj->next;
 
-        /* If marked, ensure children are marked */
         if (value_is_marked(obj)) {
             switch (obj->type) {
             case VAL_ARRAY: {
@@ -625,10 +539,6 @@ static bool gc_step_marking(Heap *heap) {
     return heap->mark_cursor != NULL;
 }
 
-/**
- * Perform incremental sweeping step.
- * Returns true if more sweep work remains.
- */
 static bool gc_step_sweeping(Heap *heap) {
     size_t processed = 0;
 
@@ -636,27 +546,19 @@ static bool gc_step_sweeping(Heap *heap) {
         Value *obj = *heap->sweep_prev;
 
         if (value_is_marked(obj)) {
-            /* Keep - unmark for next cycle */
             value_set_marked(obj, false);
             heap->sweep_prev = &obj->next;
         } else {
-            /*
-             * Object is unreachable. Use CAS to atomically claim it for freeing.
-             * This prevents a race where another thread increments refcount
-             * between our check and free.
-             */
             uint32_t expected = 0;
             if (!atomic_compare_exchange_strong_explicit(
                     &obj->refcount, &expected, REFCOUNT_FREEING,
                     memory_order_acq_rel, memory_order_acquire)) {
-                /* CAS failed - someone has a reference, keep object */
                 value_set_marked(obj, false);
                 heap->sweep_prev = &obj->next;
                 processed++;
                 continue;
             }
 
-            /* Successfully claimed - free unreachable object */
             *heap->sweep_prev = obj->next;
 
             size_t size = value_size(obj->type);
@@ -677,12 +579,11 @@ bool gc_step(Heap *heap, VM *vm) {
         return false;
     }
 
-    (void)vm; /* VM used for re-marking if write barrier triggered */
+    (void)vm;
 
     switch (heap->gc_phase) {
     case GC_MARKING:
         if (!gc_step_marking(heap)) {
-            /* Marking complete, transition to sweeping */
             heap->gc_phase = GC_SWEEPING;
             heap->sweep_prev = &heap->objects;
         }
@@ -690,17 +591,15 @@ bool gc_step(Heap *heap, VM *vm) {
 
     case GC_SWEEPING:
         if (!gc_step_sweeping(heap)) {
-            /* Sweeping complete, finish GC */
             heap->gc_phase = GC_IDLE;
             heap->gc_count++;
 
-            /* Update next GC threshold */
             heap->next_gc = (size_t)(heap->bytes_allocated * 1.5f);
             if (heap->next_gc > heap->max_size) {
                 heap->next_gc = heap->max_size;
             }
 
-            return false; /* GC complete */
+            return false;
         }
         return true;
 
@@ -717,42 +616,29 @@ bool gc_in_progress(const Heap *heap) {
 void gc_complete(Heap *heap, VM *vm) {
     if (!heap || !vm) return;
 
-    /* Run steps until complete */
     while (gc_step(heap, vm)) {
-        /* Keep stepping */
     }
 }
 
-/*============================================================================
- * Generational GC Implementation
- *============================================================================*/
+/* Generational GC */
 
-/**
- * Add a value to the remember set.
- * Called when an old-gen object references a young-gen object.
- */
 static void remember_set_add(Heap *heap, Value *value) {
     if (!heap || !value) return;
 
-    /* Already in remember set? */
     if (value_is_remembered(value)) return;
 
-    /* Check if we've hit the maximum remember set size */
     if (heap->remember_count >= heap->max_remember_size) {
-        /* Signal that a full GC is needed at next allocation */
         heap->needs_full_gc = true;
-        return;  /* Don't add more - full GC will clear this anyway */
+        return;
     }
 
-    /* Grow remember set if needed */
     if (heap->remember_count >= heap->remember_capacity) {
         size_t new_cap = heap->remember_capacity == 0 ? 64 : heap->remember_capacity * 2;
-        /* Cap growth at max_remember_size */
         if (new_cap > heap->max_remember_size) {
             new_cap = heap->max_remember_size;
         }
         Value **new_set = realloc(heap->remember_set, sizeof(Value *) * new_cap);
-        if (!new_set) return;  /* OOM - skip, will be caught in full GC */
+        if (!new_set) return;
         heap->remember_set = new_set;
         heap->remember_capacity = new_cap;
     }
@@ -761,13 +647,9 @@ static void remember_set_add(Heap *heap, Value *value) {
     value_set_remembered(value, true);
 }
 
-/**
- * Clear the remember set after collection.
- */
 static void remember_set_clear(Heap *heap) {
     if (!heap) return;
 
-    /* Clear remembered flags */
     for (size_t i = 0; i < heap->remember_count; i++) {
         if (heap->remember_set[i]) {
             value_set_remembered(heap->remember_set[i], false);
@@ -780,25 +662,18 @@ void gc_write_barrier(Heap *heap, Value *container, Value *value) {
     if (!heap || !heap->generational_enabled) return;
     if (!container || !value) return;
 
-    /* If container is old and value is young, add to remember set */
     if (value_is_old_gen(container) && !value_is_old_gen(value)) {
         remember_set_add(heap, container);
     }
 }
 
-/**
- * Mark young objects only (+ remember set roots).
- */
 static void gc_mark_young(Heap *heap, VM *vm) {
-    /* Mark roots - only follow into young generation during minor GC */
     gc_mark_roots(vm);
 
-    /* Mark from remember set (old objects pointing to young) */
     for (size_t i = 0; i < heap->remember_count; i++) {
         Value *old_obj = heap->remember_set[i];
         if (!old_obj) continue;
 
-        /* Mark children of this old object (they might be young) */
         switch (old_obj->type) {
         case VAL_ARRAY: {
             Array *arr = old_obj->as.array;
@@ -837,28 +712,22 @@ static void gc_mark_young(Heap *heap, VM *vm) {
     }
 }
 
-/**
- * Sweep only young generation objects.
- */
 static void sweep_young(Heap *heap) {
     Value **object = &heap->objects;
 
     while (*object) {
         Value *obj = *object;
 
-        /* Skip old generation objects in minor GC */
         if (value_is_old_gen(obj)) {
             object = &obj->next;
             continue;
         }
 
         if (value_is_marked(obj)) {
-            /* Survived - unmark and possibly promote */
             value_set_marked(obj, false);
             value_inc_survival(obj);
 
             if (value_survival_count(obj) >= heap->promotion_threshold) {
-                /* Promote to old generation */
                 size_t size = value_size(obj->type);
                 heap->young_count--;
                 heap->young_bytes -= size;
@@ -869,22 +738,15 @@ static void sweep_young(Heap *heap) {
 
             object = &obj->next;
         } else {
-            /*
-             * Object is unreachable. Use CAS to atomically claim it for freeing.
-             * This prevents a race where another thread increments refcount
-             * between our check and free.
-             */
             uint32_t expected = 0;
             if (!atomic_compare_exchange_strong_explicit(
                     &obj->refcount, &expected, REFCOUNT_FREEING,
                     memory_order_acq_rel, memory_order_acquire)) {
-                /* CAS failed - someone has a reference, keep object */
                 value_set_marked(obj, false);
                 object = &obj->next;
                 continue;
             }
 
-            /* Successfully claimed - free unreachable young object */
             *object = obj->next;
 
             size_t size = value_size(obj->type);
@@ -906,16 +768,10 @@ void gc_collect_young(Heap *heap, VM *vm) {
     size_t before = heap->young_bytes;
 #endif
 
-    /* Mark phase (young + remember set roots) */
     gc_mark_young(heap, vm);
-
-    /* Sweep phase (young only) */
     sweep_young(heap);
-
-    /* Clear remember set */
     remember_set_clear(heap);
 
-    /* Update threshold for next minor GC */
     heap->young_gc_threshold = heap->young_bytes * 2;
     if (heap->young_gc_threshold < 4096) {
         heap->young_gc_threshold = 4096;
@@ -938,16 +794,10 @@ void gc_collect_full(Heap *heap, VM *vm) {
     size_t before = heap->bytes_allocated;
 #endif
 
-    /* Full mark phase */
     gc_mark_roots(vm);
-
-    /* Full sweep phase */
     sweep(heap);
-
-    /* Clear remember set */
     remember_set_clear(heap);
 
-    /* Update next GC threshold */
     heap->next_gc = (size_t)(heap->bytes_allocated * 2.0f);
     if (heap->next_gc > heap->max_size) {
         heap->next_gc = heap->max_size;

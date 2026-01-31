@@ -12,46 +12,30 @@
 
 #include <stdint.h>
 
-/*============================================================================
- * Capability Definitions
- *============================================================================*/
+/* Capability Definitions */
 
-/**
- * Individual capabilities that can be granted to blocks.
- * Each capability is a single bit flag.
- */
 typedef enum Capability {
     CAP_NONE        = 0,
-    CAP_SPAWN       = 1 << 0,   /* Can create new blocks */
-    CAP_SEND        = 1 << 1,   /* Can send messages */
-    CAP_RECEIVE     = 1 << 2,   /* Can receive messages */
-    CAP_INFER       = 1 << 3,   /* Can call LLM inference */
-    CAP_HTTP        = 1 << 4,   /* Can make HTTP requests */
-    CAP_FILE_READ   = 1 << 5,   /* Can read files */
-    CAP_FILE_WRITE  = 1 << 6,   /* Can write files */
-    CAP_DB          = 1 << 7,   /* Can access databases */
-    CAP_MEMORY      = 1 << 8,   /* Can use persistent memory */
-    CAP_LINK        = 1 << 9,   /* Can link to other blocks */
-    CAP_SHELL       = 1 << 10,  /* Can execute shell commands */
-    CAP_EXEC        = 1 << 11,  /* Can execute processes */
-    CAP_TRAP_EXIT   = 1 << 12,  /* Receive exit signals as messages instead of crashing */
-    CAP_MONITOR     = 1 << 13,  /* Can monitor other blocks */
-    CAP_SUPERVISE   = 1 << 14,  /* Can act as a supervisor */
-    CAP_ALL         = 0x7FFF,   /* All defined capabilities */
+    CAP_SPAWN       = 1 << 0,
+    CAP_SEND        = 1 << 1,
+    CAP_RECEIVE     = 1 << 2,
+    CAP_INFER       = 1 << 3,
+    CAP_HTTP        = 1 << 4,
+    CAP_FILE_READ   = 1 << 5,
+    CAP_FILE_WRITE  = 1 << 6,
+    CAP_DB          = 1 << 7,
+    CAP_MEMORY      = 1 << 8,
+    CAP_LINK        = 1 << 9,
+    CAP_SHELL       = 1 << 10,
+    CAP_EXEC        = 1 << 11,
+    CAP_TRAP_EXIT   = 1 << 12,
+    CAP_MONITOR     = 1 << 13,
+    CAP_SUPERVISE   = 1 << 14,
+    CAP_ALL         = 0x7FFF,
 } Capability;
 
-/**
- * A set of capabilities (bitmask).
- */
 typedef uint32_t CapabilitySet;
 
-/*============================================================================
- * Capability Names (for debugging)
- *============================================================================*/
-
-/**
- * Get the name of a capability.
- */
 const char *capability_name(Capability cap);
 
 #endif /* AGIM_RUNTIME_CAPABILITY_H */

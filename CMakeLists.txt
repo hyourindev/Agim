@@ -248,6 +248,39 @@ if(AGIM_BUILD_TESTS)
     add_executable(test_websocket tests/net/test_websocket.c)
     target_link_libraries(test_websocket agim_vm)
     add_test(NAME test_websocket COMMAND test_websocket)
+
+    # End-to-end tests for Erlang-like VM features
+    add_executable(test_e2e_lifecycle tests/e2e/test_e2e_lifecycle.c)
+    target_link_libraries(test_e2e_lifecycle agim_vm)
+    add_test(NAME test_e2e_lifecycle COMMAND test_e2e_lifecycle)
+
+    add_executable(test_e2e_messaging tests/e2e/test_e2e_messaging.c)
+    target_link_libraries(test_e2e_messaging agim_vm)
+    add_test(NAME test_e2e_messaging COMMAND test_e2e_messaging)
+
+    add_executable(test_e2e_supervision tests/e2e/test_e2e_supervision.c)
+    target_link_libraries(test_e2e_supervision agim_vm)
+    add_test(NAME test_e2e_supervision COMMAND test_e2e_supervision)
+
+    add_executable(test_e2e_hotreload tests/e2e/test_e2e_hotreload.c)
+    target_link_libraries(test_e2e_hotreload agim_vm)
+    add_test(NAME test_e2e_hotreload COMMAND test_e2e_hotreload)
+
+    add_executable(test_e2e_checkpoint tests/e2e/test_e2e_checkpoint.c)
+    target_link_libraries(test_e2e_checkpoint agim_vm)
+    add_test(NAME test_e2e_checkpoint COMMAND test_e2e_checkpoint)
+
+    add_executable(test_e2e_distributed tests/e2e/test_e2e_distributed.c)
+    target_link_libraries(test_e2e_distributed agim_vm)
+    add_test(NAME test_e2e_distributed COMMAND test_e2e_distributed)
+
+    add_executable(test_e2e_timer tests/e2e/test_e2e_timer.c)
+    target_link_libraries(test_e2e_timer agim_vm)
+    add_test(NAME test_e2e_timer COMMAND test_e2e_timer)
+
+    add_executable(test_e2e_scheduler tests/e2e/test_e2e_scheduler.c)
+    target_link_libraries(test_e2e_scheduler agim_vm)
+    add_test(NAME test_e2e_scheduler COMMAND test_e2e_scheduler)
 endif()
 
 # Agim CLI

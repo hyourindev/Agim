@@ -13,9 +13,7 @@
 
 #include "net/websocket.h"
 
-/*============================================================================
- * Test Utilities
- *============================================================================*/
+/* Test Utilities */
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -42,9 +40,7 @@ static int tests_failed = 0;
     return; \
 } while(0)
 
-/*============================================================================
- * Tests
- *============================================================================*/
+/* Tests */
 
 TEST(error_strings) {
     ASSERT(strcmp(ws_error_string(WS_OK), "Success") == 0, "WS_OK");
@@ -209,9 +205,7 @@ TEST(close_codes) {
     ASSERT(WS_OPCODE_CONTINUATION == 0x0, "Continuation opcode should be 0x0");
 }
 
-/*============================================================================
- * Main
- *============================================================================*/
+/* Main */
 
 int main(void) {
     printf("\n=== WebSocket Tests ===\n\n");

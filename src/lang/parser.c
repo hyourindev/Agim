@@ -12,9 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/*============================================================================
- * Parser Structure
- *============================================================================*/
+/* Parser Structure */
 
 /* Maximum recursion depth for expression parsing (prevents stack overflow) */
 #define MAX_PARSE_DEPTH 256
@@ -30,9 +28,7 @@ struct Parser {
     int depth;  /* Current recursion depth */
 };
 
-/*============================================================================
- * Error Handling
- *============================================================================*/
+/* Error Handling */
 
 static void error_at(Parser *parser, Token *token, const char *message) {
     if (parser->panic_mode) return;
@@ -72,9 +68,7 @@ static void error_at_current(Parser *parser, const char *message) {
     error_at(parser, &parser->current, message);
 }
 
-/*============================================================================
- * Token Handling
- *============================================================================*/
+/* Token Handling */
 
 static void advance(Parser *parser) {
     parser->previous = parser->current;
@@ -140,9 +134,7 @@ static void synchronize(Parser *parser) {
     }
 }
 
-/*============================================================================
- * Operator Precedence
- *============================================================================*/
+/* Operator Precedence */
 
 typedef enum {
     PREC_NONE,
@@ -202,9 +194,7 @@ static Precedence get_precedence(TokenType type) {
     }
 }
 
-/*============================================================================
- * Forward Declarations
- *============================================================================*/
+/* Forward Declarations */
 
 static AstNode *parse_expression(Parser *parser);
 static AstNode *parse_precedence(Parser *parser, Precedence min_prec);
@@ -222,9 +212,7 @@ static AstNode *parse_struct_decl(Parser *parser);
 static AstNode *parse_enum_decl(Parser *parser);
 static AstNode *parse_type_alias(Parser *parser);
 
-/*============================================================================
- * Expression Parsing
- *============================================================================*/
+/* Expression Parsing */
 
 static AstNode *parse_number(Parser *parser) {
     Token token = parser->previous;
@@ -674,19 +662,7 @@ static AstNode *parse_expression(Parser *parser) {
     return parse_precedence(parser, PREC_ASSIGNMENT);
 }
 
-/*============================================================================
- * Type Parsing
- *============================================================================*/
-
-/**
- * Parse a type annotation.
- * Types can be:
- *   - Simple: int, string, bool, CustomType
- *   - Array: [T]
- *   - Generic: Option<T>, Result<T, E>
- *   - Map: map<K, V>
- *   - Function: fn(A, B) -> C
- */
+/* Type Parsing */
 static AstNode *parse_type(Parser *parser) {
     int line = parser->current.line;
 
@@ -831,9 +807,7 @@ static AstNode *parse_type(Parser *parser) {
     return ast_type_name(type_name, type_len, line);
 }
 
-/*============================================================================
- * Statement Parsing
- *============================================================================*/
+/* Statement Parsing */
 
 static AstNode *parse_let_stmt(Parser *parser, bool is_const) {
     int line = parser->previous.line;
@@ -966,9 +940,7 @@ static AstNode *parse_block(Parser *parser) {
     return block;
 }
 
-/*============================================================================
- * Match Expression Parsing
- *============================================================================*/
+/* Match Expression Parsing */
 
 static AstNode *parse_match_expr(Parser *parser) {
     int line = parser->previous.line;
@@ -1106,17 +1078,7 @@ static AstNode *parse_some_expr(Parser *parser) {
     return ast_some(value, line);
 }
 
-/*============================================================================
- * Struct/Enum Declarations
- *============================================================================*/
-
-/**
- * Parse struct declaration:
- *   struct Name {
- *       field1: Type,
- *       field2: Type,
- *   }
- */
+/* Struct/Enum Declarations */
 static AstNode *parse_struct_decl(Parser *parser) {
     int line = parser->previous.line;
 
@@ -1160,13 +1122,6 @@ static AstNode *parse_struct_decl(Parser *parser) {
     return node;
 }
 
-/**
- * Parse enum declaration:
- *   enum Name {
- *       VariantA,
- *       VariantB(Type),
- *   }
- */
 static AstNode *parse_enum_decl(Parser *parser) {
     int line = parser->previous.line;
 
@@ -1213,10 +1168,6 @@ static AstNode *parse_enum_decl(Parser *parser) {
     return node;
 }
 
-/**
- * Parse type alias:
- *   type Alias = Type
- */
 static AstNode *parse_type_alias(Parser *parser) {
     int line = parser->previous.line;
 
@@ -1233,9 +1184,7 @@ static AstNode *parse_type_alias(Parser *parser) {
     return ast_type_alias(name, aliased, line);
 }
 
-/*============================================================================
- * Import Parsing
- *============================================================================*/
+/* Import Parsing */
 
 static AstNode *parse_import(Parser *parser) {
     int line = parser->previous.line;
@@ -1367,9 +1316,7 @@ static AstNode *parse_statement(Parser *parser) {
     return node;
 }
 
-/*============================================================================
- * Declaration Parsing
- *============================================================================*/
+/* Declaration Parsing */
 
 static AstNode *parse_param(Parser *parser) {
     consume(parser, TOK_IDENT, "expected parameter name");
@@ -1435,22 +1382,10 @@ static AstNode *parse_fn_decl(Parser *parser, bool is_tool) {
     node->as.fn_decl.return_type = return_type;
     node->as.fn_decl.body = body;
     node->as.fn_decl.description = NULL;
+    node->as.fn_decl.params_map = NULL;
     return node;
 }
 
-/*
- * Parse @tool decorator:
- *   @tool(
- *       name: "tool_name",
- *       description: "description",
- *       params: { param1: { type: "string", required: true } }
- *   )
- *   fn actual_function_name(...) { ... }
- *
- * For now we support a simplified version:
- *   @tool fn name() { ... }  -- just marks as tool
- *   @tool(description: "desc") fn name() { ... }  -- with metadata
- */
 static AstNode *parse_tool_decorator(Parser *parser) {
     int line = parser->previous.line;
 
@@ -1514,11 +1449,9 @@ static AstNode *parse_tool_decorator(Parser *parser) {
         return NULL;
     }
 
-    /* Store the description in the function node */
+    /* Store the description and params_map in the function node */
     fn->as.fn_decl.description = description;
-
-    /* params_map is not currently used, but could be in the future */
-    if (params_map) ast_free(params_map);
+    fn->as.fn_decl.params_map = params_map;
 
     return fn;
 }
@@ -1563,9 +1496,7 @@ static AstNode *parse_declaration(Parser *parser) {
     return parse_statement(parser);
 }
 
-/*============================================================================
- * Public API
- *============================================================================*/
+/* Public API */
 
 Parser *parser_new(Lexer *lexer) {
     Parser *parser = agim_alloc(sizeof(Parser));

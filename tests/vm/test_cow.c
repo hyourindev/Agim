@@ -11,9 +11,7 @@
 #include "types/map.h"
 #include "types/string.h"
 
-/*============================================================================
- * Reference Counting Tests
- *============================================================================*/
+/* Reference Counting Tests */
 
 void test_refcount_initial(void) {
     /* All values start with refcount 1 */
@@ -69,9 +67,7 @@ void test_needs_cow(void) {
     value_free(v);
 }
 
-/*============================================================================
- * Array COW Tests
- *============================================================================*/
+/* Array COW Tests */
 
 void test_array_cow_on_push(void) {
     /* Create an array with some values */
@@ -168,9 +164,7 @@ void test_array_no_cow_when_unique(void) {
     value_free(arr);
 }
 
-/*============================================================================
- * Map COW Tests
- *============================================================================*/
+/* Map COW Tests */
 
 void test_map_cow_on_set(void) {
     Value *m = value_map();
@@ -258,9 +252,7 @@ void test_map_no_cow_when_unique(void) {
     value_free(m);
 }
 
-/*============================================================================
- * Immutability Tests
- *============================================================================*/
+/* Immutability Tests */
 
 void test_string_immutable_flag(void) {
     Value *s = value_string("hello");
@@ -303,9 +295,7 @@ void test_mark_shared(void) {
     value_free(arr);
 }
 
-/*============================================================================
- * Main
- *============================================================================*/
+/* Main */
 
 int main(void) {
     /* Reference counting tests */

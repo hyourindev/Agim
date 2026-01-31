@@ -9,6 +9,7 @@
 
 #include "dist/node.h"
 #include "runtime/serialize.h"
+#include "runtime/timer.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -19,23 +20,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
 
-/*============================================================================
- * Time Helper
- *============================================================================*/
-
-static uint64_t current_time_ms(void) {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (uint64_t)tv.tv_sec * 1000 + (uint64_t)tv.tv_usec / 1000;
-}
-
-/*============================================================================
+/*
  * Configuration
- *============================================================================*/
+ */
 
 NodeConfig node_config_default(void) {
     return (NodeConfig){
@@ -48,9 +40,7 @@ NodeConfig node_config_default(void) {
     };
 }
 
-/*============================================================================
- * Node Lifecycle
- *============================================================================*/
+/* Node Lifecycle */
 
 DistributedNode *node_new(const NodeConfig *config) {
     DistributedNode *node = calloc(1, sizeof(DistributedNode));
@@ -63,7 +53,7 @@ DistributedNode *node_new(const NodeConfig *config) {
     strncpy(node->local.host, cfg.host, NODE_HOST_MAX - 1);
     node->local.port = cfg.port;
     node->local.cookie = cfg.cookie;
-    node->local.node_id = (uint64_t)current_time_ms();  /* Simple unique ID */
+    node->local.node_id = (uint64_t)timer_current_time_ms();  /* Simple unique ID */
 
     node->config = cfg;
     node->peers = NULL;
@@ -116,9 +106,176 @@ void node_free(DistributedNode *node) {
     free(node);
 }
 
-/*============================================================================
- * Accept Thread
- *============================================================================*/
+/* Accept Thread */
+
+/* Read exactly n bytes from socket */
+static bool socket_read_exact(int fd, void *buf, size_t n) {
+    uint8_t *p = (uint8_t *)buf;
+    size_t remaining = n;
+    while (remaining > 0) {
+        ssize_t r = recv(fd, p, remaining, 0);
+        if (r <= 0) return false;
+        p += r;
+        remaining -= (size_t)r;
+    }
+    return true;
+}
+
+/* Write exactly n bytes to socket */
+static bool socket_write_exact(int fd, const void *buf, size_t n) {
+    const uint8_t *p = (const uint8_t *)buf;
+    size_t remaining = n;
+    while (remaining > 0) {
+        ssize_t w = send(fd, p, remaining, MSG_NOSIGNAL);
+        if (w <= 0) return false;
+        p += w;
+        remaining -= (size_t)w;
+    }
+    return true;
+}
+
+/* Receiver thread for a peer connection */
+static void *receiver_thread_fn(void *arg) {
+    NodeConnection *conn = (NodeConnection *)arg;
+
+    while (conn->recv_running) {
+        /* Read message header: [type:1][length:4] */
+        uint8_t header[5];
+        if (!socket_read_exact(conn->socket_fd, header, 5)) {
+            break;  /* Connection closed or error */
+        }
+
+        uint8_t msg_type = header[0];
+        uint32_t msg_len = ((uint32_t)header[1] << 24) | ((uint32_t)header[2] << 16) |
+                          ((uint32_t)header[3] << 8) | header[4];
+
+        /* Handle message by type */
+        switch (msg_type) {
+        case DIST_MSG_HEARTBEAT:
+            conn->last_heartbeat = timer_current_time_ms();
+            break;
+
+        case DIST_MSG_SEND: {
+            /* Format: [target_pid:8][sender_pid:8][payload:...] */
+            if (msg_len < 16) break;
+
+            uint8_t pid_buf[16];
+            if (!socket_read_exact(conn->socket_fd, pid_buf, 16)) break;
+
+            /* Parse PIDs (big-endian) */
+            Pid target_pid = 0, sender_pid = 0;
+            for (int i = 0; i < 8; i++) {
+                target_pid = (target_pid << 8) | pid_buf[i];
+                sender_pid = (sender_pid << 8) | pid_buf[8 + i];
+            }
+
+            /* Read payload */
+            size_t payload_len = msg_len - 16;
+            void *payload = NULL;
+            if (payload_len > 0) {
+                payload = malloc(payload_len);
+                if (!payload) {
+                    /* Malloc failed - skip the payload bytes to stay in sync */
+                    uint8_t skip_buf[256];
+                    size_t remaining = payload_len;
+                    while (remaining > 0) {
+                        size_t chunk = remaining > sizeof(skip_buf) ? sizeof(skip_buf) : remaining;
+                        if (!socket_read_exact(conn->socket_fd, skip_buf, chunk)) break;
+                        remaining -= chunk;
+                    }
+                    break;
+                }
+                if (!socket_read_exact(conn->socket_fd, payload, payload_len)) {
+                    free(payload);
+                    break;
+                }
+            }
+
+            /* Deliver message via callback */
+            DistributedNode *node = conn->node;
+            if (node && node->on_message) {
+                node->on_message(node->callback_ctx, &conn->peer, target_pid,
+                                 payload, payload_len);
+            }
+            free(payload);
+            conn->messages_received++;
+            break;
+        }
+
+        default:
+            /* Skip unknown message types */
+            if (msg_len > 0) {
+                uint8_t *skip = malloc(msg_len);
+                if (skip) {
+                    socket_read_exact(conn->socket_fd, skip, msg_len);
+                    free(skip);
+                }
+            }
+            break;
+        }
+
+        conn->bytes_received += 5 + msg_len;
+    }
+
+    return NULL;
+}
+
+/* Send handshake to a peer */
+static bool send_handshake(int fd, const NodeId *local) {
+    /* Handshake format: [type:1][version:1][cookie:8][name_len:1][name:var] */
+    size_t name_len = strlen(local->name);
+    if (name_len > 255) name_len = 255;
+
+    size_t total = 1 + 1 + 8 + 1 + name_len;
+    uint8_t *buf = malloc(total);
+    if (!buf) return false;
+
+    size_t pos = 0;
+    buf[pos++] = DIST_MSG_HANDSHAKE;
+    buf[pos++] = DIST_PROTOCOL_VERSION;
+
+    /* Cookie (8 bytes big-endian) */
+    for (int i = 7; i >= 0; i--) {
+        buf[pos++] = (local->cookie >> (i * 8)) & 0xFF;
+    }
+
+    buf[pos++] = (uint8_t)name_len;
+    memcpy(buf + pos, local->name, name_len);
+
+    bool ok = socket_write_exact(fd, buf, total);
+    free(buf);
+    return ok;
+}
+
+/* Read handshake from a peer */
+static bool read_handshake(int fd, uint64_t expected_cookie, NodeId *peer_out) {
+    /* Read fixed part: [type:1][version:1][cookie:8][name_len:1] */
+    uint8_t header[11];
+    if (!socket_read_exact(fd, header, 11)) return false;
+
+    if (header[0] != DIST_MSG_HANDSHAKE) return false;
+    if (header[1] != DIST_PROTOCOL_VERSION) return false;
+
+    /* Verify cookie */
+    uint64_t cookie = 0;
+    for (int i = 0; i < 8; i++) {
+        cookie = (cookie << 8) | header[2 + i];
+    }
+    if (cookie != expected_cookie) return false;
+
+    /* Read name */
+    uint8_t name_len = header[10];
+    if (name_len > 0) {
+        if (name_len >= NODE_NAME_MAX) name_len = NODE_NAME_MAX - 1;
+        if (!socket_read_exact(fd, peer_out->name, name_len)) return false;
+        peer_out->name[name_len] = '\0';
+    } else {
+        peer_out->name[0] = '\0';
+    }
+
+    peer_out->cookie = cookie;
+    return true;
+}
 
 static void *accept_thread_fn(void *arg) {
     DistributedNode *node = (DistributedNode *)arg;
@@ -137,15 +294,62 @@ static void *accept_thread_fn(void *arg) {
         int flag = 1;
         setsockopt(client_fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
 
-        /* TODO: Handle incoming connection properly
-         * - Read handshake
-         * - Verify cookie
-         * - Add to peers list
-         * - Start receiver thread
-         */
+        /* Read handshake from client */
+        NodeId peer_id = {0};
+        if (!read_handshake(client_fd, node->config.cookie, &peer_id)) {
+            close(client_fd);
+            continue;
+        }
 
-        /* For now, just close (basic infrastructure) */
-        close(client_fd);
+        /* Send our handshake response */
+        if (!send_handshake(client_fd, &node->local)) {
+            close(client_fd);
+            continue;
+        }
+
+        /* Get client address info */
+        inet_ntop(AF_INET, &client_addr.sin_addr, peer_id.host, NODE_HOST_MAX);
+        peer_id.port = ntohs(client_addr.sin_port);
+        peer_id.node_id = timer_current_time_ms();
+
+        /* Create connection and add to peers */
+        NodeConnection *conn = calloc(1, sizeof(NodeConnection));
+        if (!conn) {
+            close(client_fd);
+            continue;
+        }
+
+        conn->peer = peer_id;
+        conn->state = NODE_CONNECTED;
+        conn->socket_fd = client_fd;
+        conn->connected_at = timer_current_time_ms();
+        conn->last_heartbeat = conn->connected_at;
+        conn->recv_running = true;
+        conn->node = node;
+
+        /* Add to peers list */
+        pthread_mutex_lock(&node->lock);
+        conn->next = node->peers;
+        node->peers = conn;
+        node->peer_count++;
+        pthread_mutex_unlock(&node->lock);
+
+        /* Start receiver thread */
+        if (pthread_create(&conn->recv_thread, NULL, receiver_thread_fn, conn) != 0) {
+            /* Thread creation failed - clean up connection */
+            pthread_mutex_lock(&node->lock);
+            node->peers = conn->next;
+            node->peer_count--;
+            pthread_mutex_unlock(&node->lock);
+            close(conn->socket_fd);
+            free(conn);
+            continue;
+        }
+
+        /* Notify callback */
+        if (node->on_node_up) {
+            node->on_node_up(node->callback_ctx, &conn->peer);
+        }
     }
 
     return NULL;
@@ -234,9 +438,7 @@ void node_stop(DistributedNode *node) {
     pthread_mutex_unlock(&node->lock);
 }
 
-/*============================================================================
- * Peer Connections
- *============================================================================*/
+/* Peer Connections */
 
 bool node_connect(DistributedNode *node, const char *peer_name,
                   const char *host, uint16_t port) {
@@ -267,6 +469,7 @@ bool node_connect(DistributedNode *node, const char *peer_name,
     conn->peer.cookie = node->config.cookie;
     conn->state = NODE_CONNECTING;
     conn->socket_fd = -1;
+    conn->node = node;
 
     /* Add to list */
     conn->next = node->peers;
@@ -342,11 +545,29 @@ bool node_connect(DistributedNode *node, const char *peer_name,
     setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
 
     conn->socket_fd = sock;
-    conn->state = NODE_CONNECTED;
-    conn->connected_at = current_time_ms();
+    conn->connected_at = timer_current_time_ms();
     conn->last_heartbeat = conn->connected_at;
 
-    /* TODO: Send handshake, verify cookie, start receiver thread */
+    /* Send handshake */
+    if (!send_handshake(sock, &node->local)) {
+        close(sock);
+        conn->state = NODE_FAILED;
+        return false;
+    }
+
+    /* Read handshake response */
+    NodeId peer_response = {0};
+    if (!read_handshake(sock, node->config.cookie, &peer_response)) {
+        close(sock);
+        conn->state = NODE_FAILED;
+        return false;
+    }
+
+    conn->state = NODE_CONNECTED;
+    conn->recv_running = true;
+
+    /* Start receiver thread */
+    pthread_create(&conn->recv_thread, NULL, receiver_thread_fn, conn);
 
     /* Notify callback */
     if (node->on_node_up) {
@@ -365,19 +586,24 @@ void node_disconnect(DistributedNode *node, const char *peer_name) {
     while (*pp) {
         NodeConnection *conn = *pp;
         if (strcmp(conn->peer.name, peer_name) == 0) {
-            /* Stop receiver thread */
-            if (conn->recv_running) {
-                conn->recv_running = false;
-            }
-
-            /* Close socket */
-            if (conn->socket_fd >= 0) {
-                close(conn->socket_fd);
-            }
-
-            /* Remove from list */
+            /* Remove from list first */
             *pp = conn->next;
             node->peer_count--;
+            pthread_mutex_unlock(&node->lock);
+
+            /* Stop receiver thread - shutdown socket to unblock recv */
+            bool was_running = conn->recv_running;
+            conn->recv_running = false;
+            if (conn->socket_fd >= 0) {
+                shutdown(conn->socket_fd, SHUT_RDWR);
+                close(conn->socket_fd);
+                conn->socket_fd = -1;
+            }
+
+            /* Wait for receiver thread to finish */
+            if (was_running) {
+                pthread_join(conn->recv_thread, NULL);
+            }
 
             /* Notify callback */
             if (node->on_node_down) {
@@ -385,7 +611,6 @@ void node_disconnect(DistributedNode *node, const char *peer_name) {
             }
 
             free(conn);
-            pthread_mutex_unlock(&node->lock);
             return;
         }
         pp = &conn->next;
@@ -413,11 +638,51 @@ NodeConnection *node_get_peer(DistributedNode *node, const char *peer_name) {
 }
 
 const NodeId *node_list_peers(DistributedNode *node, size_t *count) {
-    /* Note: This is a simplified implementation that returns NULL.
-     * A full implementation would build an array of NodeIds. */
-    if (count) *count = 0;
-    (void)node;
-    return NULL;
+    if (!node || !count) {
+        if (count) *count = 0;
+        return NULL;
+    }
+
+    pthread_mutex_lock(&node->lock);
+
+    /* Count connected peers */
+    size_t n = 0;
+    NodeConnection *conn = node->peers;
+    while (conn) {
+        if (conn->state == NODE_CONNECTED) {
+            n++;
+        }
+        conn = conn->next;
+    }
+
+    if (n == 0) {
+        pthread_mutex_unlock(&node->lock);
+        *count = 0;
+        return NULL;
+    }
+
+    /* Allocate array for peer IDs */
+    NodeId *peers = malloc(sizeof(NodeId) * n);
+    if (!peers) {
+        pthread_mutex_unlock(&node->lock);
+        *count = 0;
+        return NULL;
+    }
+
+    /* Fill array with connected peer IDs */
+    size_t i = 0;
+    conn = node->peers;
+    while (conn && i < n) {
+        if (conn->state == NODE_CONNECTED) {
+            peers[i++] = conn->peer;
+        }
+        conn = conn->next;
+    }
+
+    pthread_mutex_unlock(&node->lock);
+
+    *count = i;
+    return peers;
 }
 
 bool node_is_connected(DistributedNode *node, const char *peer_name) {
@@ -425,9 +690,7 @@ bool node_is_connected(DistributedNode *node, const char *peer_name) {
     return conn && conn->state == NODE_CONNECTED;
 }
 
-/*============================================================================
- * Messaging
- *============================================================================*/
+/* Messaging */
 
 bool node_send(DistributedNode *node, const char *peer_name,
                Pid target_pid, Pid sender_pid, const void *data, size_t len) {
@@ -436,46 +699,45 @@ bool node_send(DistributedNode *node, const char *peer_name,
         return false;
     }
 
-    /* Build message header */
-    uint8_t header[32];
+    /* Message format: [type:1][length:4][target_pid:8][sender_pid:8][payload:...]
+     * where length = 16 + payload_len (PIDs + payload) */
+    uint8_t header[5];
     size_t hlen = 0;
 
     /* Message type */
     header[hlen++] = DIST_MSG_SEND;
 
-    /* Target PID (8 bytes) */
-    for (int i = 7; i >= 0; i--) {
-        header[hlen++] = (target_pid >> (i * 8)) & 0xFF;
+    /* Message length (4 bytes big-endian): PIDs (16 bytes) + payload */
+    uint32_t msg_len = 16 + (uint32_t)len;
+    header[hlen++] = (msg_len >> 24) & 0xFF;
+    header[hlen++] = (msg_len >> 16) & 0xFF;
+    header[hlen++] = (msg_len >> 8) & 0xFF;
+    header[hlen++] = msg_len & 0xFF;
+
+    /* Send message header */
+    if (!socket_write_exact(conn->socket_fd, header, hlen)) {
+        return false;
     }
 
-    /* Sender PID (8 bytes) */
+    /* Send PIDs (16 bytes total) */
+    uint8_t pids[16];
     for (int i = 7; i >= 0; i--) {
-        header[hlen++] = (sender_pid >> (i * 8)) & 0xFF;
+        pids[7 - i] = (target_pid >> (i * 8)) & 0xFF;
+        pids[15 - i] = (sender_pid >> (i * 8)) & 0xFF;
     }
-
-    /* Payload length (4 bytes) */
-    uint32_t len32 = (uint32_t)len;
-    header[hlen++] = (len32 >> 24) & 0xFF;
-    header[hlen++] = (len32 >> 16) & 0xFF;
-    header[hlen++] = (len32 >> 8) & 0xFF;
-    header[hlen++] = len32 & 0xFF;
-
-    /* Send header */
-    ssize_t sent = send(conn->socket_fd, header, hlen, MSG_NOSIGNAL);
-    if (sent != (ssize_t)hlen) {
+    if (!socket_write_exact(conn->socket_fd, pids, 16)) {
         return false;
     }
 
     /* Send payload */
     if (len > 0 && data) {
-        sent = send(conn->socket_fd, data, len, MSG_NOSIGNAL);
-        if (sent != (ssize_t)len) {
+        if (!socket_write_exact(conn->socket_fd, data, len)) {
             return false;
         }
     }
 
     conn->messages_sent++;
-    conn->bytes_sent += hlen + len;
+    conn->bytes_sent += hlen + 16 + len;
 
     return true;
 }
@@ -500,9 +762,7 @@ bool node_send_value(DistributedNode *node, const char *peer_name,
     return ok;
 }
 
-/*============================================================================
- * Monitoring
- *============================================================================*/
+/* Monitoring */
 
 bool node_monitor(DistributedNode *node, Pid watcher_pid, const char *peer_name) {
     if (!node) return false;
@@ -554,9 +814,7 @@ void node_demonitor(DistributedNode *node, Pid watcher_pid, const char *peer_nam
     pthread_mutex_unlock(&node->lock);
 }
 
-/*============================================================================
- * Queries
- *============================================================================*/
+/* Queries */
 
 const NodeId *node_self(DistributedNode *node) {
     return node ? &node->local : NULL;

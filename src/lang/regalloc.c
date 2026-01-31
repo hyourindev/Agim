@@ -8,9 +8,7 @@
 #include "lang/regalloc.h"
 #include <string.h>
 
-/*============================================================================
- * Initialization
- *============================================================================*/
+/* Initialization */
 
 void regalloc_init(RegAlloc *ra) {
     if (!ra) return;
@@ -30,9 +28,7 @@ void regalloc_reset(RegAlloc *ra) {
     memset(ra->local_to_reg, REG_NONE, sizeof(ra->local_to_reg));
 }
 
-/*============================================================================
- * Local Variable Allocation
- *============================================================================*/
+/* Local Variable Allocation */
 
 uint8_t regalloc_local(RegAlloc *ra, int local_slot) {
     if (!ra || local_slot < 0 || local_slot >= REG_MAX) {
@@ -73,9 +69,7 @@ uint8_t regalloc_get_local(RegAlloc *ra, int local_slot) {
     return ra->local_to_reg[local_slot];
 }
 
-/*============================================================================
- * Temporary Register Allocation
- *============================================================================*/
+/* Temporary Register Allocation */
 
 uint8_t regalloc_temp(RegAlloc *ra) {
     if (!ra) return REG_NONE;
@@ -109,9 +103,7 @@ void regalloc_free_all_temps(RegAlloc *ra) {
     ra->temp_count = 0;
 }
 
-/*============================================================================
- * Utilities
- *============================================================================*/
+/* Utilities */
 
 uint8_t regalloc_count(const RegAlloc *ra) {
     if (!ra) return 0;
@@ -123,9 +115,7 @@ bool regalloc_is_temp(const RegAlloc *ra, uint8_t reg) {
     return reg >= ra->temp_base && reg < ra->temp_base + ra->temp_count;
 }
 
-/*============================================================================
- * Expression Result Tracking
- *============================================================================*/
+/* Expression Result Tracking */
 
 void regalloc_set_result(RegAlloc *ra, uint8_t reg) {
     if (!ra) return;

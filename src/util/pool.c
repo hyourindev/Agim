@@ -6,26 +6,16 @@
  */
 
 #include "util/pool.h"
+#include "util/alloc.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-/*============================================================================
- * Helper Functions
- *============================================================================*/
-
-static inline size_t align_size(size_t size, size_t alignment) {
-    return (size + alignment - 1) & ~(alignment - 1);
-}
-
-/*============================================================================
- * Pool Implementation
- *============================================================================*/
+/* Pool Implementation */
 
 void pool_init(MemoryPool *pool, size_t block_size) {
     if (!pool) return;
 
-    /* Ensure minimum block size for free list pointer */
     if (block_size < sizeof(PoolFreeBlock)) {
         block_size = sizeof(PoolFreeBlock);
     }
@@ -49,7 +39,6 @@ void pool_free(MemoryPool *pool) {
 
     pthread_mutex_lock(&pool->lock);
 
-    /* Free all chunks */
     PoolChunk *chunk = pool->chunks;
     while (chunk) {
         PoolChunk *next = chunk->next;
@@ -65,20 +54,15 @@ void pool_free(MemoryPool *pool) {
     pthread_mutex_destroy(&pool->lock);
 }
 
-/**
- * Allocate a new chunk and add blocks to free list.
- */
 static bool pool_grow(MemoryPool *pool) {
     size_t total_size = sizeof(PoolChunk) + pool->block_size * pool->blocks_per_chunk;
     PoolChunk *chunk = malloc(total_size);
     if (!chunk) return false;
 
-    /* Link into chunk list */
     chunk->next = pool->chunks;
     pool->chunks = chunk;
     pool->chunk_count++;
 
-    /* Add all blocks to free list */
     char *block = chunk->data;
     for (size_t i = 0; i < pool->blocks_per_chunk; i++) {
         PoolFreeBlock *free_block = (PoolFreeBlock *)block;
@@ -96,7 +80,6 @@ void *pool_alloc(MemoryPool *pool) {
 
     pthread_mutex_lock(&pool->lock);
 
-    /* Grow if needed */
     if (!pool->free_list) {
         if (!pool_grow(pool)) {
             pthread_mutex_unlock(&pool->lock);
@@ -104,7 +87,6 @@ void *pool_alloc(MemoryPool *pool) {
         }
     }
 
-    /* Pop from free list */
     PoolFreeBlock *block = pool->free_list;
     pool->free_list = block->next;
 
@@ -121,7 +103,6 @@ void pool_dealloc(MemoryPool *pool, void *ptr) {
 
     pthread_mutex_lock(&pool->lock);
 
-    /* Push onto free list */
     PoolFreeBlock *block = (PoolFreeBlock *)ptr;
     block->next = pool->free_list;
     pool->free_list = block;
@@ -145,11 +126,8 @@ PoolStats pool_stats(const MemoryPool *pool) {
     return stats;
 }
 
-/*============================================================================
- * Global Pools
- *============================================================================*/
+/* Global Pools */
 
-/* Pool sizes: 16, 32, 64, 128, 256, 512 bytes */
 #define NUM_GLOBAL_POOLS 6
 static MemoryPool global_pools[NUM_GLOBAL_POOLS];
 static const size_t pool_sizes[NUM_GLOBAL_POOLS] = {16, 32, 64, 128, 256, 512};
@@ -173,10 +151,6 @@ void pools_free(void) {
     pools_initialized = false;
 }
 
-/**
- * Find the appropriate pool for a given size.
- * Returns -1 if no suitable pool (use malloc).
- */
 static int find_pool_index(size_t size) {
     for (int i = 0; i < NUM_GLOBAL_POOLS; i++) {
         if (size <= pool_sizes[i]) {
@@ -196,7 +170,6 @@ void *pools_alloc(size_t size) {
         return pool_alloc(&global_pools[idx]);
     }
 
-    /* Too large for pools, use malloc */
     return malloc(size);
 }
 
@@ -209,6 +182,5 @@ void pools_dealloc(void *ptr, size_t size) {
         return;
     }
 
-    /* Was allocated with malloc */
     free(ptr);
 }

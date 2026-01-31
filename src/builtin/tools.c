@@ -15,9 +15,7 @@
 #include <stdio.h>
 #include <string.h>
 
-/*============================================================================
- * Tool Registry
- *============================================================================*/
+/* Tool Registry */
 
 void tools_init(ToolRegistry *registry) {
     if (!registry) return;
@@ -61,7 +59,7 @@ bool tools_register_with_schema(ToolRegistry *registry, const char *name,
     Tool *existing = registry->tools;
     while (existing) {
         if (strcmp(existing->name, name) == 0) {
-            return false; /* Already exists */
+            return false;
         }
         existing = existing->next;
     }
@@ -123,18 +121,18 @@ Value *tools_call(ToolRegistry *registry, Block *block,
     }
 
     if (!tool) {
-        return NULL; /* Tool not found */
+        return NULL;
     }
 
     /* Check arity */
     if (arg_count < tool->min_args || arg_count > tool->max_args) {
-        return NULL; /* Wrong number of arguments */
+        return NULL;
     }
 
     /* Check capabilities */
     if (block && tool->required_caps) {
         if (!block_has_cap(block, tool->required_caps)) {
-            return NULL; /* Missing capabilities */
+            return NULL;
         }
     }
 
@@ -271,7 +269,13 @@ char *tools_get_all_schemas_json(ToolRegistry *registry) {
             size_t schema_len = strlen(schema);
             while (len + schema_len + 10 > capacity) {
                 capacity *= 2;
-                buf = agim_realloc(buf, capacity);
+                char *new_buf = agim_realloc(buf, capacity);
+                if (!new_buf) {
+                    agim_free(schema);
+                    agim_free(buf);
+                    return NULL;
+                }
+                buf = new_buf;
             }
             len += snprintf(buf + len, capacity - len, "\n%s", schema);
             agim_free(schema);
@@ -322,11 +326,8 @@ Value *tools_list_as_value(ToolRegistry *registry) {
     return arr;
 }
 
-/*============================================================================
- * Built-in Tools
- *============================================================================*/
+/* Built-in Tools */
 
-/* tool: print - Print values to stdout */
 static Value *tool_print(Block *block, Value **args, size_t arg_count,
                          void *context) {
     (void)block;
@@ -341,7 +342,6 @@ static Value *tool_print(Block *block, Value **args, size_t arg_count,
     return value_nil();
 }
 
-/* tool: type - Get type name of value */
 static Value *tool_type(Block *block, Value **args, size_t arg_count,
                         void *context) {
     (void)block;
@@ -369,7 +369,6 @@ static Value *tool_type(Block *block, Value **args, size_t arg_count,
     return value_string(type_name);
 }
 
-/* tool: len - Get length of string/array/map */
 static Value *tool_len(Block *block, Value **args, size_t arg_count,
                        void *context) {
     (void)block;
@@ -393,7 +392,6 @@ static Value *tool_len(Block *block, Value **args, size_t arg_count,
     }
 }
 
-/* tool: keys - Get array of map keys */
 static Value *tool_keys(Block *block, Value **args, size_t arg_count,
                         void *context) {
     (void)block;
@@ -406,7 +404,6 @@ static Value *tool_keys(Block *block, Value **args, size_t arg_count,
     return map_keys(args[0]);
 }
 
-/* tool: str - Convert value to string */
 static Value *tool_str(Block *block, Value **args, size_t arg_count,
                        void *context) {
     (void)block;
@@ -420,7 +417,6 @@ static Value *tool_str(Block *block, Value **args, size_t arg_count,
     return result;
 }
 
-/* tool: int - Convert value to integer */
 static Value *tool_int(Block *block, Value **args, size_t arg_count,
                        void *context) {
     (void)block;
@@ -431,7 +427,6 @@ static Value *tool_int(Block *block, Value **args, size_t arg_count,
     return value_int(value_to_int(args[0]));
 }
 
-/* tool: float - Convert value to float */
 static Value *tool_float(Block *block, Value **args, size_t arg_count,
                          void *context) {
     (void)block;
@@ -454,18 +449,12 @@ void tools_register_builtins(ToolRegistry *registry) {
     tools_register(registry, "float", tool_float, 1, 1, CAP_NONE, NULL);
 }
 
-/*============================================================================
- * Bytecode Tool Registration
- *============================================================================*/
+/* Bytecode Tool Registration */
 
 #include "vm/vm.h"
 #include "vm/bytecode.h"
 #include "types/closure.h"
 
-/**
- * Wrapper function that calls a bytecode-defined tool.
- * This is called when a user-defined tool is invoked via the tool registry.
- */
 static Value *bytecode_tool_call(Block *block, Value **args, size_t arg_count,
                                   void *context) {
     BytecodeToolContext *ctx = (BytecodeToolContext *)context;
@@ -523,13 +512,12 @@ static Value *bytecode_tool_call(Block *block, Value **args, size_t arg_count,
     frame->ip = func_chunk->code;
     frame->slots = vm->stack_top - arg_count - 1;
 
-    /* Suppress block reference temporarily if needed */
     (void)block;
 
     /* Run until function returns */
     size_t initial_frame_count = vm->frame_count;
     size_t saved_limit = vm->reduction_limit;
-    vm->reduction_limit = 1000000; /* Allow plenty of reductions */
+    vm->reduction_limit = 1000000;
 
     VMResult result;
     do {
@@ -546,6 +534,17 @@ static Value *bytecode_tool_call(Block *block, Value **args, size_t arg_count,
     }
 
     return ret;
+}
+
+static ToolParamType type_string_to_enum(const char *type) {
+    if (!type) return TOOL_PARAM_ANY;
+    if (strcmp(type, "string") == 0) return TOOL_PARAM_STRING;
+    if (strcmp(type, "int") == 0) return TOOL_PARAM_INT;
+    if (strcmp(type, "float") == 0) return TOOL_PARAM_FLOAT;
+    if (strcmp(type, "bool") == 0) return TOOL_PARAM_BOOL;
+    if (strcmp(type, "array") == 0) return TOOL_PARAM_ARRAY;
+    if (strcmp(type, "map") == 0) return TOOL_PARAM_MAP;
+    return TOOL_PARAM_ANY;
 }
 
 void tools_register_from_bytecode(ToolRegistry *registry, Bytecode *code, VM *vm) {
@@ -570,9 +569,23 @@ void tools_register_from_bytecode(ToolRegistry *registry, Bytecode *code, VM *vm
         ctx->func_index = info->func_index;
         ctx->code = code;
 
+        /* Convert bytecode params to runtime params */
+        ToolParam *params = NULL;
+        if (info->param_count > 0) {
+            params = agim_alloc(sizeof(ToolParam) * info->param_count);
+            for (size_t j = 0; j < info->param_count; j++) {
+                params[j].name = info->params[j].name;
+                params[j].description = info->params[j].description;
+                params[j].type = type_string_to_enum(info->params[j].type);
+                params[j].required = true;
+                params[j].default_value = NULL;
+            }
+        }
+
         /* Register the tool */
         tools_register_with_schema(registry, info->name, info->description,
                                    bytecode_tool_call, info->param_count,
-                                   info->param_count, 0, ctx, NULL, 0);
+                                   info->param_count, 0, ctx, params,
+                                   info->param_count);
     }
 }

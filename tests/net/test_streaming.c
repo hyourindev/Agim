@@ -43,9 +43,7 @@ static int tests_skipped = 0;
 /* Maximum retries for flaky network tests */
 #define MAX_RETRIES 3
 
-/*============================================================================
- * SSE Parser Tests
- *============================================================================*/
+/* SSE Parser Tests */
 
 static void test_sse_parser_basic(void) {
     TEST("sse_parser basic event");
@@ -222,9 +220,7 @@ static void test_sse_parser_comments(void) {
     PASS();
 }
 
-/*============================================================================
- * HTTP Streaming Tests
- *============================================================================*/
+/* HTTP Streaming Tests */
 
 static void test_stream_get(void) {
     TEST("http_stream_get (HTTPS)");
@@ -360,9 +356,7 @@ static void test_stream_post(void) {
     PASS();
 }
 
-/*============================================================================
- * Main
- *============================================================================*/
+/* Main */
 
 int main(void) {
     printf("=== HTTP Streaming Tests ===\n\n");

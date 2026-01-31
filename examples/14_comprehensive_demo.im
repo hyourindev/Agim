@@ -71,9 +71,7 @@ fn print_subsection(title: string) -> string {
 
 print_section("TOFULANG COMPREHENSIVE FEATURE DEMO")
 
-// ============================================================
-// SECTION 1: Range Loops
-// ============================================================
+// Range Loops
 print_subsection("1. Range Loops")
 
 print("Exclusive range (0..5):")
@@ -94,9 +92,7 @@ for i in 0..len(sample) {
     print("  arr[" + str(i) + "] = " + str(sample[i]))
 }
 
-// ============================================================
-// SECTION 2: Structs and Enums
-// ============================================================
+// Structs and Enums
 print_section("2. Structs and Enums")
 
 let config = Config {
@@ -119,9 +115,7 @@ for s in states {
     print("  " + state_to_string(s))
 }
 
-// ============================================================
-// SECTION 3: Result and Option Types
-// ============================================================
+// Result and Option Types
 print_section("3. Result and Option Types")
 
 print_subsection("Result<T, E>")
@@ -169,9 +163,7 @@ for arr in test_arrays {
     }
 }
 
-// ============================================================
-// SECTION 4: File I/O
-// ============================================================
+// File I/O
 print_section("4. File I/O")
 
 let test_file = "/tmp/tofu_test.json"
@@ -232,9 +224,7 @@ match lines_result {
     err(e) => print("  Lines read failed: " + e)
 }
 
-// ============================================================
-// SECTION 5: HTTP Methods (all of them)
-// ============================================================
+// HTTP Methods
 print_section("5. HTTP Methods")
 
 let base_url = "https://httpbin.org"
@@ -355,9 +345,7 @@ for r in http_results {
     print("  " + r.method + " " + r.url + " -> " + status_str)
 }
 
-// ============================================================
-// SECTION 6: WebSocket (if available)
-// ============================================================
+// WebSocket
 print_section("6. WebSocket")
 
 // Note: ws.connect returns handle or nil, ws.send returns bool, ws.recv returns string or nil
@@ -389,9 +377,7 @@ if ws_handle == nil {
     print("  WebSocket closed")
 }
 
-// ============================================================
-// SECTION 7: JSON Operations
-// ============================================================
+// JSON Operations
 print_section("7. JSON Operations")
 
 print_subsection("json.encode")
@@ -426,9 +412,7 @@ for s in json_strings {
     }
 }
 
-// ============================================================
-// SECTION 8: Imported Utilities
-// ============================================================
+// Imported Utilities
 print_section("8. Imported Module Functions")
 
 log_info("Testing imported utilities")
@@ -456,9 +440,7 @@ match idx {
     none => print("8 not found")
 }
 
-// ============================================================
-// SECTION 9: Tool Decorator
-// ============================================================
+// Tool Definitions
 print_section("9. Tool Definitions")
 
 @tool(description: "Add two numbers together")
@@ -502,9 +484,7 @@ print("Calling tool_fetch_summary:")
 let fetch_result = tool_fetch_summary("https://httpbin.org/uuid")
 print("  " + json.encode(fetch_result))
 
-// ============================================================
-// FINAL SUMMARY
-// ============================================================
+// Final Summary
 print_section("DEMO COMPLETE")
 
 print("All features tested:")

@@ -10,20 +10,17 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "net/sse.h"
+#include "util/alloc.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-/*============================================================================
- * Constants
- *============================================================================*/
+/* Constants */
 
 #define SSE_INITIAL_BUFFER_SIZE 4096
 #define SSE_MAX_EVENTS 16
 
-/*============================================================================
- * Parser State
- *============================================================================*/
+/* Parser State */
 
 typedef struct {
     char *event;       /* Event type (allocated) */
@@ -56,25 +53,13 @@ struct SSEParser {
     bool has_error;
 };
 
-/*============================================================================
- * Helper Functions
- *============================================================================*/
-
-static char *str_dup(const char *s) {
-    if (!s) return NULL;
-    size_t len = strlen(s);
-    char *dup = malloc(len + 1);
-    if (dup) {
-        memcpy(dup, s, len + 1);
-    }
-    return dup;
-}
+/* Helper Functions */
 
 static char *str_append_with_newline(char *existing, const char *append) {
     if (!append) return existing;
 
     if (!existing) {
-        return str_dup(append);
+        return agim_strdup(append);
     }
 
     size_t existing_len = strlen(existing);
@@ -123,9 +108,7 @@ static void free_event_contents(ParsedEvent *event) {
     event->retry = -1;
 }
 
-/*============================================================================
- * Parser Lifecycle
- *============================================================================*/
+/* Parser Lifecycle */
 
 SSEParser *sse_parser_new(void) {
     SSEParser *parser = calloc(1, sizeof(SSEParser));
@@ -183,9 +166,7 @@ void sse_parser_reset(SSEParser *parser) {
     parser->has_error = false;
 }
 
-/*============================================================================
- * Parsing
- *============================================================================*/
+/* Parsing */
 
 /**
  * Process a single line from the SSE stream.
@@ -200,15 +181,15 @@ static bool process_line(SSEParser *parser, const char *line, size_t len) {
                 ParsedEvent *event = &parser->events[parser->event_count];
                 free_event_contents(event);
 
-                event->event = parser->cur_event ? parser->cur_event : str_dup("message");
+                event->event = parser->cur_event ? parser->cur_event : agim_strdup("message");
                 event->data = parser->cur_data;
-                event->id = parser->cur_id ? parser->cur_id : str_dup(parser->last_id);
+                event->id = parser->cur_id ? parser->cur_id : agim_strdup(parser->last_id);
                 event->retry = parser->cur_retry;
 
                 /* Update last_id if we had an id */
                 if (parser->cur_id) {
                     free(parser->last_id);
-                    parser->last_id = str_dup(parser->cur_id);
+                    parser->last_id = agim_strdup(parser->cur_id);
                 }
 
                 parser->cur_event = NULL;

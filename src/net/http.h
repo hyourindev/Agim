@@ -13,9 +13,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-/*============================================================================
- * HTTP Response
- *============================================================================*/
+/* HTTP Response */
 
 typedef struct HttpResponse {
     long status_code;       /* HTTP status code (200, 404, etc.) */
@@ -25,9 +23,7 @@ typedef struct HttpResponse {
     char *error;            /* Error message if request failed */
 } HttpResponse;
 
-/*============================================================================
- * HTTP Streaming
- *============================================================================*/
+/* HTTP Streaming */
 
 typedef struct HttpStream HttpStream;
 
@@ -38,9 +34,7 @@ typedef struct HttpStream HttpStream;
  */
 typedef bool (*HttpStreamCallback)(const char *chunk, size_t len, void *ctx);
 
-/*============================================================================
- * HTTP Client Lifecycle
- *============================================================================*/
+/* HTTP Client Lifecycle */
 
 /**
  * Initialize the HTTP client (call once at startup).
@@ -53,9 +47,7 @@ bool http_init(void);
  */
 void http_cleanup(void);
 
-/*============================================================================
- * Synchronous Requests
- *============================================================================*/
+/* Synchronous Requests */
 
 /**
  * Perform an HTTP GET request.
@@ -105,9 +97,7 @@ HttpResponse *http_request_generic(const char *method, const char *url,
  */
 void http_response_free(HttpResponse *resp);
 
-/*============================================================================
- * Streaming Requests
- *============================================================================*/
+/* Streaming Requests */
 
 /**
  * Start a streaming HTTP GET request.
@@ -161,9 +151,7 @@ long http_stream_status(HttpStream *stream);
  */
 void http_stream_close(HttpStream *stream);
 
-/*============================================================================
- * URL Validation
- *============================================================================*/
+/* URL Validation */
 
 /**
  * Check if a URL is valid and safe to request.

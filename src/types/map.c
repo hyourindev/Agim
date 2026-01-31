@@ -16,23 +16,15 @@
 #include <stdatomic.h>
 #include <string.h>
 
-/*
- * Thread-local heap reference for write barriers.
- * Set by the VM during execution.
- */
-static _Thread_local Heap *tls_current_heap = NULL;
-
 void map_set_gc_heap(Heap *heap) {
-    tls_current_heap = heap;
+    gc_set_current_heap(heap);
 }
 
 Heap *map_get_gc_heap(void) {
-    return tls_current_heap;
+    return gc_get_current_heap();
 }
 
-/*============================================================================
- * Map Creation
- *============================================================================*/
+/* Map Creation */
 
 Value *value_map_with_capacity(size_t capacity) {
     Value *v = agim_alloc(sizeof(Value));
@@ -56,9 +48,7 @@ Value *value_map(void) {
     return value_map_with_capacity(16);
 }
 
-/*============================================================================
- * Map Properties
- *============================================================================*/
+/* Map Properties */
 
 size_t map_size(const Value *v) {
     if (!v || v->type != VAL_MAP) return 0;
@@ -70,22 +60,11 @@ size_t map_capacity(const Value *v) {
     return v->as.map->capacity;
 }
 
-/*============================================================================
- * Internal Helpers
- *============================================================================*/
+/* Internal Helpers */
 
-/**
- * Maximum chain depth before triggering emergency rehash.
- * This limits the worst-case lookup time to O(MAX_CHAIN_DEPTH)
- * even under hash collision attacks.
- */
+/* Limit chain depth to protect against hash collision DoS */
 #define MAP_MAX_CHAIN_DEPTH 16
 
-/**
- * Find an entry in the map by key.
- * Returns NULL if not found.
- * If chain_depth_out is non-NULL, stores the depth at which entry was found.
- */
 static MapEntry *find_entry_internal(Map *map, const char *key, size_t key_hash) {
     size_t index = key_hash % map->capacity;
     MapEntry *entry = map->buckets[index];
@@ -100,17 +79,9 @@ static MapEntry *find_entry_internal(Map *map, const char *key, size_t key_hash)
         depth++;
     }
 
-    /*
-     * If we hit MAX_CHAIN_DEPTH without finding the key, stop searching.
-     * This protects against hash collision DoS attacks by limiting
-     * worst-case lookup time.
-     */
     return NULL;
 }
 
-/**
- * Count the current chain depth at a bucket index.
- */
 static size_t chain_depth_at(Map *map, size_t index) {
     size_t depth = 0;
     MapEntry *entry = map->buckets[index];
@@ -125,13 +96,11 @@ static void map_resize(Map *map, size_t new_capacity) {
     MapEntry **new_buckets = agim_alloc(sizeof(MapEntry *) * new_capacity);
     memset(new_buckets, 0, sizeof(MapEntry *) * new_capacity);
 
-    /* Rehash all entries */
     for (size_t i = 0; i < map->capacity; i++) {
         MapEntry *entry = map->buckets[i];
         while (entry) {
             MapEntry *next = entry->next;
 
-            /* Insert into new bucket */
             size_t new_index = entry->key->hash % new_capacity;
             entry->next = new_buckets[new_index];
             new_buckets[new_index] = entry;
@@ -145,43 +114,29 @@ static void map_resize(Map *map, size_t new_capacity) {
     map->capacity = new_capacity;
 }
 
-/**
- * Ensure the map is writable (COW semantics).
- * If the value has refcount > 1, create a NEW Value with cloned map.
- * Returns the Value to use (either original if refcount==1, or new copy).
- *
- * IMPORTANT: Caller MUST use the returned Value, not the original!
- */
 static Value *map_ensure_writable(Value *v) {
     if (!v || v->type != VAL_MAP) return v;
 
     if (!value_needs_cow(v)) {
-        /* No COW needed - return original */
         return v;
     }
 
-    /*
-     * COW triggered: create a completely NEW Value with NEW Map.
-     * Do NOT modify the original Value - other references depend on it.
-     */
+    /* COW: create new Value with cloned Map */
     Map *old = v->as.map;
 
-    /* Create new Value wrapper */
     Value *new_v = agim_alloc(sizeof(Value));
     new_v->type = VAL_MAP;
     atomic_store_explicit(&new_v->refcount, 1, memory_order_relaxed);
-    new_v->flags = 0;  /* Clear COW_SHARED flag */
+    new_v->flags = 0;
     new_v->gc_state = 0;
     new_v->next = NULL;
 
-    /* Create new Map */
     Map *new_map = agim_alloc(sizeof(Map));
     new_map->size = old->size;
     new_map->capacity = old->capacity;
     new_map->buckets = agim_alloc(sizeof(MapEntry *) * new_map->capacity);
     memset(new_map->buckets, 0, sizeof(MapEntry *) * new_map->capacity);
 
-    /* Deep copy entries (keys are copied, values are retained) */
     for (size_t i = 0; i < old->capacity; i++) {
         MapEntry *src = old->buckets[i];
         MapEntry **dst = &new_map->buckets[i];
@@ -189,7 +144,6 @@ static Value *map_ensure_writable(Value *v) {
         while (src) {
             MapEntry *entry = agim_alloc(sizeof(MapEntry));
 
-            /* Copy key string */
             size_t key_len = src->key->length;
             String *key_str = agim_alloc(sizeof(String) + key_len + 1);
             key_str->length = key_len;
@@ -207,16 +161,12 @@ static Value *map_ensure_writable(Value *v) {
     }
 
     new_v->as.map = new_map;
-
-    /* Decrement refcount on original (we're detaching) */
     value_release(v);
 
     return new_v;
 }
 
-/*============================================================================
- * Map Access
- *============================================================================*/
+/* Map Access */
 
 MapEntry *map_find_entry(const Value *v, const char *key) {
     if (!v || v->type != VAL_MAP) return NULL;
@@ -239,8 +189,7 @@ Value *map_set(Value *v, const char *key, Value *value) {
 
     Map *map = writable->as.map;
 
-    /* Write barrier for generational GC */
-    Heap *heap = tls_current_heap;
+    Heap *heap = gc_get_current_heap();
     if (heap) {
         gc_write_barrier(heap, writable, value);
     }
@@ -248,7 +197,6 @@ Value *map_set(Value *v, const char *key, Value *value) {
     size_t key_len = strlen(key);
     size_t key_hash = agim_hash_string(key, key_len);
 
-    /* Check if key exists */
     MapEntry *existing = find_entry_internal(map, key, key_hash);
     if (existing) {
         existing->value = value;
@@ -260,28 +208,22 @@ Value *map_set(Value *v, const char *key, Value *value) {
         map_resize(map, map->capacity * 2);
     }
 
-    /* Check target bucket chain depth for hash collision attack protection */
+    /* Check chain depth for hash collision attack protection */
     size_t index = key_hash % map->capacity;
     size_t depth = chain_depth_at(map, index);
 
     if (depth >= MAP_MAX_CHAIN_DEPTH) {
-        /*
-         * Chain is too long - possible hash collision attack.
-         * Force a resize to redistribute entries and hopefully
-         * spread out the collisions.
-         */
         map_resize(map, map->capacity * 2);
-        index = key_hash % map->capacity;  /* Recalculate after resize */
+        index = key_hash % map->capacity;
     }
 
-    /* Create new entry */
     MapEntry *entry = agim_alloc(sizeof(MapEntry));
-    if (!entry) return writable;  /* OOM */
+    if (!entry) return writable;
 
     String *key_str = agim_alloc(sizeof(String) + key_len + 1);
     if (!key_str) {
         agim_free(entry);
-        return writable;  /* OOM */
+        return writable;
     }
     key_str->length = key_len;
     key_str->hash = key_hash;
@@ -290,7 +232,6 @@ Value *map_set(Value *v, const char *key, Value *value) {
     entry->key = key_str;
     entry->value = value;
 
-    /* Insert at bucket head */
     entry->next = map->buckets[index];
     map->buckets[index] = entry;
     map->size++;
@@ -357,9 +298,7 @@ Value *map_clear(Value *v) {
     return writable;
 }
 
-/*============================================================================
- * Map Iteration
- *============================================================================*/
+/* Map Iteration */
 
 Value *map_keys(const Value *v) {
     Value *result = value_array();

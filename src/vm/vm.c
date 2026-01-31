@@ -10,12 +10,14 @@
 
 #include "vm/vm.h"
 #include "vm/ic.h"
+#include "vm/nanbox_convert.h"
 #include "util/hash.h"
 #include "runtime/block.h"
 #include "runtime/scheduler.h"
 #include "runtime/supervisor.h"
 #include "runtime/procgroup.h"
 #include "runtime/telemetry.h"
+#include "runtime/timer.h"
 #include "vm/primitives.h"
 #include "types/closure.h"
 #include "debug/trace.h"
@@ -36,9 +38,7 @@
 #include "net/websocket.h"
 #include "builtin/tools.h"
 
-/*============================================================================
- * Memory Helpers
- *============================================================================*/
+/* Memory Helpers */
 
 static void *alloc(size_t size) {
     void *ptr = malloc(size);
@@ -46,9 +46,7 @@ static void *alloc(size_t size) {
     return ptr;
 }
 
-/*============================================================================
- * VM Lifecycle
- *============================================================================*/
+/* VM Lifecycle */
 
 VM *vm_new(void) {
     VM *vm = alloc(sizeof(VM));
@@ -142,9 +140,7 @@ void vm_reset(VM *vm) {
     vm->reductions = 0;
 }
 
-/*============================================================================
- * Dynamic Stack/Frame Growth
- *============================================================================*/
+/* Dynamic Stack/Frame Growth */
 
 /**
  * Ensure stack has room for at least 'needed' more values.
@@ -215,56 +211,9 @@ static bool vm_ensure_frames(VM *vm) {
     return true;
 }
 
-/*============================================================================
- * NaN Boxing Helpers
- *============================================================================*/
-
-/**
- * Convert a NanValue to a Value* (allocates for primitives).
- */
-static Value *nanbox_to_value(NanValue v) {
-    if (nanbox_is_nil(v)) {
-        return value_nil();
-    } else if (nanbox_is_bool(v)) {
-        return value_bool(nanbox_as_bool(v));
-    } else if (nanbox_is_int(v)) {
-        return value_int(nanbox_as_int(v));
-    } else if (nanbox_is_double(v)) {
-        return value_float(nanbox_as_double(v));
-    } else if (nanbox_is_pid(v)) {
-        return value_pid(nanbox_as_pid(v));
-    } else if (nanbox_is_obj(v)) {
-        return (Value *)nanbox_as_obj(v);
-    }
-    return value_nil();
-}
-
-/**
- * Convert a Value* to a NanValue.
- */
-static NanValue value_to_nanbox(Value *val) {
-    if (!val) return NANBOX_NIL;
-
-    switch (val->type) {
-    case VAL_NIL:
-        return NANBOX_NIL;
-    case VAL_BOOL:
-        return nanbox_bool(val->as.boolean);
-    case VAL_INT:
-        return nanbox_int(val->as.integer);
-    case VAL_FLOAT:
-        return nanbox_double(val->as.floating);
-    case VAL_PID:
-        return nanbox_pid(val->as.pid);
-    default:
-        /* Heap objects: encode pointer to Value */
-        return nanbox_obj(val);
-    }
-}
-
-/*============================================================================
+/*
  * Upvalue Management (for closures)
- *============================================================================*/
+ */
 
 /**
  * Capture a local variable as an upvalue.
@@ -312,9 +261,7 @@ static void close_upvalues(VM *vm, NanValue *last) {
     }
 }
 
-/*============================================================================
- * Stack Operations (NaN-boxed)
- *============================================================================*/
+/* Stack Operations (NaN-boxed) */
 
 VMResult vm_push_nan(VM *vm, NanValue value) {
     /* Grow stack if needed */
@@ -343,9 +290,7 @@ NanValue vm_peek_nan(VM *vm, int distance) {
     return vm->stack_top[-1 - distance];
 }
 
-/*============================================================================
- * Stack Operations (Value* compatibility)
- *============================================================================*/
+/* Stack Operations (Value* compatibility) */
 
 VMResult vm_push(VM *vm, Value *value) {
     return vm_push_nan(vm, value_to_nanbox(value));
@@ -361,9 +306,7 @@ Value *vm_peek(VM *vm, int distance) {
     return nanbox_to_value(v);
 }
 
-/*============================================================================
- * Execution Helpers
- *============================================================================*/
+/* Execution Helpers */
 
 static inline uint8_t read_byte(CallFrame *frame) {
     return *frame->ip++;
@@ -385,9 +328,7 @@ static inline NanValue read_constant_nan(CallFrame *frame) {
     return value_to_nanbox(frame->chunk->constants[index]);
 }
 
-/*============================================================================
- * Jump Bounds Checking
- *============================================================================*/
+/* Jump Bounds Checking */
 
 /**
  * Check if a forward jump target is within bounds.
@@ -407,9 +348,7 @@ static inline bool check_jump_backward(CallFrame *frame, uint16_t offset) {
     return frame->ip >= frame->chunk->code + offset;
 }
 
-/*============================================================================
- * NaN-Boxed Binary Operation Macros
- *============================================================================*/
+/* NaN-Boxed Binary Operation Macros */
 
 #define BINARY_OP_NUM_NAN(vm, op)                                       \
     do {                                                                \
@@ -497,9 +436,7 @@ static inline bool check_jump_backward(CallFrame *frame, uint16_t offset) {
         }                                                               \
     } while (0)
 
-/*============================================================================
- * Computed Goto Dispatch (GCC extension for ~20-30% speedup)
- *============================================================================*/
+/* Computed Goto Dispatch */
 
 #if defined(__GNUC__) && !defined(AGIM_NO_COMPUTED_GOTO)
 #define USE_COMPUTED_GOTO 1
@@ -507,9 +444,7 @@ static inline bool check_jump_backward(CallFrame *frame, uint16_t offset) {
 #define USE_COMPUTED_GOTO 0
 #endif
 
-/*============================================================================
- * Main Execution Loop
- *============================================================================*/
+/* Main Execution Loop */
 
 void vm_load(VM *vm, Bytecode *code) {
     /* Ensure lazy initialization before accessing stack/frames */
@@ -544,10 +479,7 @@ VMResult vm_run(VM *vm) {
     CallFrame *frame = &vm->frames[vm->frame_count - 1];
 
 #if USE_COMPUTED_GOTO
-    /*========================================================================
-     * COMPUTED GOTO DISPATCH (GCC extension)
-     * Provides ~20-30% speedup by eliminating switch dispatch overhead
-     *========================================================================*/
+    /* Computed goto dispatch */
 
     /* Dispatch table mapping opcodes to label addresses
      * Hot opcodes (stack ops, arithmetic, jumps, calls) use dedicated labels
@@ -556,7 +488,8 @@ VMResult vm_run(VM *vm) {
     static void *dispatch_table[] = {
         /* Hot path opcodes - dedicated computed goto handlers */
         [OP_NOP] = &&op_nop, [OP_POP] = &&op_pop, [OP_DUP] = &&op_dup,
-        [OP_SWAP] = &&op_swap, [OP_CONST] = &&op_const, [OP_NIL] = &&op_nil,
+        [OP_DUP2] = &&op_slow, [OP_SWAP] = &&op_swap,
+        [OP_CONST] = &&op_const, [OP_NIL] = &&op_nil,
         [OP_TRUE] = &&op_true, [OP_FALSE] = &&op_false, [OP_ADD] = &&op_add,
         [OP_SUB] = &&op_sub, [OP_MUL] = &&op_mul, [OP_DIV] = &&op_div,
         [OP_MOD] = &&op_mod, [OP_NEG] = &&op_neg, [OP_EQ] = &&op_eq,
@@ -1033,9 +966,7 @@ VMResult vm_run(VM *vm) {
     /* Label for slow path dispatch (used by computed goto fallback) */
     slow_dispatch: (void)0;
 
-    /*========================================================================
-     * SWITCH-BASED DISPATCH (portable fallback, also handles complex opcodes)
-     *========================================================================*/
+    /* Switch-based dispatch (portable fallback) */
 
 #if USE_COMPUTED_GOTO
     /* When using computed goto, handle one slow opcode then return to fast path */
@@ -1082,6 +1013,16 @@ VMResult vm_run(VM *vm) {
             Value *top = vm_peek(vm, 0);
             if (!top) return VM_ERROR_STACK_UNDERFLOW;
             vm_push(vm, top);
+            break;
+        }
+
+        case OP_DUP2: {
+            /* Duplicate top two stack items: [a, b] -> [a, b, a, b] */
+            Value *b = vm_peek(vm, 0);
+            Value *a = vm_peek(vm, 1);
+            if (!a || !b) return VM_ERROR_STACK_UNDERFLOW;
+            vm_push(vm, a);
+            vm_push(vm, b);
             break;
         }
 
@@ -2229,6 +2170,10 @@ VMResult vm_run(VM *vm) {
                 if (end) {
                     size_t len = end - s;
                     char *val = malloc(len + 1);
+                    if (!val) {
+                        vm_push(vm, value_result_err(value_string("out of memory")));
+                        break;
+                    }
                     memcpy(val, s, len);
                     val[len] = '\0';
                     vm_push(vm, value_result_ok(value_string(val)));
@@ -2249,6 +2194,7 @@ VMResult vm_run(VM *vm) {
                         if (end) {
                             size_t len = end - s;
                             char *val = malloc(len + 1);
+                            if (!val) break;  /* OOM - stop parsing */
                             memcpy(val, s, len);
                             val[len] = '\0';
                             array_push(arr, value_string(val));
@@ -2291,6 +2237,7 @@ VMResult vm_run(VM *vm) {
                         if (end) {
                             size_t keylen = end - s;
                             char *key = malloc(keylen + 1);
+                            if (!key) break;  /* OOM - stop parsing */
                             memcpy(key, s, keylen);
                             key[keylen] = '\0';
                             s = end + 1;
@@ -2303,10 +2250,12 @@ VMResult vm_run(VM *vm) {
                                 if (end) {
                                     size_t vallen = end - s;
                                     char *v = malloc(vallen + 1);
-                                    memcpy(v, s, vallen);
-                                    v[vallen] = '\0';
-                                    val = value_string(v);
-                                    free(v);
+                                    if (v) {
+                                        memcpy(v, s, vallen);
+                                        v[vallen] = '\0';
+                                        val = value_string(v);
+                                        free(v);
+                                    }
                                     s = end + 1;
                                 }
                             } else if (*s == '-' || (*s >= '0' && *s <= '9')) {
@@ -2485,6 +2434,10 @@ VMResult vm_run(VM *vm) {
                 if (i > 0) total += strlen(delim->as.string->data);
             }
             char *result = malloc(total + 1);
+            if (!result) {
+                vm_set_error(vm, "out of memory");
+                return VM_ERROR_RUNTIME;
+            }
             result[0] = '\0';
             for (size_t i = 0; i < arr->as.array->length; i++) {
                 if (i > 0) strcat(result, delim->as.string->data);
@@ -2515,6 +2468,10 @@ VMResult vm_run(VM *vm) {
             while (len > 0 && (s[len-1] == ' ' || s[len-1] == '\t' ||
                                s[len-1] == '\n' || s[len-1] == '\r')) len--;
             char *result = malloc(len + 1);
+            if (!result) {
+                vm_set_error(vm, "out of memory");
+                return VM_ERROR_RUNTIME;
+            }
             memcpy(result, s, len);
             result[len] = '\0';
             vm_push(vm, value_string(result));
@@ -2541,6 +2498,7 @@ VMResult vm_run(VM *vm) {
             const char *repl = replacement->as.string->data;
             size_t findlen = strlen(find);
             size_t repllen = strlen(repl);
+            size_t slen = strlen(s);
 
             /* Count occurrences */
             size_t count = 0;
@@ -2550,8 +2508,19 @@ VMResult vm_run(VM *vm) {
                 p += findlen;
             }
 
-            size_t newlen = strlen(s) + count * (repllen - findlen);
+            /* Calculate new length safely avoiding unsigned underflow */
+            size_t newlen;
+            if (repllen >= findlen) {
+                newlen = slen + count * (repllen - findlen);
+            } else {
+                size_t shrink = count * (findlen - repllen);
+                newlen = (shrink > slen) ? 0 : slen - shrink;
+            }
             char *result = malloc(newlen + 1);
+            if (!result) {
+                vm_set_error(vm, "out of memory");
+                return VM_ERROR_RUNTIME;
+            }
             char *r = result;
             p = s;
             const char *found;
@@ -2696,6 +2665,10 @@ VMResult vm_run(VM *vm) {
             size_t inlen = strlen(str->as.string->data);
             size_t outlen = ((inlen + 2) / 3) * 4;
             char *out = malloc(outlen + 1);
+            if (!out) {
+                vm_set_error(vm, "out of memory");
+                return VM_ERROR_RUNTIME;
+            }
             char *p = out;
             for (size_t i = 0; i < inlen; i += 3) {
                 unsigned int n = (unsigned int)in[i] << 16;
@@ -2732,6 +2705,10 @@ VMResult vm_run(VM *vm) {
             size_t inlen = strlen(in);
             size_t outlen = inlen / 4 * 3;
             char *out = malloc(outlen + 1);
+            if (!out) {
+                vm_set_error(vm, "out of memory");
+                return VM_ERROR_RUNTIME;
+            }
             char *p = out;
             for (size_t i = 0; i < inlen; i += 4) {
                 int n = b64d[(unsigned char)in[i]] << 18;
@@ -4498,14 +4475,97 @@ VMResult vm_run(VM *vm) {
         }
 
         case OP_RECEIVE_TIMEOUT: {
-            /* TODO: Implement receive with timeout - requires timer infrastructure */
-            vm_set_error(vm, "receive_timeout not yet implemented");
-            return VM_ERROR_RUNTIME;
+            Block *block = (Block *)vm->block;
+            Scheduler *sched = (Scheduler *)vm->scheduler;
+            if (!block || !sched) {
+                vm_set_error(vm, "no runtime context");
+                return VM_ERROR_RUNTIME;
+            }
+
+            /* Check capability */
+            if (!block_has_cap(block, CAP_RECEIVE)) {
+                vm_set_error(vm, "receive capability denied");
+                return VM_ERROR_CAPABILITY;
+            }
+
+            /* Check if timeout already fired */
+            if (block->timeout_fired) {
+                /* Timeout fired - return Err("timeout") */
+                block->timeout_fired = false;
+                block->pending_timer = NULL;
+                vm_push(vm, value_result_err(value_string("timeout")));
+                break;
+            }
+
+            /* Try to receive a message first */
+            Message *msg = block_receive(block);
+            if (msg) {
+                /* Got a message - cancel any pending timer */
+                if (block->pending_timer) {
+                    /* Free the timer entry (malloc'd in this opcode) */
+                    free(block->pending_timer);
+                    block->pending_timer = NULL;
+                }
+
+                /* Create result map */
+                Value *result = value_map();
+                map_set(result, "sender", value_pid(msg->sender));
+                map_set(result, "value", msg->value);
+                msg->value = NULL;
+                message_free(msg);
+
+                /* Return Ok(message) */
+                vm_push(vm, value_result_ok(result));
+                break;
+            }
+
+            /* No message available - set up timeout if not already pending */
+            if (!block->pending_timer) {
+                /* Pop timeout value from stack */
+                Value *timeout_val = vm_pop(vm);
+                if (!timeout_val || timeout_val->type != VAL_INT) {
+                    vm_set_error(vm, "receive_timeout requires integer timeout");
+                    return VM_ERROR_TYPE;
+                }
+                int64_t timeout_ms = timeout_val->as.integer;
+
+                if (timeout_ms <= 0) {
+                    /* Zero or negative timeout - immediate timeout */
+                    vm_push(vm, value_result_err(value_string("timeout")));
+                    break;
+                }
+
+                /* Store deadline in pending_timer (using timestamp for simplicity) */
+                /* In a full implementation, we'd use a timer wheel */
+                TimerEntry *timer = malloc(sizeof(TimerEntry));
+                if (timer) {
+                    timer->block_pid = block->pid;
+                    timer->deadline_ms = timer_current_time_ms() + (uint64_t)timeout_ms;
+                    timer->callback = NULL;
+                    timer->callback_ctx = NULL;
+                    timer->next = NULL;
+                    timer->prev = NULL;
+                    timer->cancelled = false;
+                    block->pending_timer = timer;
+                }
+            } else {
+                /* Check if deadline has passed */
+                if (timer_current_time_ms() >= block->pending_timer->deadline_ms) {
+                    /* Timer expired */
+                    free(block->pending_timer);
+                    block->pending_timer = NULL;
+                    vm_push(vm, value_result_err(value_string("timeout")));
+                    break;
+                }
+            }
+
+            /* No message and timer not expired - yield and retry later */
+            frame->ip--;  /* Backup IP to retry this instruction */
+            block->state = BLOCK_WAITING;
+            return VM_YIELD;
         }
 
-        /*================================================================
-         * Process Groups
-         *================================================================*/
+        /* Process Groups */
 
         case OP_GROUP_JOIN: {
             Block *block = (Block *)vm->block;
@@ -4659,9 +4719,7 @@ VMResult vm_run(VM *vm) {
             break;
         }
 
-        /*================================================================
-         * Telemetry & Introspection
-         *================================================================*/
+        /* Telemetry & Introspection */
 
         case OP_GET_STATS: {
             Block *block = (Block *)vm->block;
@@ -4699,28 +4757,88 @@ VMResult vm_run(VM *vm) {
         }
 
         case OP_TRACE: {
-            /* Enable tracing on a block - for now just a stub */
+            /* Enable tracing on a block */
+            Block *block = (Block *)vm->block;
+            Scheduler *sched = (Scheduler *)vm->scheduler;
+            if (!block || !sched) {
+                vm_set_error(vm, "no runtime context");
+                return VM_ERROR_RUNTIME;
+            }
+
             Value *flags_val = vm_pop(vm);
             Value *pid_val = vm_pop(vm);
-            (void)flags_val;
-            (void)pid_val;
-            /* TODO: Implement per-block tracing */
+
+            /* Get target PID (default to self) */
+            Pid target_pid = block->pid;
+            if (pid_val && pid_val->type == VAL_PID) {
+                target_pid = pid_val->as.pid;
+            }
+
+            /* Get trace flags (default to all) */
+            TraceFlags flags = TRACE_ALL;
+            if (flags_val && flags_val->type == VAL_INT) {
+                flags = (TraceFlags)flags_val->as.integer;
+            }
+
+            /* Get target block */
+            Block *target = scheduler_get_block(sched, target_pid);
+            if (!target) {
+                vm_push(vm, value_bool(false));
+                break;
+            }
+
+            /* Create or update tracer on target block */
+            if (!target->tracer) {
+                target->tracer = tracer_new(flags, 1024);  /* Buffer for 1024 events */
+                if (!target->tracer) {
+                    vm_push(vm, value_bool(false));
+                    break;
+                }
+            } else {
+                tracer_set_flags(target->tracer, flags);
+            }
+
+            tracer_set_enabled(target->tracer, true);
+            tracer_set_target(target->tracer, block->pid);  /* Set tracer PID (who receives traces) */
+
             vm_push(vm, value_bool(true));
             break;
         }
 
         case OP_TRACE_OFF: {
-            /* Disable tracing on a block - for now just a stub */
+            /* Disable tracing on a block */
+            Block *block = (Block *)vm->block;
+            Scheduler *sched = (Scheduler *)vm->scheduler;
+            if (!block || !sched) {
+                vm_set_error(vm, "no runtime context");
+                return VM_ERROR_RUNTIME;
+            }
+
             Value *pid_val = vm_pop(vm);
-            (void)pid_val;
-            /* TODO: Implement per-block tracing */
+
+            /* Get target PID (default to self) */
+            Pid target_pid = block->pid;
+            if (pid_val && pid_val->type == VAL_PID) {
+                target_pid = pid_val->as.pid;
+            }
+
+            /* Get target block */
+            Block *target = scheduler_get_block(sched, target_pid);
+            if (!target) {
+                vm_push(vm, value_bool(false));
+                break;
+            }
+
+            /* Disable tracer on target block */
+            if (target->tracer) {
+                tracer_set_enabled(target->tracer, false);
+            }
+
             vm_push(vm, value_bool(true));
             break;
         }
 
-        /*================================================================
-         * Selective Receive (Pattern Matching)
-         *================================================================*/
+        /* Selective Receive */
 
         case OP_RECEIVE_MATCH: {
             Block *block = (Block *)vm->block;
@@ -4737,32 +4855,33 @@ VMResult vm_run(VM *vm) {
 
             Value *pattern = vm_pop(vm);
 
-            /* For now, selective receive with pattern just checks mailbox.
-             * A full implementation would scan the mailbox for matching messages.
-             * This is a simplified version that checks the first message. */
-            Message *msg = block_receive(block);
-            if (msg) {
-                bool matched = true;
+            /* Helper function to check if a message matches the pattern */
+            bool matched = false;
+            Message *matched_msg = NULL;
 
-                /* Simple pattern matching: if pattern is a map, check keys */
-                if (pattern && pattern->type == VAL_MAP && msg->value && msg->value->type == VAL_MAP) {
-                    /* Get keys from pattern map */
+            /* First, scan the save queue for a matching message */
+            Message *prev = NULL;
+            Message *scan = block->save_queue_head;
+            while (scan && !matched) {
+                bool msg_matches = true;
+
+                /* Pattern matching logic */
+                if (pattern && pattern->type == VAL_MAP && scan->value && scan->value->type == VAL_MAP) {
                     Value *keys_val = map_keys(pattern);
                     if (keys_val && keys_val->type == VAL_ARRAY) {
                         Array *keys = keys_val->as.array;
-                        for (size_t i = 0; i < keys->length && matched; i++) {
+                        for (size_t i = 0; i < keys->length && msg_matches; i++) {
                             Value *key = keys->items[i];
                             if (key && key->type == VAL_STRING) {
                                 const char *key_str = key->as.string->data;
                                 Value *pattern_val = map_get(pattern, key_str);
-                                Value *msg_val = map_get(msg->value, key_str);
+                                Value *msg_val = map_get(scan->value, key_str);
 
                                 if (!msg_val) {
-                                    matched = false;
+                                    msg_matches = false;
                                 } else if (pattern_val && pattern_val->type != VAL_NIL) {
-                                    /* Check value matches if pattern specifies a value */
                                     if (!value_equals(pattern_val, msg_val)) {
-                                        matched = false;
+                                        msg_matches = false;
                                     }
                                 }
                             }
@@ -4770,25 +4889,81 @@ VMResult vm_run(VM *vm) {
                     }
                 }
 
-                if (matched) {
-                    /* Create result map with sender and value */
-                    Value *result = value_map();
-                    map_set(result, "sender", value_pid(msg->sender));
-                    map_set(result, "value", msg->value);
-                    msg->value = NULL;
-                    message_free(msg);
-                    vm_push(vm, result);
+                if (msg_matches) {
+                    /* Found a match in save queue - remove it */
+                    matched = true;
+                    matched_msg = scan;
+
+                    if (prev) {
+                        prev->next = scan->next;
+                    } else {
+                        block->save_queue_head = scan->next;
+                    }
+                    if (scan == block->save_queue_tail) {
+                        block->save_queue_tail = prev;
+                    }
                 } else {
-                    /* Message doesn't match - put it back (simplified: we can't easily do this
-                     * with current mailbox, so we just discard it for now) */
-                    /* TODO: Implement proper message queue with save/restore for selective receive */
-                    message_free(msg);
-                    frame->ip--;
-                    block->state = BLOCK_WAITING;
-                    return VM_YIELD;
+                    prev = scan;
+                    scan = scan->next;
                 }
+            }
+
+            /* If not found in save queue, scan the mailbox */
+            while (!matched) {
+                Message *msg = block_receive(block);
+                if (!msg) break;  /* No more messages */
+
+                bool msg_matches = true;
+
+                /* Pattern matching logic */
+                if (pattern && pattern->type == VAL_MAP && msg->value && msg->value->type == VAL_MAP) {
+                    Value *keys_val = map_keys(pattern);
+                    if (keys_val && keys_val->type == VAL_ARRAY) {
+                        Array *keys = keys_val->as.array;
+                        for (size_t i = 0; i < keys->length && msg_matches; i++) {
+                            Value *key = keys->items[i];
+                            if (key && key->type == VAL_STRING) {
+                                const char *key_str = key->as.string->data;
+                                Value *pattern_val = map_get(pattern, key_str);
+                                Value *msg_val = map_get(msg->value, key_str);
+
+                                if (!msg_val) {
+                                    msg_matches = false;
+                                } else if (pattern_val && pattern_val->type != VAL_NIL) {
+                                    if (!value_equals(pattern_val, msg_val)) {
+                                        msg_matches = false;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (msg_matches) {
+                    matched = true;
+                    matched_msg = msg;
+                } else {
+                    /* Non-matching message - add to save queue tail */
+                    msg->next = NULL;
+                    if (block->save_queue_tail) {
+                        block->save_queue_tail->next = msg;
+                    } else {
+                        block->save_queue_head = msg;
+                    }
+                    block->save_queue_tail = msg;
+                }
+            }
+
+            if (matched && matched_msg) {
+                /* Create result map with sender and value */
+                Value *result = value_map();
+                map_set(result, "sender", value_pid(matched_msg->sender));
+                map_set(result, "value", matched_msg->value);
+                matched_msg->value = NULL;
+                message_free(matched_msg);
+                vm_push(vm, result);
             } else {
-                /* No message available */
+                /* No matching message available - yield and retry */
                 frame->ip--;
                 block->state = BLOCK_WAITING;
                 return VM_YIELD;
@@ -4824,9 +4999,7 @@ VMResult vm_resume(VM *vm) {
     return vm_run(vm);
 }
 
-/*============================================================================
- * Error Handling
- *============================================================================*/
+/* Error Handling */
 
 const char *vm_error(VM *vm) {
     return vm->error;

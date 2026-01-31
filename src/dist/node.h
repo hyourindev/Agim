@@ -17,9 +17,7 @@
 
 #include "runtime/mailbox.h"
 
-/*============================================================================
- * Node Identity
- *============================================================================*/
+/* Node Identity */
 
 #define NODE_NAME_MAX 64
 #define NODE_HOST_MAX 256
@@ -43,9 +41,7 @@ typedef struct GlobalBlockId {
     NodeId *node;               /* Node (NULL = local node) */
 } GlobalBlockId;
 
-/*============================================================================
- * Node State
- *============================================================================*/
+/* Node State */
 
 typedef enum NodeState {
     NODE_DISCONNECTED,          /* Not connected */
@@ -74,12 +70,13 @@ typedef struct NodeConnection {
     pthread_t recv_thread;      /* Receiver thread */
     bool recv_running;          /* Receiver thread running */
 
+    /* Parent node reference for callbacks */
+    struct DistributedNode *node;
+
     struct NodeConnection *next; /* Linked list */
 } NodeConnection;
 
-/*============================================================================
- * Distributed Node
- *============================================================================*/
+/* Distributed Node */
 
 /**
  * Configuration for a distributed node.
@@ -138,9 +135,7 @@ typedef struct NodeMonitor {
     struct NodeMonitor *next;
 } NodeMonitor;
 
-/*============================================================================
- * Node API - Lifecycle
- *============================================================================*/
+/* Node API - Lifecycle */
 
 /**
  * Get default node configuration.
@@ -167,9 +162,7 @@ bool node_start(DistributedNode *node);
  */
 void node_stop(DistributedNode *node);
 
-/*============================================================================
- * Node API - Connections
- *============================================================================*/
+/* Node API - Connections */
 
 /**
  * Connect to a peer node.
@@ -198,9 +191,7 @@ const NodeId *node_list_peers(DistributedNode *node, size_t *count);
  */
 bool node_is_connected(DistributedNode *node, const char *peer_name);
 
-/*============================================================================
- * Node API - Messaging
- *============================================================================*/
+/* Node API - Messaging */
 
 /**
  * Send a message to a remote block.
@@ -215,9 +206,7 @@ bool node_send(DistributedNode *node, const char *peer_name,
 bool node_send_value(DistributedNode *node, const char *peer_name,
                      Pid target_pid, Pid sender_pid, struct Value *value);
 
-/*============================================================================
- * Node API - Monitoring
- *============================================================================*/
+/* Node API - Monitoring */
 
 /**
  * Monitor a node (receive nodedown message on disconnect).
@@ -229,9 +218,7 @@ bool node_monitor(DistributedNode *node, Pid watcher_pid, const char *peer_name)
  */
 void node_demonitor(DistributedNode *node, Pid watcher_pid, const char *peer_name);
 
-/*============================================================================
- * Node API - Queries
- *============================================================================*/
+/* Node API - Queries */
 
 /**
  * Get this node's identity.
@@ -253,9 +240,7 @@ bool node_parse_ref(const char *ref, char *name, char *host, uint16_t *port);
  */
 void node_format_ref(const NodeId *node, char *buf, size_t buf_size);
 
-/*============================================================================
- * Distribution Protocol
- *============================================================================*/
+/* Distribution Protocol */
 
 /* Message types */
 #define DIST_MSG_HANDSHAKE  0x01

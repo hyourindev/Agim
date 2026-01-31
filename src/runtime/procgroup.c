@@ -14,9 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/*============================================================================
- * Process Group Registry
- *============================================================================*/
+/* Process Group Registry */
 
 ProcessGroupRegistry *procgroup_registry_new(void) {
     ProcessGroupRegistry *reg = calloc(1, sizeof(ProcessGroupRegistry));
@@ -56,9 +54,7 @@ void procgroup_registry_free(ProcessGroupRegistry *reg) {
     free(reg);
 }
 
-/*============================================================================
- * Process Group Operations
- *============================================================================*/
+/* Process Group Operations */
 
 static ProcessGroup *group_new(const char *name) {
     ProcessGroup *group = calloc(1, sizeof(ProcessGroup));
@@ -79,7 +75,6 @@ static ProcessGroup *group_new(const char *name) {
 ProcessGroup *procgroup_get_or_create(ProcessGroupRegistry *reg, const char *name) {
     if (!reg || !name) return NULL;
 
-    /* First, try to find existing (read lock) */
     pthread_rwlock_rdlock(&reg->lock);
     ProcessGroup *group = reg->groups;
     while (group) {
@@ -91,10 +86,8 @@ ProcessGroup *procgroup_get_or_create(ProcessGroupRegistry *reg, const char *nam
     }
     pthread_rwlock_unlock(&reg->lock);
 
-    /* Not found, create new (write lock) */
     pthread_rwlock_wrlock(&reg->lock);
 
-    /* Double-check after acquiring write lock */
     group = reg->groups;
     while (group) {
         if (strcmp(group->name, name) == 0) {
@@ -104,7 +97,6 @@ ProcessGroup *procgroup_get_or_create(ProcessGroupRegistry *reg, const char *nam
         group = group->next;
     }
 
-    /* Create new group */
     group = group_new(name);
     if (!group) {
         pthread_rwlock_unlock(&reg->lock);
@@ -191,9 +183,7 @@ const char **procgroup_list(ProcessGroupRegistry *reg, size_t *count) {
     return names;
 }
 
-/*============================================================================
- * Membership Operations
- *============================================================================*/
+/* Membership Operations */
 
 bool procgroup_join(ProcessGroupRegistry *reg, const char *name, Pid pid) {
     ProcessGroup *group = procgroup_get_or_create(reg, name);
@@ -201,15 +191,13 @@ bool procgroup_join(ProcessGroupRegistry *reg, const char *name, Pid pid) {
 
     pthread_mutex_lock(&group->lock);
 
-    /* Check if already member */
     for (size_t i = 0; i < group->count; i++) {
         if (group->members[i] == pid) {
             pthread_mutex_unlock(&group->lock);
-            return true;  /* Already a member */
+            return true;
         }
     }
 
-    /* Grow if needed */
     if (group->count >= group->capacity) {
         size_t new_capacity = group->capacity ? group->capacity * 2 : 8;
         Pid *new_members = realloc(group->members, sizeof(Pid) * new_capacity);
@@ -235,7 +223,6 @@ void procgroup_leave(ProcessGroupRegistry *reg, const char *name, Pid pid) {
 
     for (size_t i = 0; i < group->count; i++) {
         if (group->members[i] == pid) {
-            /* Swap with last and decrement count */
             group->members[i] = group->members[--group->count];
             pthread_mutex_unlock(&group->lock);
             return;
@@ -323,15 +310,12 @@ size_t procgroup_member_count(ProcessGroupRegistry *reg, const char *name) {
     return count;
 }
 
-/*============================================================================
- * Broadcasting
- *============================================================================*/
+/* Broadcasting */
 
 size_t procgroup_broadcast(ProcessGroupRegistry *reg, Scheduler *sched,
                            const char *name, Pid sender, Value *message) {
     if (!reg || !sched || !name || !message) return 0;
 
-    /* Get copy of members */
     size_t count;
     Pid *members = procgroup_members(reg, name, &count);
     if (!members || count == 0) {
@@ -339,7 +323,6 @@ size_t procgroup_broadcast(ProcessGroupRegistry *reg, Scheduler *sched,
         return 0;
     }
 
-    /* Send to each member - block_send handles COW copying */
     size_t sent = 0;
     for (size_t i = 0; i < count; i++) {
         Block *target = scheduler_get_block(sched, members[i]);
@@ -358,7 +341,6 @@ size_t procgroup_broadcast_others(ProcessGroupRegistry *reg, Scheduler *sched,
                                   const char *name, Pid sender, Value *message) {
     if (!reg || !sched || !name || !message) return 0;
 
-    /* Get copy of members */
     size_t count;
     Pid *members = procgroup_members(reg, name, &count);
     if (!members || count == 0) {
@@ -366,10 +348,9 @@ size_t procgroup_broadcast_others(ProcessGroupRegistry *reg, Scheduler *sched,
         return 0;
     }
 
-    /* Send to each member except sender - block_send handles COW copying */
     size_t sent = 0;
     for (size_t i = 0; i < count; i++) {
-        if (members[i] == sender) continue;  /* Skip sender */
+        if (members[i] == sender) continue;
 
         Block *target = scheduler_get_block(sched, members[i]);
         if (target && block_is_alive(target)) {

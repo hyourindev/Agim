@@ -2,11 +2,7 @@
  * Agim - NaN Boxing Value Representation
  *
  * Packs all values into 8 bytes using IEEE 754 quiet NaN space.
- * This eliminates heap allocation for primitives and reduces memory
- * usage while improving cache locality.
- *
- * For heap objects (strings, arrays, maps), we store a pointer to
- * the existing Value struct for compatibility with the current codebase.
+ * Eliminates heap allocation for primitives.
  *
  * Copyright (c) 2025 Agim Language Contributors
  * SPDX-License-Identifier: MIT
@@ -19,70 +15,40 @@
 #include <stdint.h>
 #include <string.h>
 
-/*============================================================================
- * NaN Boxing Layout
- *============================================================================
+/*
+ * NaN Boxing Layout:
  *
  * IEEE 754 double: [sign:1][exponent:11][mantissa:52]
- *
- * A quiet NaN has exponent all 1s and bit 51 set (quiet bit).
- * We use the remaining bits for type tags and payloads.
- *
- * Layout:
- *   Doubles: Any bit pattern that's NOT a quiet NaN with our tags
- *   Tagged values: Quiet NaN with type tag in upper bits
+ * A quiet NaN has exponent all 1s and bit 51 set.
  *
  * Tag encoding (bits 48-50 after quiet NaN prefix):
- *   QNAN + 0x0004 = Integer (48-bit signed, sign-extended)
+ *   QNAN + 0x0004 = Integer (48-bit signed)
  *   QNAN + 0x0005 = Object pointer (Value*)
  *   QNAN + 0x0006 = Special (nil, true, false)
  *   QNAN + 0x0007 = PID (48-bit process ID)
- *
- * This gives us:
- *   - Full 64-bit double precision for floats
- *   - 48-bit signed integers (-140 trillion to +140 trillion)
- *   - 48-bit pointers (enough for 256TB address space)
- *   - Special values (nil, true, false)
- *   - Process IDs for actor model
  */
-
-/*============================================================================
- * Type Definitions
- *============================================================================*/
 
 typedef uint64_t NanValue;
 
-/*============================================================================
- * Bit Patterns
- *============================================================================*/
+/* Bit Patterns */
 
-/* Quiet NaN prefix: exponent all 1s + quiet bit */
 #define NANBOX_QNAN     0x7FFC000000000000ULL
-
-/* Payload mask: bottom 48 bits hold the value */
 #define NANBOX_PAYLOAD  0x0000FFFFFFFFFFFFULL
 
-/* Type tags */
-#define NANBOX_TAG_INT     0x7FFC000000000000ULL  /* Integer */
-#define NANBOX_TAG_OBJ     0x7FFD000000000000ULL  /* Object pointer (Value*) */
-#define NANBOX_TAG_SPECIAL 0x7FFE000000000000ULL  /* nil/true/false */
-#define NANBOX_TAG_PID     0x7FFF000000000000ULL  /* Process ID */
+#define NANBOX_TAG_INT     0x7FFC000000000000ULL
+#define NANBOX_TAG_OBJ     0x7FFD000000000000ULL
+#define NANBOX_TAG_SPECIAL 0x7FFE000000000000ULL
+#define NANBOX_TAG_PID     0x7FFF000000000000ULL
 
-/* Mask to extract tag (top 16 bits) */
 #define NANBOX_TAG_MASK    0xFFFF000000000000ULL
 
-/* Special value constants */
 #define NANBOX_NIL   (NANBOX_TAG_SPECIAL | 1ULL)
 #define NANBOX_TRUE  (NANBOX_TAG_SPECIAL | 2ULL)
 #define NANBOX_FALSE (NANBOX_TAG_SPECIAL | 3ULL)
 
-/*============================================================================
- * Type Checking
- *============================================================================*/
+/* Type Checking */
 
-/* A value is a double if it's not one of our tagged types */
 static inline bool nanbox_is_double(NanValue v) {
-    /* Check if the top 13 bits match any of our tags (0x7FFC-0x7FFF) */
     uint64_t tag = v & 0xFFFC000000000000ULL;
     return tag != 0x7FFC000000000000ULL;
 }
@@ -123,9 +89,7 @@ static inline bool nanbox_is_number(NanValue v) {
     return nanbox_is_double(v) || nanbox_is_int(v);
 }
 
-/*============================================================================
- * Value Encoding
- *============================================================================*/
+/* Value Encoding */
 
 static inline NanValue nanbox_double(double d) {
     NanValue v;
@@ -153,9 +117,7 @@ static inline NanValue nanbox_bool(bool b) {
 #define NANBOX_VAL_TRUE  NANBOX_TRUE
 #define NANBOX_VAL_FALSE NANBOX_FALSE
 
-/*============================================================================
- * Value Decoding
- *============================================================================*/
+/* Value Decoding */
 
 static inline double nanbox_as_double(NanValue v) {
     double d;
@@ -164,7 +126,6 @@ static inline double nanbox_as_double(NanValue v) {
 }
 
 static inline int64_t nanbox_as_int(NanValue v) {
-    /* Sign-extend from 48 bits to 64 bits */
     int64_t payload = (int64_t)(v & NANBOX_PAYLOAD);
     if (payload & 0x800000000000ULL) {
         payload |= 0xFFFF000000000000ULL;
@@ -184,9 +145,7 @@ static inline bool nanbox_as_bool(NanValue v) {
     return v == NANBOX_TRUE;
 }
 
-/*============================================================================
- * Numeric Coercion
- *============================================================================*/
+/* Numeric Coercion */
 
 static inline double nanbox_to_float(NanValue v) {
     if (nanbox_is_double(v)) return nanbox_as_double(v);
@@ -200,9 +159,7 @@ static inline int64_t nanbox_to_int(NanValue v) {
     return 0;
 }
 
-/*============================================================================
- * Truthiness
- *============================================================================*/
+/* Truthiness */
 
 static inline bool nanbox_is_truthy(NanValue v) {
     if (v == NANBOX_NIL || v == NANBOX_FALSE) return false;
@@ -211,13 +168,10 @@ static inline bool nanbox_is_truthy(NanValue v) {
     return true;
 }
 
-/*============================================================================
- * Equality
- *============================================================================*/
+/* Equality */
 
 static inline bool nanbox_equal(NanValue a, NanValue b) {
     if (a == b) return true;
-    /* Handle int vs float comparison */
     if (nanbox_is_number(a) && nanbox_is_number(b)) {
         return nanbox_to_float(a) == nanbox_to_float(b);
     }

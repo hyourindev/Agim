@@ -20,25 +20,20 @@
 #include "runtime/block.h"
 #include "vm/bytecode.h"
 
-/* Forward declarations */
 typedef struct PrimitivesRuntime PrimitivesRuntime;
 typedef struct ProcessGroupRegistry ProcessGroupRegistry;
 typedef struct Tracer Tracer;
 
-/*============================================================================
- * Scheduler Configuration
- *============================================================================*/
+/* Scheduler Configuration */
 
 typedef struct SchedulerConfig {
-    size_t max_blocks;          /* Maximum concurrent blocks */
-    size_t default_reductions;  /* Default reductions per slice */
-    size_t num_workers;         /* Number of worker threads (0 = single-threaded) */
-    bool enable_stealing;       /* Enable work-stealing between workers */
+    size_t max_blocks;
+    size_t default_reductions;
+    size_t num_workers;		/* 0 = single-threaded */
+    bool enable_stealing;
 } SchedulerConfig;
 
-/*============================================================================
- * Block Registry (Hash Table for O(1) lookup)
- *============================================================================*/
+/* Block Registry */
 
 #define REGISTRY_SHARDS 64
 #define REGISTRY_INITIAL_CAPACITY 64
@@ -61,9 +56,7 @@ typedef struct BlockRegistry {
     _Atomic(size_t) total_count;
 } BlockRegistry;
 
-/*============================================================================
- * Run Queue
- *============================================================================*/
+/* Run Queue */
 
 typedef struct RunQueue {
     Block *head;
@@ -71,240 +64,107 @@ typedef struct RunQueue {
     size_t count;
 } RunQueue;
 
-/*============================================================================
- * Scheduler
- *============================================================================*/
+/* Scheduler */
 
-/* Forward declaration for worker */
 typedef struct Worker Worker;
 
 typedef struct Scheduler {
-    /* Configuration */
     SchedulerConfig config;
 
-    /* Block registry (sharded hash table for O(1) lookup) */
     BlockRegistry registry;
-
-    /* PID allocation (atomic for multi-threading) */
     _Atomic(Pid) next_pid;
 
-    /* Single-threaded run queue (used when num_workers == 0) */
     RunQueue run_queue;
 
-    /* Multi-threaded workers */
-    Worker **workers;           /* Array of worker threads */
+    Worker **workers;
     size_t worker_count;
-    _Atomic(size_t) next_worker; /* For round-robin assignment */
+    _Atomic(size_t) next_worker;
 
-    /* State */
     _Atomic(bool) running;
-    Block *current;             /* Currently executing block (single-threaded only) */
+    Block *current;
 
-    /* Synchronization */
-    pthread_mutex_t block_mutex; /* Protects block registry */
+    pthread_mutex_t block_mutex;
 
-    /* Primitives runtime */
     PrimitivesRuntime *primitives;
-
-    /* Process groups */
     ProcessGroupRegistry *groups;
-
-    /* Global tracer (for system-wide tracing) */
     Tracer *tracer;
 
-    /* Statistics (atomic for multi-threading) */
     _Atomic(size_t) total_spawned;
     _Atomic(size_t) total_terminated;
     _Atomic(size_t) total_reductions;
     _Atomic(size_t) context_switches;
+
+    uint64_t start_time_ms;
 } Scheduler;
 
-/*============================================================================
- * Scheduler Lifecycle
- *============================================================================*/
+/* Lifecycle */
 
-/**
- * Get default scheduler configuration.
- */
 SchedulerConfig scheduler_config_default(void);
-
-/**
- * Create a new scheduler.
- */
 Scheduler *scheduler_new(const SchedulerConfig *config);
-
-/**
- * Free a scheduler and all its blocks.
- */
 void scheduler_free(Scheduler *scheduler);
 
-/*============================================================================
- * Block Management
- *============================================================================*/
+/* Block Management */
 
-/**
- * Spawn a new block with bytecode.
- * Returns the new block's PID, or PID_INVALID on failure.
- */
 Pid scheduler_spawn(Scheduler *scheduler, Bytecode *code, const char *name);
-
-/**
- * Spawn with specific capabilities and limits.
- */
 Pid scheduler_spawn_ex(Scheduler *scheduler, Bytecode *code, const char *name,
                        CapabilitySet caps, const BlockLimits *limits);
-
-/**
- * Get a block by PID.
- */
+bool scheduler_register_block(Scheduler *scheduler, Block *block);
 Block *scheduler_get_block(Scheduler *scheduler, Pid pid);
-
-/**
- * Kill a block by PID.
- */
 void scheduler_kill(Scheduler *scheduler, Pid pid);
-
-/**
- * Get current executing block.
- */
+void scheduler_propagate_exit(Scheduler *scheduler, Block *exited_block);
 Block *scheduler_current(Scheduler *scheduler);
 
-/*============================================================================
- * Execution
- *============================================================================*/
+/* Execution */
 
-/**
- * Run the scheduler until all blocks complete.
- */
 void scheduler_run(Scheduler *scheduler);
-
-/**
- * Run one scheduling cycle (execute one block for one time slice).
- * Returns true if there are still runnable blocks.
- */
 bool scheduler_step(Scheduler *scheduler);
-
-/**
- * Stop the scheduler.
- */
 void scheduler_stop(Scheduler *scheduler);
 
-/*============================================================================
- * Run Queue Operations
- *============================================================================*/
+/* Run Queue */
 
-/**
- * Add a block to the run queue.
- */
 void scheduler_enqueue(Scheduler *scheduler, Block *block);
-
-/**
- * Remove and return next block from run queue.
- */
 Block *scheduler_dequeue(Scheduler *scheduler);
-
-/**
- * Check if run queue is empty.
- */
 bool scheduler_queue_empty(const Scheduler *scheduler);
 
-/*============================================================================
- * Primitives Runtime
- *============================================================================*/
+/* Primitives */
 
-/**
- * Set the primitives runtime for the scheduler.
- */
 void scheduler_set_primitives(Scheduler *scheduler, PrimitivesRuntime *primitives);
-
-/**
- * Get the primitives runtime.
- */
 PrimitivesRuntime *scheduler_get_primitives(Scheduler *scheduler);
 
-/*============================================================================
- * Statistics
- *============================================================================*/
+/* Statistics */
 
 typedef struct SchedulerStats {
-    size_t blocks_total;        /* Total blocks ever created */
-    size_t blocks_alive;        /* Currently alive blocks */
-    size_t blocks_runnable;     /* Blocks in run queue */
-    size_t blocks_waiting;      /* Blocks waiting for messages */
-    size_t blocks_dead;         /* Terminated blocks */
-    size_t total_reductions;    /* Total instructions executed */
-    size_t context_switches;    /* Number of context switches */
+    size_t blocks_total;
+    size_t blocks_alive;
+    size_t blocks_runnable;
+    size_t blocks_waiting;
+    size_t blocks_dead;
+    size_t total_reductions;
+    size_t context_switches;
 } SchedulerStats;
 
-/**
- * Get scheduler statistics.
- */
 SchedulerStats scheduler_stats(const Scheduler *scheduler);
-
-/**
- * Print scheduler statistics.
- */
 void scheduler_print_stats(const Scheduler *scheduler);
 
-/*============================================================================
- * Debug
- *============================================================================*/
+/* Debug */
 
-/**
- * Print scheduler state for debugging.
- */
 void scheduler_print(const Scheduler *scheduler);
 
-/*============================================================================
- * Multi-threaded Scheduler
- *============================================================================*/
+/* Multi-threaded */
 
-/**
- * Check if scheduler is running in multi-threaded mode.
- */
 bool scheduler_is_multithreaded(const Scheduler *scheduler);
-
-/**
- * Get number of worker threads.
- */
 size_t scheduler_worker_count(const Scheduler *scheduler);
-
-/**
- * Get a specific worker.
- */
 Worker *scheduler_get_worker(Scheduler *scheduler, size_t index);
-
-/**
- * Wake up a waiting block (thread-safe).
- */
 void scheduler_wake_block(Scheduler *scheduler, Block *block);
-
-/**
- * Get total block count.
- */
 size_t scheduler_block_count(const Scheduler *scheduler);
 
-/*============================================================================
- * Process Groups
- *============================================================================*/
+/* Process Groups */
 
-/**
- * Get the process group registry.
- */
 ProcessGroupRegistry *scheduler_get_groups(Scheduler *scheduler);
 
-/*============================================================================
- * Tracing
- *============================================================================*/
+/* Tracing */
 
-/**
- * Get the global tracer.
- */
 Tracer *scheduler_get_tracer(Scheduler *scheduler);
-
-/**
- * Set the global tracer.
- */
 void scheduler_set_tracer(Scheduler *scheduler, Tracer *tracer);
 
 #endif /* AGIM_RUNTIME_SCHEDULER_H */

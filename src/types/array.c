@@ -14,23 +14,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-/*
- * Thread-local heap reference for write barriers.
- * Set by the VM during execution.
- */
-static _Thread_local Heap *tls_current_heap = NULL;
-
 void array_set_gc_heap(Heap *heap) {
-    tls_current_heap = heap;
+    gc_set_current_heap(heap);
 }
 
 Heap *array_get_gc_heap(void) {
-    return tls_current_heap;
+    return gc_get_current_heap();
 }
 
-/*============================================================================
- * Array Creation
- *============================================================================*/
+/* Array Creation */
 
 Value *value_array_with_capacity(size_t capacity) {
     Value *v = agim_alloc(sizeof(Value));
@@ -53,9 +45,7 @@ Value *value_array(void) {
     return value_array_with_capacity(8);
 }
 
-/*============================================================================
- * Array Properties
- *============================================================================*/
+/* Array Properties */
 
 size_t array_length(const Value *v) {
     if (!v || v->type != VAL_ARRAY) return 0;
@@ -72,16 +62,12 @@ Value **array_data(const Value *v) {
     return v->as.array->items;
 }
 
-/*============================================================================
- * Internal Helpers (forward declarations)
- *============================================================================*/
+/* Internal Helpers */
 
 static bool array_ensure_capacity(Array *arr, size_t needed);
 static Value *array_ensure_writable(Value *v);
 
-/*============================================================================
- * Array Access
- *============================================================================*/
+/* Array Access */
 
 Value *array_get(const Value *v, size_t index) {
     if (!v || v->type != VAL_ARRAY) return NULL;
@@ -99,8 +85,7 @@ Value *array_set(Value *v, size_t index, Value *item) {
     Array *arr = writable->as.array;
     if (index >= arr->length) return writable;
 
-    /* Write barrier for generational GC */
-    Heap *heap = tls_current_heap;
+    Heap *heap = gc_get_current_heap();
     if (heap) {
         gc_write_barrier(heap, writable, item);
     }
@@ -109,27 +94,17 @@ Value *array_set(Value *v, size_t index, Value *item) {
     return writable;
 }
 
-/*============================================================================
- * Internal Helpers
- *============================================================================*/
-
-/**
- * Ensure array has capacity for at least 'needed' elements.
- * Returns true on success, false on allocation failure or overflow.
- */
 static bool array_ensure_capacity(Array *arr, size_t needed) {
     if (needed <= arr->capacity) return true;
 
     size_t new_cap = arr->capacity;
     while (new_cap < needed) {
-        /* Check for overflow before doubling */
         if (new_cap > SIZE_MAX / 2) {
-            return false; /* Would overflow */
+            return false;
         }
         new_cap *= 2;
     }
 
-    /* Check for overflow in allocation size */
     if (new_cap > SIZE_MAX / sizeof(Value *)) {
         return false;
     }
@@ -142,57 +117,39 @@ static bool array_ensure_capacity(Array *arr, size_t needed) {
     return true;
 }
 
-/**
- * Ensure the array is writable (COW semantics).
- * If the value has refcount > 1, create a NEW Value with cloned array.
- * Returns the Value to use (either original if refcount==1, or new copy).
- *
- * IMPORTANT: Caller MUST use the returned Value, not the original!
- */
 static Value *array_ensure_writable(Value *v) {
     if (!v || v->type != VAL_ARRAY) return v;
 
     if (!value_needs_cow(v)) {
-        /* No COW needed - return original */
         return v;
     }
 
-    /*
-     * COW triggered: create a completely NEW Value with NEW Array.
-     * Do NOT modify the original Value - other references depend on it.
-     */
     Array *old = v->as.array;
 
-    /* Create new Value wrapper */
     Value *new_v = agim_alloc(sizeof(Value));
     new_v->type = VAL_ARRAY;
     atomic_store_explicit(&new_v->refcount, 1, memory_order_relaxed);
-    new_v->flags = 0;  /* Clear COW_SHARED flag */
+    new_v->flags = 0;
     new_v->gc_state = 0;
     new_v->next = NULL;
 
-    /* Create new Array */
     Array *new_arr = agim_alloc(sizeof(Array));
     new_arr->length = old->length;
     new_arr->capacity = old->capacity;
     new_arr->items = agim_alloc(sizeof(Value *) * new_arr->capacity);
 
-    /* Shallow copy - retain each element */
     for (size_t i = 0; i < old->length; i++) {
         new_arr->items[i] = value_retain(old->items[i]);
     }
 
     new_v->as.array = new_arr;
 
-    /* Decrement refcount on original (we're detaching) */
     value_release(v);
 
     return new_v;
 }
 
-/*============================================================================
- * Array Modification
- *============================================================================*/
+/* Array Modification */
 
 Value *array_push(Value *v, Value *item) {
     if (!v || v->type != VAL_ARRAY) return v;
@@ -202,14 +159,13 @@ Value *array_push(Value *v, Value *item) {
 
     Array *arr = writable->as.array;
 
-    /* Write barrier for generational GC */
-    Heap *heap = tls_current_heap;
+    Heap *heap = gc_get_current_heap();
     if (heap) {
         gc_write_barrier(heap, writable, item);
     }
 
     if (!array_ensure_capacity(arr, arr->length + 1)) {
-        return writable; /* Allocation failed - return unmodified */
+        return writable;
     }
     arr->items[arr->length++] = item;
     return writable;
@@ -239,22 +195,19 @@ Value *array_insert(Value *v, size_t index, Value *item) {
 
     Array *arr = writable->as.array;
 
-    /* Write barrier for generational GC */
-    Heap *heap = tls_current_heap;
+    Heap *heap = gc_get_current_heap();
     if (heap) {
         gc_write_barrier(heap, writable, item);
     }
 
-    /* Clamp index to length (append if beyond) */
     if (index > arr->length) {
         index = arr->length;
     }
 
     if (!array_ensure_capacity(arr, arr->length + 1)) {
-        return writable; /* Allocation failed - return unmodified */
+        return writable;
     }
 
-    /* Shift elements right */
     if (index < arr->length) {
         memmove(&arr->items[index + 1], &arr->items[index],
                 sizeof(Value *) * (arr->length - index));
@@ -281,7 +234,6 @@ Value *array_remove(Value *v, size_t index, Value **arr_out) {
 
     Value *removed = arr->items[index];
 
-    /* Shift elements left */
     if (index < arr->length - 1) {
         memmove(&arr->items[index], &arr->items[index + 1],
                 sizeof(Value *) * (arr->length - index - 1));
@@ -301,9 +253,7 @@ Value *array_clear(Value *v) {
     return writable;
 }
 
-/*============================================================================
- * Array Operations
- *============================================================================*/
+/* Array Operations */
 
 Value *array_slice(const Value *v, size_t start, size_t end) {
     if (!v || v->type != VAL_ARRAY) {
@@ -380,11 +330,8 @@ Value *array_reverse(Value *v) {
     return writable;
 }
 
-/*============================================================================
- * Sorting
- *============================================================================*/
+/* Sorting */
 
-/* Default comparator for qsort */
 static int (*custom_compare)(const Value *, const Value *) = NULL;
 
 static int qsort_compare(const void *a, const void *b) {
@@ -395,7 +342,6 @@ static int qsort_compare(const void *a, const void *b) {
         return custom_compare(va, vb);
     }
 
-    /* Default: use value_compare */
     return value_compare(va, vb);
 }
 

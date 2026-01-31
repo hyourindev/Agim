@@ -22,9 +22,7 @@
 #include "runtime/scheduler.h"
 #include "runtime/worker.h"
 
-/*============================================================================
- * Timing & Memory
- *============================================================================*/
+/* Timing & Memory */
 
 static double get_time_ms(void) {
     struct timespec ts;
@@ -51,14 +49,7 @@ static void print_memory(const char *label) {
     }
 }
 
-/*============================================================================
- * Minimal Agent Bytecode
- *============================================================================*/
-
-/**
- * Create minimal bytecode that just halts immediately.
- * This tests raw spawn overhead without execution overhead.
- */
+/* Minimal Agent Bytecode */
 static Bytecode *make_minimal_code(void) {
     Bytecode *code = bytecode_new();
     Chunk *chunk = code->main;
@@ -66,9 +57,6 @@ static Bytecode *make_minimal_code(void) {
     return code;
 }
 
-/**
- * Create bytecode that does N iterations then halts.
- */
 static Bytecode *make_loop_code(int iterations) {
     Bytecode *code = bytecode_new();
     Chunk *chunk = code->main;
@@ -114,9 +102,7 @@ static Bytecode *make_loop_code(int iterations) {
     return code;
 }
 
-/*============================================================================
- * Spawn Benchmark
- *============================================================================*/
+/* Spawn Benchmark */
 
 typedef struct SpawnResult {
     double spawn_time_ms;
@@ -242,9 +228,7 @@ static void print_result(const char *name, SpawnResult *r) {
            r->agents_per_sec, r->kb_per_agent);
 }
 
-/*============================================================================
- * Main
- *============================================================================*/
+/* Main */
 
 int main(int argc, char **argv) {
     int target_agents = 100000;  /* Default: 100K agents */

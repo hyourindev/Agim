@@ -40,9 +40,7 @@ static int64_t run_program(const char *source) {
     return val;
 }
 
-/*============================================================================
- * Classic Algorithm Tests
- *============================================================================*/
+/* Classic Algorithm Tests */
 
 void test_factorial_iterative(void) {
     printf("  Testing iterative factorial...\n");
@@ -159,9 +157,7 @@ void test_is_prime(void) {
     ASSERT_EQ(0, run_program(source2));
 }
 
-/*============================================================================
- * Array Tests
- *============================================================================*/
+/* Array Tests */
 
 void test_array_sum(void) {
     printf("  Testing array sum with for loop...\n");
@@ -205,9 +201,7 @@ void test_array_count(void) {
     ASSERT_EQ(4, run_program(source));
 }
 
-/*============================================================================
- * Control Flow Tests
- *============================================================================*/
+/* Control Flow Tests */
 
 void test_nested_loops(void) {
     printf("  Testing nested loops...\n");
@@ -259,9 +253,7 @@ void test_early_return(void) {
     ASSERT_EQ(8, run_program(source));
 }
 
-/*============================================================================
- * Function Tests
- *============================================================================*/
+/* Function Tests */
 
 void test_higher_order(void) {
     printf("  Testing function composition...\n");
@@ -292,9 +284,7 @@ void test_mutual_recursion(void) {
     ASSERT_EQ(1, run_program(source));
 }
 
-/*============================================================================
- * Map Tests
- *============================================================================*/
+/* Map Tests */
 
 void test_map_operations(void) {
     printf("  Testing map operations...\n");
@@ -306,9 +296,7 @@ void test_map_operations(void) {
     ASSERT_EQ(125, run_program(source));
 }
 
-/*============================================================================
- * Complex Programs
- *============================================================================*/
+/* Complex Programs */
 
 void test_bubble_sort(void) {
     printf("  Testing bubble sort...\n");
@@ -364,9 +352,7 @@ void test_sum_of_primes(void) {
     ASSERT_EQ(328, run_program(source));
 }
 
-/*============================================================================
- * Main
- *============================================================================*/
+/* Main */
 
 int main(void) {
     printf("\n");

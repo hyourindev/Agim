@@ -14,9 +14,7 @@
 #include <stdio.h>
 #include <string.h>
 
-/*============================================================================
- * Compiler State
- *============================================================================*/
+/* Compiler State */
 
 typedef struct {
     char *name;
@@ -47,9 +45,7 @@ typedef struct RegCompiler {
 
 static RegCompiler *compiler = NULL;
 
-/*============================================================================
- * Error Handling
- *============================================================================*/
+/* Error Handling */
 
 static void compile_error(int line, const char *msg) {
     if (!compiler || compiler->had_error) return;
@@ -67,9 +63,7 @@ int regcompile_error_line(void) {
     return compiler ? compiler->error_line : 0;
 }
 
-/*============================================================================
- * Code Generation Helpers
- *============================================================================*/
+/* Code Generation Helpers */
 
 static RegChunk *current_chunk(void) {
     return compiler->current->chunk;
@@ -116,9 +110,7 @@ static size_t add_constant(Value *value, int line) {
     return idx;
 }
 
-/*============================================================================
- * Scope Management
- *============================================================================*/
+/* Scope Management */
 
 static void begin_scope(void) {
     compiler->current->scope_depth++;
@@ -166,19 +158,13 @@ static int resolve_local(const char *name, size_t length) {
     return -1;
 }
 
-/*============================================================================
- * Forward Declarations
- *============================================================================*/
+/* Forward Declarations */
 
 static void compile_node(AstNode *node);
 static uint8_t compile_expr(AstNode *node);
 static void compile_stmt(AstNode *node);
 
-/*============================================================================
- * Expression Compilation
- *
- * Each expression returns the register containing its result.
- *============================================================================*/
+/* Expression Compilation */
 
 static uint8_t compile_nil(AstNode *node) {
     uint8_t rd = regalloc_new_result(current_alloc());
@@ -480,9 +466,7 @@ static uint8_t compile_expr(AstNode *node) {
     }
 }
 
-/*============================================================================
- * Statement Compilation
- *============================================================================*/
+/* Statement Compilation */
 
 static void compile_var_decl(AstNode *node, bool is_const) {
     uint8_t init_reg;
@@ -656,9 +640,6 @@ static void compile_stmt(AstNode *node) {
         compile_return(node);
         break;
     case NODE_EXPR_STMT:
-        /* Expression statement - we need to find the actual expression */
-        /* Looking at AST, there's no specific field for expr_stmt */
-        /* This may be handled differently - for now, treat as expression */
         compile_expr_stmt(node);
         break;
     default:
@@ -680,9 +661,7 @@ static void compile_node(AstNode *node) {
     compile_stmt(node);
 }
 
-/*============================================================================
- * Public API
- *============================================================================*/
+/* Public API */
 
 RegChunk *regcompile(AstNode *ast) {
     if (!ast) return NULL;

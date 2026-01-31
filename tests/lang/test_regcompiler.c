@@ -15,9 +15,7 @@
 
 #include <math.h>
 
-/*============================================================================
- * Helper Functions
- *============================================================================*/
+/* Helper Functions */
 
 static NanValue run_chunk(RegChunk *chunk) {
     RegVM *vm = regvm_new();
@@ -37,9 +35,7 @@ static NanValue run_chunk(RegChunk *chunk) {
     return ret;
 }
 
-/*============================================================================
- * Expression Tests
- *============================================================================*/
+/* Expression Tests */
 
 void test_compile_int_literal(void) {
     AstNode *ast = ast_int(42, 1);
@@ -308,9 +304,7 @@ void test_compile_not(void) {
     ast_free(ast);
 }
 
-/*============================================================================
- * Register Usage Tests
- *============================================================================*/
+/* Register Usage Tests */
 
 void test_registers_allocated(void) {
     /* 1 + 2 + 3 + 4 - should use registers efficiently */
@@ -350,9 +344,7 @@ void test_code_generated(void) {
     ast_free(ast);
 }
 
-/*============================================================================
- * Main
- *============================================================================*/
+/* Main */
 
 int main(void) {
     printf("=== Register Compiler Tests ===\n");

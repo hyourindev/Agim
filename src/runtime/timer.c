@@ -13,9 +13,7 @@
 #include <string.h>
 #include <sys/time.h>
 
-/*============================================================================
- * Configuration
- *============================================================================*/
+/* Configuration */
 
 TimerConfig timer_config_default(void) {
     return (TimerConfig){
@@ -24,9 +22,7 @@ TimerConfig timer_config_default(void) {
     };
 }
 
-/*============================================================================
- * Time Helpers
- *============================================================================*/
+/* Time Helpers */
 
 uint64_t timer_current_time_ms(void) {
     struct timeval tv;
@@ -34,12 +30,9 @@ uint64_t timer_current_time_ms(void) {
     return (uint64_t)tv.tv_sec * 1000 + (uint64_t)tv.tv_usec / 1000;
 }
 
-/*============================================================================
- * Timer Entry Management
- *============================================================================*/
+/* Timer Entry Management */
 
 static TimerEntry *timer_entry_alloc(TimerWheel *wheel) {
-    /* Try free list first */
     if (wheel->free_list) {
         TimerEntry *entry = wheel->free_list;
         wheel->free_list = entry->next;
@@ -47,7 +40,6 @@ static TimerEntry *timer_entry_alloc(TimerWheel *wheel) {
         return entry;
     }
 
-    /* Allocate new entry */
     TimerEntry *entry = malloc(sizeof(TimerEntry));
     if (entry) {
         memset(entry, 0, sizeof(TimerEntry));
@@ -59,16 +51,13 @@ static TimerEntry *timer_entry_alloc(TimerWheel *wheel) {
 static void timer_entry_free(TimerWheel *wheel, TimerEntry *entry) {
     if (!entry) return;
 
-    /* Add to free list for reuse */
     entry->next = wheel->free_list;
     entry->prev = NULL;
     entry->cancelled = false;
     wheel->free_list = entry;
 }
 
-/*============================================================================
- * Bucket Operations
- *============================================================================*/
+/* Bucket Operations */
 
 static void bucket_add(TimerBucket *bucket, TimerEntry *entry) {
     entry->prev = bucket->tail;
@@ -99,9 +88,7 @@ static void bucket_remove(TimerBucket *bucket, TimerEntry *entry) {
     entry->prev = NULL;
 }
 
-/*============================================================================
- * Timer Wheel Lifecycle
- *============================================================================*/
+/* Timer Wheel Lifecycle */
 
 TimerWheel *timer_wheel_new(const TimerConfig *config) {
     TimerWheel *wheel = malloc(sizeof(TimerWheel));
@@ -116,7 +103,6 @@ TimerWheel *timer_wheel_new(const TimerConfig *config) {
     wheel->free_list = NULL;
     wheel->allocated = 0;
 
-    /* Allocate buckets */
     wheel->buckets = calloc(wheel->wheel_size, sizeof(TimerBucket));
     if (!wheel->buckets) {
         free(wheel);
@@ -133,7 +119,6 @@ void timer_wheel_free(TimerWheel *wheel) {
 
     pthread_mutex_lock(&wheel->lock);
 
-    /* Free all entries in buckets */
     for (size_t i = 0; i < wheel->wheel_size; i++) {
         TimerEntry *entry = wheel->buckets[i].head;
         while (entry) {
@@ -143,7 +128,6 @@ void timer_wheel_free(TimerWheel *wheel) {
         }
     }
 
-    /* Free free list */
     TimerEntry *entry = wheel->free_list;
     while (entry) {
         TimerEntry *next = entry->next;
@@ -157,9 +141,7 @@ void timer_wheel_free(TimerWheel *wheel) {
     free(wheel);
 }
 
-/*============================================================================
- * Timer Operations
- *============================================================================*/
+/* Timer Operations */
 
 TimerEntry *timer_add(TimerWheel *wheel, Pid block_pid, uint64_t timeout_ms,
                       TimerCallback callback, void *ctx) {
@@ -167,14 +149,12 @@ TimerEntry *timer_add(TimerWheel *wheel, Pid block_pid, uint64_t timeout_ms,
 
     pthread_mutex_lock(&wheel->lock);
 
-    /* Allocate entry */
     TimerEntry *entry = timer_entry_alloc(wheel);
     if (!entry) {
         pthread_mutex_unlock(&wheel->lock);
         return NULL;
     }
 
-    /* Calculate deadline */
     uint64_t now = timer_current_time_ms();
     entry->block_pid = block_pid;
     entry->deadline_ms = now + timeout_ms;
@@ -182,13 +162,11 @@ TimerEntry *timer_add(TimerWheel *wheel, Pid block_pid, uint64_t timeout_ms,
     entry->callback_ctx = ctx;
     entry->cancelled = false;
 
-    /* Calculate slot: ticks from now, modulo wheel size */
     uint64_t ticks = timeout_ms / wheel->tick_ms;
-    if (ticks == 0) ticks = 1;  /* At least 1 tick */
+    if (ticks == 0) ticks = 1;
 
     size_t slot = (wheel->current_slot + ticks) % wheel->wheel_size;
 
-    /* Add to bucket */
     bucket_add(&wheel->buckets[slot], entry);
 
     pthread_mutex_unlock(&wheel->lock);
@@ -207,13 +185,11 @@ bool timer_cancel(TimerWheel *wheel, TimerEntry *entry) {
 
     entry->cancelled = true;
 
-    /* Find and remove from bucket */
     uint64_t now = timer_current_time_ms();
     if (entry->deadline_ms > now) {
         uint64_t ticks_remaining = (entry->deadline_ms - now) / wheel->tick_ms;
         size_t slot = (wheel->current_slot + ticks_remaining) % wheel->wheel_size;
 
-        /* Search bucket for entry (may not be in expected slot due to timing) */
         for (size_t i = 0; i < wheel->wheel_size; i++) {
             size_t check_slot = (slot + i) % wheel->wheel_size;
             TimerEntry *e = wheel->buckets[check_slot].head;
@@ -242,32 +218,25 @@ TimerEntry *timer_tick(TimerWheel *wheel, uint64_t current_time_ms, size_t *fire
     TimerEntry *fired_head = NULL;
     TimerEntry *fired_tail = NULL;
 
-    /* Calculate how many ticks have passed */
     uint64_t elapsed = current_time_ms - wheel->current_time_ms;
     size_t ticks = (size_t)(elapsed / wheel->tick_ms);
     if (ticks == 0 && elapsed > 0) ticks = 1;
 
-    /* Process up to one full rotation */
     if (ticks > wheel->wheel_size) {
         ticks = wheel->wheel_size;
     }
 
-    /* Advance through slots */
     for (size_t t = 0; t < ticks; t++) {
         wheel->current_slot = (wheel->current_slot + 1) % wheel->wheel_size;
         TimerBucket *bucket = &wheel->buckets[wheel->current_slot];
 
-        /* Process entries in this slot */
         TimerEntry *entry = bucket->head;
         while (entry) {
             TimerEntry *next = entry->next;
 
-            /* Check if entry should fire */
             if (!entry->cancelled && entry->deadline_ms <= current_time_ms) {
-                /* Remove from bucket */
                 bucket_remove(bucket, entry);
 
-                /* Add to fired list */
                 entry->next = NULL;
                 entry->prev = fired_tail;
                 if (fired_tail) {
@@ -278,7 +247,6 @@ TimerEntry *timer_tick(TimerWheel *wheel, uint64_t current_time_ms, size_t *fire
                 fired_tail = entry;
                 (*fired_count)++;
             } else if (!entry->cancelled && entry->deadline_ms > current_time_ms) {
-                /* Entry not ready yet - reschedule to correct slot */
                 uint64_t remaining = entry->deadline_ms - current_time_ms;
                 size_t ticks_remaining = (size_t)(remaining / wheel->tick_ms);
                 if (ticks_remaining == 0) ticks_remaining = 1;
@@ -289,7 +257,6 @@ TimerEntry *timer_tick(TimerWheel *wheel, uint64_t current_time_ms, size_t *fire
                     bucket_add(&wheel->buckets[new_slot], entry);
                 }
             } else if (entry->cancelled) {
-                /* Clean up cancelled entry */
                 bucket_remove(bucket, entry);
                 timer_entry_free(wheel, entry);
             }
@@ -306,10 +273,6 @@ TimerEntry *timer_tick(TimerWheel *wheel, uint64_t current_time_ms, size_t *fire
 
 uint64_t timer_next_deadline(const TimerWheel *wheel) {
     if (!wheel) return 0;
-
-    /* Note: This is a simplified implementation that returns the minimum
-     * deadline across all buckets. A more efficient implementation would
-     * track this incrementally. */
 
     pthread_mutex_lock((pthread_mutex_t *)&wheel->lock);
 

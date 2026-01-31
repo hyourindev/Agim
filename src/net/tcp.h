@@ -15,9 +15,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-/*============================================================================
- * Types
- *============================================================================*/
+/* Types */
 
 typedef struct TCPSocket TCPSocket;
 
@@ -31,9 +29,7 @@ typedef enum {
     TCP_ERROR_MEMORY,       /* Memory allocation failed */
 } TCPError;
 
-/*============================================================================
- * Global Init
- *============================================================================*/
+/* Global Init */
 
 /**
  * Initialize TCP subsystem (required on Windows for Winsock).
@@ -47,9 +43,7 @@ bool tcp_init(void);
  */
 void tcp_cleanup(void);
 
-/*============================================================================
- * Connection
- *============================================================================*/
+/* Connection */
 
 /**
  * Connect to a remote host.
@@ -67,9 +61,7 @@ TCPSocket *tcp_connect(const char *host, uint16_t port, int timeout_ms, TCPError
  */
 void tcp_close(TCPSocket *sock);
 
-/*============================================================================
- * I/O
- *============================================================================*/
+/* I/O */
 
 /**
  * Write data to socket.
@@ -101,9 +93,7 @@ bool tcp_write_all(TCPSocket *sock, const void *data, size_t len);
  */
 ssize_t tcp_read(TCPSocket *sock, void *buf, size_t len);
 
-/*============================================================================
- * Options
- *============================================================================*/
+/* Options */
 
 /**
  * Set socket read/write timeout.
@@ -123,9 +113,7 @@ bool tcp_set_timeout(TCPSocket *sock, int timeout_ms);
  */
 bool tcp_set_nonblocking(TCPSocket *sock, bool nonblocking);
 
-/*============================================================================
- * Info
- *============================================================================*/
+/* Info */
 
 /**
  * Get the underlying file descriptor (for select/poll).

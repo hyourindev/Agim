@@ -14,9 +14,7 @@
 #include <stddef.h>
 #include <sys/types.h>
 
-/*============================================================================
- * Types
- *============================================================================*/
+/* Types */
 
 typedef enum {
     HTTP_PARSE_NEED_MORE,       /* Need more data */
@@ -33,9 +31,7 @@ typedef struct HttpHeader {
 
 typedef struct HttpParser HttpParser;
 
-/*============================================================================
- * Parser Lifecycle
- *============================================================================*/
+/* Parser Lifecycle */
 
 /**
  * Create a new HTTP parser.
@@ -52,9 +48,7 @@ void http_parser_free(HttpParser *parser);
  */
 void http_parser_reset(HttpParser *parser);
 
-/*============================================================================
- * Parsing
- *============================================================================*/
+/* Parsing */
 
 /**
  * Feed data to the parser.
@@ -67,9 +61,7 @@ void http_parser_reset(HttpParser *parser);
  */
 HttpParseResult http_parser_feed(HttpParser *parser, const char *data, size_t len, size_t *consumed);
 
-/*============================================================================
- * Accessors (valid after HTTP_PARSE_HEADERS_DONE)
- *============================================================================*/
+/* Accessors */
 
 /**
  * Get HTTP status code (e.g., 200).
@@ -107,9 +99,7 @@ bool http_parser_is_chunked(const HttpParser *parser);
  */
 ssize_t http_parser_content_length(const HttpParser *parser);
 
-/*============================================================================
- * Body Access (valid after HTTP_PARSE_CHUNK_READY)
- *============================================================================*/
+/* Body Access */
 
 /**
  * Get current body chunk data.

@@ -22,17 +22,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-/*============================================================================
- * Constants
- *============================================================================*/
+/* Constants */
 
 #define HTTP_TIMEOUT_MS 30000
 #define HTTP_BUFFER_SIZE 8192
 #define HTTP_MAX_RESPONSE_SIZE (10 * 1024 * 1024) /* 10 MB */
 
-/*============================================================================
- * Response Buffer
- *============================================================================*/
+/* Response Buffer */
 
 typedef struct {
     char *data;
@@ -73,9 +69,7 @@ static void buffer_free(Buffer *buf) {
     buf->capacity = 0;
 }
 
-/*============================================================================
- * Stream Structure
- *============================================================================*/
+/* Stream Structure */
 
 typedef struct StreamChunk {
     char *data;
@@ -104,9 +98,7 @@ struct HttpStream {
     char *error_msg;
 };
 
-/*============================================================================
- * Global State
- *============================================================================*/
+/* Global State */
 
 static bool g_http_initialized = false;
 
@@ -128,9 +120,7 @@ void http_cleanup(void) {
     g_http_initialized = false;
 }
 
-/*============================================================================
- * URL Validation & SSRF Protection
- *============================================================================*/
+/* URL Validation & SSRF Protection */
 
 static bool is_private_ipv4(uint32_t ip);
 static bool parse_ipv4(const char *host, uint32_t *ip);
@@ -269,9 +259,7 @@ char *http_url_encode(const char *str) {
     return encoded;
 }
 
-/*============================================================================
- * Response Helpers
- *============================================================================*/
+/* Response Helpers */
 
 void http_response_free(HttpResponse *resp) {
     if (!resp) return;
@@ -293,9 +281,7 @@ static HttpResponse *response_error(const char *msg) {
     return resp;
 }
 
-/*============================================================================
- * Request Building
- *============================================================================*/
+/* Request Building */
 
 static char *build_request(const char *method, ParsedURL *url, const char *body,
                            const char **headers) {
@@ -358,9 +344,7 @@ static char *build_request(const char *method, ParsedURL *url, const char *body,
     return buf.data;
 }
 
-/*============================================================================
- * Synchronous HTTP Requests
- *============================================================================*/
+/* Synchronous HTTP Requests */
 
 static HttpResponse *http_request(const char *method, const char *url_str,
                                    const char *body, const char **headers) {
@@ -563,9 +547,7 @@ HttpResponse *http_request_generic(const char *method, const char *url,
     return http_request(method, url, body, headers);
 }
 
-/*============================================================================
- * Streaming - Helper Functions
- *============================================================================*/
+/* Streaming - Helper Functions */
 
 /**
  * Enqueue a chunk to the stream's queue.
@@ -795,9 +777,7 @@ static HttpStream *http_stream_request(const char *method, const char *url_str,
     return stream;
 }
 
-/*============================================================================
- * Streaming - Public API
- *============================================================================*/
+/* Streaming - Public API */
 
 HttpStream *http_stream_get(const char *url) {
     return http_stream_request("GET", url, NULL, NULL);

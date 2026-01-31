@@ -14,16 +14,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-/*============================================================================
- * Magic Number and Version
- *============================================================================*/
-
-#define AGIM_MAGIC 0x4147494D /* "AGIM" */
+#define AGIM_MAGIC 0x4147494D
 #define AGIM_BYTECODE_VERSION 1
 
-/*============================================================================
- * Memory Helpers
- *============================================================================*/
+/* Memory Helpers */
 
 static void *alloc(size_t size) {
     void *ptr = malloc(size);
@@ -43,9 +37,7 @@ static void *realloc_safe(void *ptr, size_t size) {
     return new_ptr;
 }
 
-/*============================================================================
- * Chunk Implementation
- *============================================================================*/
+/* Chunk Implementation */
 
 Chunk *chunk_new(void) {
     Chunk *chunk = alloc(sizeof(Chunk));
@@ -114,7 +106,7 @@ size_t chunk_write_arg(Chunk *chunk, uint16_t arg, int line) {
 size_t chunk_write_jump(Chunk *chunk, Opcode op, int line) {
     chunk_write_opcode(chunk, op, line);
     size_t offset = chunk->code_size;
-    chunk_write_byte(chunk, 0xFF, line); /* Placeholder */
+    chunk_write_byte(chunk, 0xFF, line);
     chunk_write_byte(chunk, 0xFF, line);
     return offset;
 }
@@ -165,9 +157,7 @@ uint16_t chunk_read_arg(Chunk *chunk, size_t offset) {
     return (uint16_t)(chunk->code[offset] << 8) | chunk->code[offset + 1];
 }
 
-/*============================================================================
- * Bytecode Implementation
- *============================================================================*/
+/* Bytecode Implementation */
 
 Bytecode *bytecode_new(void) {
     Bytecode *code = alloc(sizeof(Bytecode));
@@ -215,6 +205,7 @@ void bytecode_free(Bytecode *code) {
         for (size_t j = 0; j < code->tools[i].param_count; j++) {
             free(code->tools[i].params[j].name);
             free(code->tools[i].params[j].type);
+            free(code->tools[i].params[j].description);
         }
         free(code->tools[i].params);
     }
@@ -236,7 +227,6 @@ void bytecode_release(Bytecode *code) {
 
     uint32_t prev = atomic_fetch_sub(&code->refcount, 1);
     if (prev == 1) {
-        /* Refcount reached 0, free the bytecode */
         bytecode_free(code);
     }
 }
@@ -254,7 +244,6 @@ size_t bytecode_add_function(Bytecode *code, Chunk *chunk) {
 }
 
 size_t bytecode_add_string(Bytecode *code, const char *str) {
-    /* Check if string already exists */
     for (size_t i = 0; i < code->strings_count; i++) {
         if (strcmp(code->strings[i], str) == 0) {
             return i;
@@ -277,14 +266,12 @@ const char *bytecode_get_string(Bytecode *code, size_t index) {
     return code->strings[index];
 }
 
-/*============================================================================
- * Tools
- *============================================================================*/
+/* Tools */
 
 size_t bytecode_add_tool(Bytecode *code, const char *name, size_t func_index,
                          const char **param_names, const char **param_types,
-                         size_t param_count, const char *return_type,
-                         const char *description) {
+                         const char **param_descriptions, size_t param_count,
+                         const char *return_type, const char *description) {
     if (!code || !name) return (size_t)-1;
 
     if (code->tools_count >= code->tools_capacity) {
@@ -305,6 +292,8 @@ size_t bytecode_add_tool(Bytecode *code, const char *name, size_t func_index,
         for (size_t i = 0; i < param_count; i++) {
             tool->params[i].name = param_names[i] ? strdup(param_names[i]) : NULL;
             tool->params[i].type = param_types && param_types[i] ? strdup(param_types[i]) : NULL;
+            tool->params[i].description = param_descriptions && param_descriptions[i]
+                ? strdup(param_descriptions[i]) : NULL;
         }
     } else {
         tool->params = NULL;
@@ -333,18 +322,8 @@ const ToolInfo *bytecode_find_tool(Bytecode *code, const char *name) {
     return NULL;
 }
 
-/*============================================================================
- * Serialization
- *============================================================================*/
+/* Serialization */
 
-/* Simple binary format:
- * - 4 bytes: magic number
- * - 4 bytes: version
- * - Chunks...
- * - String table...
- */
-
-/* Helper to write 4-byte integer */
 static void write_u32(uint8_t **buf, uint32_t val) {
     (*buf)[0] = (val >> 24) & 0xFF;
     (*buf)[1] = (val >> 16) & 0xFF;
@@ -353,7 +332,6 @@ static void write_u32(uint8_t **buf, uint32_t val) {
     *buf += 4;
 }
 
-/* Serialize a value constant */
 static size_t serialize_value(uint8_t *buf, Value *val) {
     size_t offset = 0;
     buf[offset++] = (uint8_t)val->type;
@@ -390,30 +368,24 @@ static size_t serialize_value(uint8_t *buf, Value *val) {
         break;
     }
     default:
-        /* Other types not serialized as constants */
         break;
     }
     return offset;
 }
 
-/* Serialize a chunk */
 static size_t serialize_chunk(uint8_t *buf, Chunk *chunk) {
     uint8_t *p = buf;
 
-    /* Code size and code */
     write_u32(&p, (uint32_t)chunk->code_size);
     memcpy(p, chunk->code, chunk->code_size);
     p += chunk->code_size;
 
-    /* Line numbers */
     for (size_t i = 0; i < chunk->code_size; i++) {
         write_u32(&p, (uint32_t)chunk->lines[i]);
     }
 
-    /* Constants count */
     write_u32(&p, (uint32_t)chunk->constants_size);
 
-    /* Constants */
     for (size_t i = 0; i < chunk->constants_size; i++) {
         p += serialize_value(p, chunk->constants[i]);
     }
@@ -422,24 +394,20 @@ static size_t serialize_chunk(uint8_t *buf, Chunk *chunk) {
 }
 
 uint8_t *bytecode_serialize(const Bytecode *code, size_t *size) {
-    /* Calculate size estimate */
-    size_t total = 8; /* magic + version */
+    size_t total = 8;
 
-    /* Main chunk */
-    total += 4 + code->main->code_size;                      /* code */
-    total += code->main->code_size * 4;                      /* lines */
-    total += 4 + code->main->constants_size * 64;            /* constants */
+    total += 4 + code->main->code_size;
+    total += code->main->code_size * 4;
+    total += 4 + code->main->constants_size * 64;
 
-    /* Functions */
-    total += 4; /* function count */
+    total += 4;
     for (size_t i = 0; i < code->functions_count; i++) {
         total += 4 + code->functions[i]->code_size;
         total += code->functions[i]->code_size * 4;
         total += 4 + code->functions[i]->constants_size * 64;
     }
 
-    /* Strings */
-    total += 4; /* string count */
+    total += 4;
     for (size_t i = 0; i < code->strings_count; i++) {
         total += 4 + strlen(code->strings[i]) + 1;
     }
@@ -447,27 +415,19 @@ uint8_t *bytecode_serialize(const Bytecode *code, size_t *size) {
     uint8_t *buffer = alloc(total);
     uint8_t *p = buffer;
 
-    /* Magic number */
     write_u32(&p, AGIM_MAGIC);
-
-    /* Version */
     write_u32(&p, code->version);
 
-    /* Main chunk */
     p += serialize_chunk(p, code->main);
 
-    /* Function count */
     write_u32(&p, (uint32_t)code->functions_count);
 
-    /* Functions */
     for (size_t i = 0; i < code->functions_count; i++) {
         p += serialize_chunk(p, code->functions[i]);
     }
 
-    /* String count */
     write_u32(&p, (uint32_t)code->strings_count);
 
-    /* Strings */
     for (size_t i = 0; i < code->strings_count; i++) {
         size_t len = strlen(code->strings[i]);
         write_u32(&p, (uint32_t)len);
@@ -479,7 +439,6 @@ uint8_t *bytecode_serialize(const Bytecode *code, size_t *size) {
     return buffer;
 }
 
-/* Helper to read 4-byte integer */
 static uint32_t read_u32(const uint8_t **buf) {
     uint32_t val = ((*buf)[0] << 24) | ((*buf)[1] << 16) |
                    ((*buf)[2] << 8) | (*buf)[3];
@@ -487,7 +446,6 @@ static uint32_t read_u32(const uint8_t **buf) {
     return val;
 }
 
-/* Helper to read 8-byte integer */
 static uint64_t read_u64(const uint8_t **buf) {
     uint64_t val = 0;
     for (int i = 0; i < 8; i++) {
@@ -497,7 +455,6 @@ static uint64_t read_u64(const uint8_t **buf) {
     return val;
 }
 
-/* Deserialize a value constant */
 static Value *deserialize_value(const uint8_t **buf) {
     uint8_t type = (*buf)[0];
     (*buf)++;
@@ -519,6 +476,7 @@ static Value *deserialize_value(const uint8_t **buf) {
     case VAL_STRING: {
         uint32_t len = read_u32(buf);
         char *str = malloc(len + 1);
+        if (!str) return value_nil();
         memcpy(str, *buf, len);
         str[len] = '\0';
         *buf += len;
@@ -531,11 +489,9 @@ static Value *deserialize_value(const uint8_t **buf) {
     }
 }
 
-/* Deserialize a chunk */
 static bool deserialize_chunk(const uint8_t **buf, const uint8_t *end, Chunk *chunk) {
     if (*buf + 4 > end) return false;
 
-    /* Code size and code */
     uint32_t code_size = read_u32(buf);
     if (*buf + code_size > end) return false;
 
@@ -547,7 +503,6 @@ static bool deserialize_chunk(const uint8_t **buf, const uint8_t *end, Chunk *ch
     chunk->code_size = code_size;
     *buf += code_size;
 
-    /* Line numbers */
     if (*buf + code_size * 4 > end) return false;
     while (chunk->lines_capacity < code_size) {
         chunk->lines_capacity *= 2;
@@ -557,11 +512,9 @@ static bool deserialize_chunk(const uint8_t **buf, const uint8_t *end, Chunk *ch
         chunk->lines[i] = (int)read_u32(buf);
     }
 
-    /* Constants count */
     if (*buf + 4 > end) return false;
     uint32_t const_count = read_u32(buf);
 
-    /* Constants */
     for (uint32_t i = 0; i < const_count; i++) {
         Value *val = deserialize_value(buf);
         chunk_add_constant(chunk, val);
@@ -576,14 +529,12 @@ Bytecode *bytecode_deserialize(const uint8_t *data, size_t size) {
     const uint8_t *p = data;
     const uint8_t *end = data + size;
 
-    /* Check magic */
     uint32_t magic = read_u32(&p);
     if (magic != AGIM_MAGIC) {
         fprintf(stderr, "agim: invalid bytecode file\n");
         return NULL;
     }
 
-    /* Check version */
     uint32_t version = read_u32(&p);
     if (version > AGIM_BYTECODE_VERSION) {
         fprintf(stderr, "agim: bytecode version %u not supported\n", version);
@@ -593,14 +544,11 @@ Bytecode *bytecode_deserialize(const uint8_t *data, size_t size) {
     Bytecode *code = bytecode_new();
     code->version = version;
 
-    /* Read main chunk */
     if (!deserialize_chunk(&p, end, code->main)) goto error;
 
-    /* Read function count */
     if (p + 4 > end) goto error;
     uint32_t func_count = read_u32(&p);
 
-    /* Read functions */
     for (uint32_t i = 0; i < func_count; i++) {
         Chunk *chunk = chunk_new();
         if (!deserialize_chunk(&p, end, chunk)) {
@@ -610,16 +558,15 @@ Bytecode *bytecode_deserialize(const uint8_t *data, size_t size) {
         bytecode_add_function(code, chunk);
     }
 
-    /* Read string count */
     if (p + 4 > end) goto error;
     uint32_t str_count = read_u32(&p);
 
-    /* Read strings */
     for (uint32_t i = 0; i < str_count; i++) {
         if (p + 4 > end) goto error;
         uint32_t len = read_u32(&p);
         if (p + len > end) goto error;
         char *str = malloc(len + 1);
+        if (!str) goto error;
         memcpy(str, p, len);
         str[len] = '\0';
         p += len;
@@ -634,14 +581,13 @@ error:
     return NULL;
 }
 
-/*============================================================================
- * Disassembly
- *============================================================================*/
+/* Disassembly */
 
 static const char *opcode_names[] = {
     [OP_NOP] = "NOP",
     [OP_POP] = "POP",
     [OP_DUP] = "DUP",
+    [OP_DUP2] = "DUP2",
     [OP_SWAP] = "SWAP",
     [OP_CONST] = "CONST",
     [OP_NIL] = "NIL",
@@ -759,7 +705,6 @@ static const char *opcode_names[] = {
     [OP_HASH_MD5] = "HASH_MD5",
     [OP_HASH_SHA256] = "HASH_SHA256",
     [OP_PRINT] = "PRINT",
-    /* Result operations */
     [OP_RESULT_OK] = "RESULT_OK",
     [OP_RESULT_ERR] = "RESULT_ERR",
     [OP_RESULT_IS_OK] = "RESULT_IS_OK",
@@ -767,22 +712,18 @@ static const char *opcode_names[] = {
     [OP_RESULT_UNWRAP] = "RESULT_UNWRAP",
     [OP_RESULT_UNWRAP_OR] = "RESULT_UNWRAP_OR",
     [OP_RESULT_MATCH] = "RESULT_MATCH",
-    /* Tool introspection */
     [OP_LIST_TOOLS] = "LIST_TOOLS",
     [OP_TOOL_SCHEMA] = "TOOL_SCHEMA",
-    /* Option operations */
     [OP_SOME] = "SOME",
     [OP_NONE] = "NONE",
     [OP_IS_SOME] = "IS_SOME",
     [OP_IS_NONE] = "IS_NONE",
     [OP_UNWRAP_OPTION] = "UNWRAP_OPTION",
     [OP_UNWRAP_OPTION_OR] = "UNWRAP_OPTION_OR",
-    /* Struct operations */
     [OP_STRUCT_NEW] = "STRUCT_NEW",
     [OP_STRUCT_GET] = "STRUCT_GET",
     [OP_STRUCT_SET] = "STRUCT_SET",
     [OP_STRUCT_GET_INDEX] = "STRUCT_GET_INDEX",
-    /* Enum operations */
     [OP_ENUM_NEW] = "ENUM_NEW",
     [OP_ENUM_IS] = "ENUM_IS",
     [OP_ENUM_PAYLOAD] = "ENUM_PAYLOAD",
@@ -816,7 +757,6 @@ size_t chunk_disassemble_instruction(Chunk *chunk, size_t offset) {
         printf("UNKNOWN(%d)", instruction);
     }
 
-    /* Handle instructions with operands */
     switch (instruction) {
     case OP_CONST:
     case OP_GET_LOCAL:
@@ -875,7 +815,6 @@ size_t chunk_disassemble_instruction(Chunk *chunk, size_t offset) {
         uint16_t type_idx = chunk_read_arg(chunk, offset + 1);
         uint8_t field_count = chunk->code[offset + 3];
         printf(" type=%d fields=%d\n", type_idx, field_count);
-        /* Variable-length: type + field_count + (field_name_idx * field_count) */
         return offset + 4 + (field_count * 2);
     }
 

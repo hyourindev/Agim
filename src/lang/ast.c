@@ -11,9 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 
-/*============================================================================
- * Node Type Names
- *============================================================================*/
+/* Node Type Names */
 
 const char *ast_node_type_name(NodeType type) {
     static const char *names[] = {
@@ -73,9 +71,7 @@ const char *ast_node_type_name(NodeType type) {
     return names[type];
 }
 
-/*============================================================================
- * Node Creation
- *============================================================================*/
+/* Node Creation */
 
 AstNode *ast_new(NodeType type, int line) {
     AstNode *node = agim_alloc(sizeof(AstNode));
@@ -85,9 +81,7 @@ AstNode *ast_new(NodeType type, int line) {
     return node;
 }
 
-/*============================================================================
- * Node Destruction
- *============================================================================*/
+/* Node Destruction */
 
 void ast_free(AstNode *node) {
     if (!node) return;
@@ -109,6 +103,7 @@ void ast_free(AstNode *node) {
         agim_free(node->as.fn_decl.params);
         ast_free(node->as.fn_decl.return_type);
         agim_free(node->as.fn_decl.description);
+        ast_free(node->as.fn_decl.params_map);
         ast_free(node->as.fn_decl.body);
         break;
 
@@ -154,7 +149,7 @@ void ast_free(AstNode *node) {
         break;
 
     case NODE_EXPR_STMT:
-        ast_free(node->as.return_stmt.value); /* Same layout */
+        ast_free(node->as.return_stmt.value);
         break;
 
     case NODE_BINARY:
@@ -225,7 +220,6 @@ void ast_free(AstNode *node) {
     case NODE_NIL:
     case NODE_BREAK:
     case NODE_CONTINUE:
-        /* No additional allocations */
         break;
 
     case NODE_IMPORT:
@@ -332,7 +326,6 @@ void ast_free(AstNode *node) {
         break;
 
     case NODE_NONE:
-        /* No allocations */
         break;
 
     case NODE_STRUCT_INIT:
@@ -360,9 +353,7 @@ void ast_free(AstNode *node) {
     agim_free(node);
 }
 
-/*============================================================================
- * Node Helpers
- *============================================================================*/
+/* Node Helpers */
 
 AstNode *ast_program(int line) {
     AstNode *node = ast_new(NODE_PROGRAM, line);
@@ -433,7 +424,6 @@ AstNode *ast_float(double value, int line) {
 
 AstNode *ast_string(const char *value, size_t length, int line) {
     AstNode *node = ast_new(NODE_STRING, line);
-    /* Skip quotes and handle escapes */
     char *str = agim_alloc(length + 1);
     size_t j = 0;
     for (size_t i = 0; i < length; i++) {
@@ -474,9 +464,7 @@ AstNode *ast_ident(const char *name, size_t length, int line) {
     return node;
 }
 
-/*============================================================================
- * Type Node Helpers
- *============================================================================*/
+/* Type Node Helpers */
 
 AstNode *ast_type_name(const char *name, size_t length, int line) {
     AstNode *node = ast_new(NODE_TYPE_NAME, line);
@@ -517,9 +505,7 @@ AstNode *ast_type_func(AstNode **param_types, size_t param_count, AstNode *retur
     return node;
 }
 
-/*============================================================================
- * Struct/Enum Helpers
- *============================================================================*/
+/* Struct/Enum Helpers */
 
 AstNode *ast_struct_decl(const char *name, int line) {
     AstNode *node = ast_new(NODE_STRUCT_DECL, line);
@@ -652,9 +638,7 @@ AstNode *ast_range(AstNode *start, AstNode *end, bool inclusive, int line) {
     return node;
 }
 
-/*============================================================================
- * Debug Printing
- *============================================================================*/
+/* Debug Printing */
 
 static void print_indent(int indent) {
     for (int i = 0; i < indent; i++) {

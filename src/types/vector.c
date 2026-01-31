@@ -13,9 +13,7 @@
 #include <stdatomic.h>
 #include <string.h>
 
-/*============================================================================
- * Vector Creation
- *============================================================================*/
+/* Vector Creation */
 
 Value *value_vector(size_t dim) {
     if (dim == 0) return value_nil();
@@ -23,7 +21,7 @@ Value *value_vector(size_t dim) {
     Value *v = agim_alloc(sizeof(Value));
     v->type = VAL_VECTOR;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
-    v->flags = VALUE_IMMUTABLE;  /* Vectors are immutable */
+    v->flags = VALUE_IMMUTABLE;
     v->gc_state = 0;
     v->next = NULL;
 
@@ -41,7 +39,7 @@ Value *value_vector_from(const double *data, size_t dim) {
     Value *v = agim_alloc(sizeof(Value));
     v->type = VAL_VECTOR;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
-    v->flags = VALUE_IMMUTABLE;  /* Vectors are immutable */
+    v->flags = VALUE_IMMUTABLE;
     v->gc_state = 0;
     v->next = NULL;
 
@@ -53,9 +51,7 @@ Value *value_vector_from(const double *data, size_t dim) {
     return v;
 }
 
-/*============================================================================
- * Vector Properties
- *============================================================================*/
+/* Vector Properties */
 
 size_t vector_dim(const Value *v) {
     if (!v || v->type != VAL_VECTOR) return 0;
@@ -79,9 +75,7 @@ bool value_is_vector(const Value *v) {
     return v && v->type == VAL_VECTOR;
 }
 
-/*============================================================================
- * Vector Element Access
- *============================================================================*/
+/* Vector Element Access */
 
 double vector_get(const Value *v, size_t index) {
     if (!v || v->type != VAL_VECTOR) return 0.0;
@@ -97,9 +91,7 @@ void vector_set(Value *v, size_t index, double val) {
     vec->data[index] = val;
 }
 
-/*============================================================================
- * Vector Math Operations
- *============================================================================*/
+/* Vector Math Operations */
 
 double vector_dot(const Value *a, const Value *b) {
     if (!a || a->type != VAL_VECTOR || !b || b->type != VAL_VECTOR) {
@@ -202,9 +194,7 @@ Value *vector_scale(const Value *v, double scalar) {
     return result;
 }
 
-/*============================================================================
- * Vector Similarity/Distance
- *============================================================================*/
+/* Vector Similarity/Distance */
 
 double vector_cosine_similarity(const Value *a, const Value *b) {
     if (!a || a->type != VAL_VECTOR || !b || b->type != VAL_VECTOR) {

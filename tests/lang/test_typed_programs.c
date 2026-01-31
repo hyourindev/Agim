@@ -15,9 +15,7 @@
 #include "vm/vm.h"
 #include "vm/value.h"
 
-/*============================================================================
- * Test Helpers
- *============================================================================*/
+/* Test Helpers */
 
 static int64_t run_and_get_int(const char *source) {
     const char *error = NULL;
@@ -148,9 +146,7 @@ static bool runs_successfully(const char *source) {
     return success;
 }
 
-/*============================================================================
- * Option Integration Tests
- *============================================================================*/
+/* Option Integration Tests */
 
 void test_option_some_creation(void) {
     printf("  Testing some() creation...\n");
@@ -227,9 +223,7 @@ void test_option_match_none(void) {
     ASSERT_EQ(99, run_and_get_int(source));
 }
 
-/*============================================================================
- * Result Integration Tests
- *============================================================================*/
+/* Result Integration Tests */
 
 void test_result_ok_creation(void) {
     printf("  Testing ok() creation...\n");
@@ -317,9 +311,7 @@ void test_result_chaining(void) {
     ASSERT_EQ(5, run_and_get_int(source));
 }
 
-/*============================================================================
- * Typed Function Tests
- *============================================================================*/
+/* Typed Function Tests */
 
 void test_typed_fn_int_params(void) {
     printf("  Testing typed function with int params...\n");
@@ -432,9 +424,7 @@ void test_typed_map(void) {
     ASSERT_EQ(100, run_and_get_int(source));
 }
 
-/*============================================================================
- * Struct Integration Tests
- *============================================================================*/
+/* Struct Integration Tests */
 
 void test_struct_definition(void) {
     printf("  Testing struct definition...\n");
@@ -524,9 +514,7 @@ void test_struct_with_option_field(void) {
     ASSERT(run_and_get_bool(source));
 }
 
-/*============================================================================
- * Enum Integration Tests
- *============================================================================*/
+/* Enum Integration Tests */
 
 void test_enum_definition(void) {
     printf("  Testing enum definition...\n");
@@ -632,9 +620,7 @@ void test_enum_in_function(void) {
     ASSERT_EQ(2, run_and_get_int(source));
 }
 
-/*============================================================================
- * Complex Integration Tests
- *============================================================================*/
+/* Complex Integration Tests */
 
 void test_struct_and_result_combined(void) {
     printf("  Testing struct and Result combined...\n");
@@ -735,9 +721,7 @@ void test_typed_higher_order_function(void) {
     ASSERT_EQ(12, run_and_get_int(source));
 }
 
-/*============================================================================
- * Main
- *============================================================================*/
+/* Main */
 
 int main(void) {
     printf("Running typed programs integration tests...\n\n");

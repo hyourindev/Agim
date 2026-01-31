@@ -1,8 +1,6 @@
 /*
  * Agim - Built-in Primitives
  *
- * Thin coordination layer using builtin/ modules.
- *
  * Copyright (c) 2025 Agim Language Contributors
  * SPDX-License-Identifier: MIT
  */
@@ -10,9 +8,7 @@
 #include "vm/primitives.h"
 #include "util/alloc.h"
 
-/*============================================================================
- * Primitives Runtime
- *============================================================================*/
+/* Primitives Runtime */
 
 PrimitivesRuntime *primitives_new(void) {
     PrimitivesRuntime *rt = agim_alloc(sizeof(PrimitivesRuntime));
@@ -33,9 +29,7 @@ void primitives_free(PrimitivesRuntime *rt) {
     agim_free(rt);
 }
 
-/*============================================================================
- * Inference API (delegates to builtin/inference)
- *============================================================================*/
+/* Inference API */
 
 void primitives_set_infer(PrimitivesRuntime *rt, InferCallback callback,
                           void *context) {
@@ -48,9 +42,7 @@ Value *primitives_infer(PrimitivesRuntime *rt, Block *block, Value *prompt) {
     return inference_call(&rt->inference, block, prompt);
 }
 
-/*============================================================================
- * Tool API (delegates to builtin/tools)
- *============================================================================*/
+/* Tool API */
 
 bool primitives_register_tool(PrimitivesRuntime *rt, const char *name,
                               ToolFunction func, size_t min_args,
@@ -77,9 +69,7 @@ const Tool *primitives_get_tools(PrimitivesRuntime *rt) {
     return tools_list(&rt->tools);
 }
 
-/*============================================================================
- * Memory API (delegates to builtin/memory)
- *============================================================================*/
+/* Memory API */
 
 Value *primitives_memory_get(PrimitivesRuntime *rt, const char *key) {
     if (!rt) return NULL;
@@ -106,9 +96,7 @@ void primitives_memory_clear(PrimitivesRuntime *rt) {
     memory_clear(rt->memory);
 }
 
-/*============================================================================
- * Built-in Tools (delegates to builtin/tools)
- *============================================================================*/
+/* Built-in Tools */
 
 void primitives_register_builtins(PrimitivesRuntime *rt) {
     if (!rt) return;

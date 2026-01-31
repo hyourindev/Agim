@@ -13,9 +13,7 @@
 #include <stdio.h>
 #include <string.h>
 
-/*============================================================================
- * Local Variable
- *============================================================================*/
+/* Local Variable */
 
 typedef struct {
     char *name;
@@ -23,9 +21,7 @@ typedef struct {
     bool is_const;
 } Local;
 
-/*============================================================================
- * Loop Context (for break/continue)
- *============================================================================*/
+/* Loop Context */
 
 typedef struct {
     size_t start;
@@ -35,9 +31,7 @@ typedef struct {
     int scope_depth;
 } LoopContext;
 
-/*============================================================================
- * Function Context
- *============================================================================*/
+/* Function Context */
 
 typedef struct FunctionContext {
     Chunk *chunk;
@@ -49,9 +43,7 @@ typedef struct FunctionContext {
     struct FunctionContext *enclosing;
 } FunctionContext;
 
-/*============================================================================
- * Compiler Structure
- *============================================================================*/
+/* Compiler Structure */
 
 struct Compiler {
     Bytecode *code;
@@ -63,9 +55,7 @@ struct Compiler {
     char *source_path;          /* Path of current source file */
 };
 
-/*============================================================================
- * Error Handling
- *============================================================================*/
+/* Error Handling */
 
 static void compile_error(Compiler *c, int line, const char *message) {
     if (c->had_error) return;
@@ -81,9 +71,7 @@ static void compile_error(Compiler *c, int line, const char *message) {
     c->error_line = line;
 }
 
-/*============================================================================
- * Chunk Helpers
- *============================================================================*/
+/* Chunk Helpers */
 
 static Chunk *current_chunk(Compiler *c) {
     return c->current->chunk;
@@ -139,9 +127,7 @@ static size_t emit_constant(Compiler *c, Value *value, int line) {
     return index;
 }
 
-/*============================================================================
- * Scope Management
- *============================================================================*/
+/* Scope Management */
 
 static void begin_scope(Compiler *c) {
     c->current->scope_depth++;
@@ -195,9 +181,7 @@ static int resolve_local(Compiler *c, const char *name, size_t length) {
     return -1;
 }
 
-/*============================================================================
- * Loop Management
- *============================================================================*/
+/* Loop Management */
 
 static void begin_loop(Compiler *c, size_t start) {
     if (c->current->loop_depth >= 32) {
@@ -269,9 +253,7 @@ static void emit_continue(Compiler *c, int line) {
     emit_loop(c, loop->start, line);
 }
 
-/*============================================================================
- * Forward Declarations
- *============================================================================*/
+/* Forward Declarations */
 
 static void compile_expr(Compiler *c, AstNode *node);
 static void compile_stmt(Compiler *c, AstNode *node);
@@ -279,9 +261,7 @@ static void compile_decl(Compiler *c, AstNode *node);
 static void compile_return(Compiler *c, AstNode *node);
 static void compile_block_expr(Compiler *c, AstNode *node);
 
-/*============================================================================
- * Expression Compilation
- *============================================================================*/
+/* Expression Compilation */
 
 static void compile_literal(Compiler *c, AstNode *node) {
     switch (node->type) {
@@ -1704,12 +1684,25 @@ static void compile_assign(Compiler *c, AstNode *node) {
         compile_expr(c, target->as.index_expr.index);
 
         if (op != TOK_ASSIGN) {
-            /* Compound: need current value, modify, then set */
-            emit_op(c, OP_DUP, node->line);  /* Dup index */
-            emit_op(c, OP_DUP, node->line);  /* Stack: [arr, idx, idx, idx] - wrong! */
-            /* This is tricky - need to get arr[idx] without consuming arr/idx */
-            /* For simplicity, don't support compound index assignment yet */
-            compile_error(c, node->line, "compound index assignment not yet supported");
+            /* Compound index assignment: arr[i] op= value
+             * Stack: [arr, idx]
+             * DUP2:  [arr, idx, arr, idx]
+             * GET:   [arr, idx, current]
+             * value: [arr, idx, current, rhs]
+             * op:    [arr, idx, new_val]
+             * SET:   [arr] (result)
+             */
+            emit_op(c, OP_DUP2, node->line);
+            emit_op(c, OP_ARRAY_GET, node->line);
+            compile_expr(c, node->as.assign.value);
+            switch (op) {
+            case TOK_PLUS_ASSIGN: emit_op(c, OP_ADD, node->line); break;
+            case TOK_MINUS_ASSIGN: emit_op(c, OP_SUB, node->line); break;
+            case TOK_STAR_ASSIGN: emit_op(c, OP_MUL, node->line); break;
+            case TOK_SLASH_ASSIGN: emit_op(c, OP_DIV, node->line); break;
+            default: break;
+            }
+            emit_op(c, OP_ARRAY_SET, node->line);
             return;
         }
 
@@ -1721,7 +1714,25 @@ static void compile_assign(Compiler *c, AstNode *node) {
         emit_constant(c, value_string(target->as.member.field), node->line);
 
         if (op != TOK_ASSIGN) {
-            compile_error(c, node->line, "compound member assignment not yet supported");
+            /* Compound member assignment: obj.field op= value
+             * Stack: [obj, "field"]
+             * DUP2:  [obj, "field", obj, "field"]
+             * GET:   [obj, "field", current]
+             * value: [obj, "field", current, rhs]
+             * op:    [obj, "field", new_val]
+             * SET:   [obj] (result)
+             */
+            emit_op(c, OP_DUP2, node->line);
+            emit_op(c, OP_MAP_GET, node->line);
+            compile_expr(c, node->as.assign.value);
+            switch (op) {
+            case TOK_PLUS_ASSIGN: emit_op(c, OP_ADD, node->line); break;
+            case TOK_MINUS_ASSIGN: emit_op(c, OP_SUB, node->line); break;
+            case TOK_STAR_ASSIGN: emit_op(c, OP_MUL, node->line); break;
+            case TOK_SLASH_ASSIGN: emit_op(c, OP_DIV, node->line); break;
+            default: break;
+            }
+            emit_op(c, OP_MAP_SET, node->line);
             return;
         }
 
@@ -2196,9 +2207,7 @@ static void compile_expr(Compiler *c, AstNode *node) {
     }
 }
 
-/*============================================================================
- * Statement Compilation
- *============================================================================*/
+/* Statement Compilation */
 
 static void compile_block(Compiler *c, AstNode *node) {
     begin_scope(c);
@@ -2507,9 +2516,7 @@ static void compile_stmt(Compiler *c, AstNode *node) {
     }
 }
 
-/*============================================================================
- * Declaration Compilation
- *============================================================================*/
+/* Declaration Compilation */
 
 static void compile_fn(Compiler *c, AstNode *node, bool is_tool) {
     /* Create new function chunk */
@@ -2571,19 +2578,39 @@ static void compile_fn(Compiler *c, AstNode *node, bool is_tool) {
     if (is_tool) {
         const char **param_names = NULL;
         const char **param_types = NULL;
+        const char **param_descriptions = NULL;
 
         if (node->as.fn_decl.param_count > 0) {
             param_names = agim_alloc(sizeof(char *) * node->as.fn_decl.param_count);
             param_types = agim_alloc(sizeof(char *) * node->as.fn_decl.param_count);
+            param_descriptions = agim_alloc(sizeof(char *) * node->as.fn_decl.param_count);
+
+            /* Extract parameter descriptions from params_map if present */
+            AstNode *params_map = node->as.fn_decl.params_map;
 
             for (size_t i = 0; i < node->as.fn_decl.param_count; i++) {
                 AstNode *param = node->as.fn_decl.params[i];
                 param_names[i] = param->as.param.name;
+                param_descriptions[i] = NULL;
+
                 /* Extract type name from type annotation node */
                 if (param->as.param.type_ann && param->as.param.type_ann->type == NODE_TYPE_NAME) {
                     param_types[i] = param->as.param.type_ann->as.type_name.name;
                 } else {
                     param_types[i] = NULL;
+                }
+
+                /* Look up description in params_map */
+                if (params_map && params_map->type == NODE_MAP) {
+                    for (size_t j = 0; j < params_map->as.map.count; j++) {
+                        if (strcmp(params_map->as.map.keys[j], param->as.param.name) == 0) {
+                            AstNode *desc_node = params_map->as.map.values[j];
+                            if (desc_node && desc_node->type == NODE_STRING) {
+                                param_descriptions[i] = desc_node->as.string_val;
+                            }
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -2595,12 +2622,13 @@ static void compile_fn(Compiler *c, AstNode *node, bool is_tool) {
         }
 
         bytecode_add_tool(c->code, node->as.fn_decl.name, fn_index,
-                          param_names, param_types, node->as.fn_decl.param_count,
-                          ret_type,
+                          param_names, param_types, param_descriptions,
+                          node->as.fn_decl.param_count, ret_type,
                           node->as.fn_decl.description);
 
         if (param_names) agim_free(param_names);
         if (param_types) agim_free(param_types);
+        if (param_descriptions) agim_free(param_descriptions);
     }
 }
 
@@ -2765,9 +2793,7 @@ static void compile_program(Compiler *c, AstNode *node) {
     emit_op(c, OP_HALT, node->line);
 }
 
-/*============================================================================
- * Public API
- *============================================================================*/
+/* Public API */
 
 Compiler *compiler_new(void) {
     Compiler *c = agim_alloc(sizeof(Compiler));

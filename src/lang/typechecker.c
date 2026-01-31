@@ -12,9 +12,7 @@
 #include <stdio.h>
 #include <string.h>
 
-/*============================================================================
- * Type Construction
- *============================================================================*/
+/* Type Construction */
 
 static Type *type_new(TypeKind kind) {
     Type *t = agim_alloc(sizeof(Type));
@@ -271,9 +269,7 @@ const char *type_to_string(Type *type) {
     return "unknown";
 }
 
-/*============================================================================
- * Type Environment
- *============================================================================*/
+/* Type Environment */
 
 typedef struct VarEntry {
     char *name;
@@ -449,9 +445,7 @@ Type *type_env_lookup_func(TypeEnv *env, const char *name) {
     return NULL;
 }
 
-/*============================================================================
- * AST Type Conversion
- *============================================================================*/
+/* AST Type Conversion */
 
 Type *type_from_ast(TypeEnv *env, AstNode *type_node) {
     if (!type_node) return type_any();
@@ -521,9 +515,7 @@ Type *type_from_ast(TypeEnv *env, AstNode *type_node) {
     }
 }
 
-/*============================================================================
- * Type Checker
- *============================================================================*/
+/* Type Checker */
 
 struct TypeChecker {
     TypeEnv *env;

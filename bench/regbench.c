@@ -18,9 +18,7 @@
 #include "vm/vm.h"
 #include "vm/regvm.h"
 
-/*============================================================================
- * Timing Utilities
- *============================================================================*/
+/* Timing Utilities */
 
 static double get_time_ms(void) {
     struct timespec ts;
@@ -30,9 +28,7 @@ static double get_time_ms(void) {
 
 #define BENCH_ITERATIONS 1000000
 
-/*============================================================================
- * Stack VM Benchmark: Arithmetic Loop
- *============================================================================*/
+/* Stack VM Benchmark: Arithmetic Loop */
 
 static Bytecode *make_stack_arithmetic_loop(int iterations) {
     Bytecode *code = bytecode_new();
@@ -94,9 +90,7 @@ static double bench_stack_vm(int iterations) {
     return end - start;
 }
 
-/*============================================================================
- * Register VM Benchmark: Count-up loop (simpler)
- *============================================================================*/
+/* Register VM Benchmark: Count-up loop */
 
 static RegChunk *make_reg_countup_loop(int iterations) {
     RegChunk *chunk = regchunk_new();
@@ -162,9 +156,7 @@ static double bench_reg_vm(int iterations) {
     return end - start;
 }
 
-/*============================================================================
- * Main
- *============================================================================*/
+/* Main */
 
 int main(int argc, char **argv) {
     int scale = 1;

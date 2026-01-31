@@ -20,9 +20,7 @@
 #include "vm/vm.h"
 #include "vm/bytecode.h"
 
-/*============================================================================
- * Timing
- *============================================================================*/
+/* Timing */
 
 static double get_time_us(void) {
     struct timespec ts;
@@ -30,14 +28,7 @@ static double get_time_us(void) {
     return ts.tv_sec * 1000000.0 + ts.tv_nsec / 1000.0;
 }
 
-/*============================================================================
- * Allocate Objects
- *============================================================================*/
-
-/**
- * Allocate many objects to trigger GC.
- * Returns count of objects allocated (some may fail due to heap limits).
- */
+/* Allocate Objects */
 static int allocate_objects(Heap *heap, int count) {
     int allocated = 0;
     for (int i = 0; i < count; i++) {
@@ -62,9 +53,7 @@ static int allocate_objects(Heap *heap, int count) {
     return allocated;
 }
 
-/*============================================================================
- * GC Pause Measurement
- *============================================================================*/
+/* GC Pause Measurement */
 
 typedef struct GCStats {
     double min_pause_us;
@@ -170,9 +159,7 @@ static void print_gc_stats(const char *name, GCStats *stats) {
            stats->total_pause_us / 1000.0);
 }
 
-/*============================================================================
- * Main
- *============================================================================*/
+/* Main */
 
 int main(void) {
     printf("================================================================\n");

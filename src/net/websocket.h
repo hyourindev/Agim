@@ -14,9 +14,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/*============================================================================
- * Types
- *============================================================================*/
+/* Types */
 
 typedef struct WebSocket WebSocket;
 
@@ -42,9 +40,7 @@ typedef enum {
     WS_OPCODE_PONG = 0xA,
 } WSOpcode;
 
-/*============================================================================
- * Connection
- *============================================================================*/
+/* Connection */
 
 /**
  * Connect to a WebSocket server.
@@ -65,9 +61,7 @@ WebSocket *ws_connect(const char *url, int timeout_ms, WSError *error);
  */
 void ws_close(WebSocket *ws, uint16_t code, const char *reason);
 
-/*============================================================================
- * Send
- *============================================================================*/
+/* Send */
 
 /**
  * Send a text message.
@@ -98,9 +92,7 @@ bool ws_send_binary(WebSocket *ws, const void *data, size_t len);
  */
 bool ws_send_ping(WebSocket *ws, const void *data, size_t len);
 
-/*============================================================================
- * Receive
- *============================================================================*/
+/* Receive */
 
 /**
  * Receive a message from the WebSocket.
@@ -113,9 +105,7 @@ bool ws_send_ping(WebSocket *ws, const void *data, size_t len);
  */
 char *ws_recv(WebSocket *ws, size_t *len, int *opcode, int timeout_ms);
 
-/*============================================================================
- * Status
- *============================================================================*/
+/* Status */
 
 /**
  * Check if WebSocket is connected.

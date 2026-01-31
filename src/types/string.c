@@ -16,15 +16,13 @@
 #include <stdatomic.h>
 #include <string.h>
 
-/*============================================================================
- * String Creation
- *============================================================================*/
+/* String Creation */
 
 Value *value_string_n(const char *str, size_t length) {
     Value *v = agim_alloc(sizeof(Value));
     v->type = VAL_STRING;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
-    v->flags = VALUE_IMMUTABLE;  /* Strings are immutable */
+    v->flags = VALUE_IMMUTABLE;
     v->gc_state = 0;
     v->next = NULL;
 
@@ -42,9 +40,7 @@ Value *value_string(const char *str) {
     return value_string_n(str, strlen(str));
 }
 
-/*============================================================================
- * String Properties
- *============================================================================*/
+/* String Properties */
 
 size_t string_length(const Value *v) {
     if (!v || v->type != VAL_STRING) return 0;
@@ -54,13 +50,11 @@ size_t string_length(const Value *v) {
 size_t string_chars(const Value *v) {
     if (!v || v->type != VAL_STRING) return 0;
 
-    /* Count UTF-8 characters */
     const char *s = v->as.string->data;
     size_t len = v->as.string->length;
     size_t count = 0;
 
     for (size_t i = 0; i < len; i++) {
-        /* Count bytes that are not continuation bytes (10xxxxxx) */
         if ((s[i] & 0xC0) != 0x80) {
             count++;
         }
@@ -78,9 +72,7 @@ const char *string_data(const Value *v) {
     return v->as.string->data;
 }
 
-/*============================================================================
- * String Operations
- *============================================================================*/
+/* String Operations */
 
 Value *string_concat(const Value *a, const Value *b) {
     if (!a || a->type != VAL_STRING || !b || b->type != VAL_STRING) {
@@ -163,7 +155,6 @@ Value *string_split(const Value *v, const char *delimiter) {
     size_t delim_len = strlen(delimiter);
 
     if (delim_len == 0) {
-        /* Split into individual characters */
         for (size_t i = 0; i < v->as.string->length; i++) {
             result = array_push(result, value_string_n(str + i, 1));
         }
@@ -178,7 +169,6 @@ Value *string_split(const Value *v, const char *delimiter) {
         start = pos + delim_len;
     }
 
-    /* Add the remaining part */
     result = array_push(result, value_string(start));
 
     return result;
@@ -196,7 +186,6 @@ Value *string_join(const Value *arr, const char *separator) {
 
     size_t sep_len = strlen(separator);
 
-    /* Calculate total length */
     size_t total = 0;
     for (size_t i = 0; i < arr_len; i++) {
         Value *item = array_get(arr, i);
@@ -208,7 +197,6 @@ Value *string_join(const Value *arr, const char *separator) {
         }
     }
 
-    /* Build result */
     char *buf = agim_alloc(total + 1);
     char *ptr = buf;
 
@@ -238,13 +226,11 @@ Value *string_trim(const Value *v) {
     const char *str = v->as.string->data;
     size_t len = v->as.string->length;
 
-    /* Find start (skip leading whitespace) */
     size_t start = 0;
     while (start < len && isspace((unsigned char)str[start])) {
         start++;
     }
 
-    /* Find end (skip trailing whitespace) */
     size_t end = len;
     while (end > start && isspace((unsigned char)str[end - 1])) {
         end--;
@@ -299,11 +285,9 @@ Value *string_replace(const Value *v, const char *old_str, const char *new_str) 
     size_t new_len = strlen(new_str);
 
     if (old_len == 0) {
-        /* Can't replace empty string */
         return value_string_n(str, v->as.string->length);
     }
 
-    /* Count occurrences */
     size_t count = 0;
     const char *pos = str;
     while ((pos = strstr(pos, old_str)) != NULL) {
@@ -315,28 +299,23 @@ Value *string_replace(const Value *v, const char *old_str, const char *new_str) 
         return value_string_n(str, v->as.string->length);
     }
 
-    /* Calculate new length */
     size_t result_len = v->as.string->length + count * (new_len - old_len);
     char *buf = agim_alloc(result_len + 1);
 
-    /* Build result */
     char *dest = buf;
     const char *src = str;
 
     while ((pos = strstr(src, old_str)) != NULL) {
-        /* Copy part before match */
         size_t prefix_len = (size_t)(pos - src);
         memcpy(dest, src, prefix_len);
         dest += prefix_len;
 
-        /* Copy replacement */
         memcpy(dest, new_str, new_len);
         dest += new_len;
 
         src = pos + old_len;
     }
 
-    /* Copy remaining */
     strcpy(dest, src);
 
     Value *result = value_string_n(buf, result_len);

@@ -19,9 +19,7 @@
 #include "runtime/scheduler.h"
 #include "runtime/worker.h"
 
-/*============================================================================
- * Timing
- *============================================================================*/
+/* Timing */
 
 static double get_time_ms(void) {
     struct timespec ts;
@@ -29,9 +27,7 @@ static double get_time_ms(void) {
     return ts.tv_sec * 1000.0 + ts.tv_nsec / 1000000.0;
 }
 
-/*============================================================================
- * Create Worker Bytecode (same as test_parallel.c)
- *============================================================================*/
+/* Create Worker Bytecode */
 
 static Bytecode *make_loop_code(int iterations) {
     Bytecode *code = bytecode_new();
@@ -73,9 +69,7 @@ static Bytecode *make_loop_code(int iterations) {
     return code;
 }
 
-/*============================================================================
- * Benchmark
- *============================================================================*/
+/* Benchmark */
 
 static void bench_parallel(int num_agents, int work_per_agent, int num_workers) {
     SchedulerConfig config = scheduler_config_default();
@@ -115,9 +109,7 @@ static void bench_parallel(int num_agents, int work_per_agent, int num_workers) 
     free(codes);
 }
 
-/*============================================================================
- * Main
- *============================================================================*/
+/* Main */
 
 int main(void) {
     printf("================================================\n");

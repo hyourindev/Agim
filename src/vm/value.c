@@ -14,9 +14,7 @@
 #include <stdio.h>
 #include <string.h>
 
-/*============================================================================
- * Value Constructors (primitives)
- *============================================================================*/
+/* Value Constructors */
 
 Value *value_nil(void) {
     Value *v = agim_alloc(sizeof(Value));
@@ -108,9 +106,7 @@ Value *value_bytes(size_t capacity) {
     return v;
 }
 
-/*============================================================================
- * Result Constructors
- *============================================================================*/
+/* Result Constructors */
 
 Value *value_result_ok(Value *value) {
     Value *v = agim_alloc(sizeof(Value));
@@ -174,9 +170,7 @@ Value *value_result_unwrap_err(const Value *v) {
     return v->as.result->value;
 }
 
-/*============================================================================
- * Option Constructors
- *============================================================================*/
+/* Option Constructors */
 
 Value *value_some(Value *value) {
     Value *v = agim_alloc(sizeof(Value));
@@ -234,9 +228,7 @@ Value *value_option_unwrap_or(const Value *v, Value *default_val) {
     return default_val;
 }
 
-/*============================================================================
- * Struct Constructors
- *============================================================================*/
+/* Struct Constructors */
 
 Value *value_struct_new(const char *type_name, size_t field_count) {
     Value *v = agim_alloc(sizeof(Value));
@@ -297,9 +289,7 @@ const char *value_struct_type_name(const Value *v) {
     return v->as.struct_val->type_name;
 }
 
-/*============================================================================
- * Enum Constructors
- *============================================================================*/
+/* Enum Constructors */
 
 Value *value_enum_unit(const char *type_name, const char *variant_name) {
     Value *v = agim_alloc(sizeof(Value));
@@ -355,9 +345,7 @@ bool value_enum_is_variant(const Value *v, const char *variant_name) {
     return strcmp(v->as.enum_val->variant_name, variant_name) == 0;
 }
 
-/*============================================================================
- * Value Type Checking
- *============================================================================*/
+/* Value Type Checking */
 
 bool value_is_nil(const Value *v) {
     return v && v->type == VAL_NIL;
@@ -442,9 +430,7 @@ bool value_is_truthy(const Value *v) {
     }
 }
 
-/*============================================================================
- * Value Comparison and Hashing
- *============================================================================*/
+/* Value Comparison and Hashing */
 
 bool value_equals(const Value *a, const Value *b) {
     if (!a || !b) return false;
@@ -475,14 +461,13 @@ bool value_equals(const Value *a, const Value *b) {
         return true;
     }
     default:
-        return a == b; /* Pointer equality for other types */
+        return a == b;
     }
 }
 
 int value_compare(const Value *a, const Value *b) {
     if (!a || !b) return 0;
 
-    /* Compare by type first */
     if (a->type != b->type) {
         return (int)a->type - (int)b->type;
     }
@@ -534,9 +519,7 @@ size_t value_hash(const Value *v) {
     }
 }
 
-/*============================================================================
- * Value Type Coercion
- *============================================================================*/
+/* Value Type Coercion */
 
 int64_t value_to_int(const Value *v) {
     if (!v) return 0;
@@ -573,30 +556,22 @@ const char *value_to_string(const Value *v) {
     return v->as.string->data;
 }
 
-/*============================================================================
- * Bytes Operations
- *============================================================================*/
+/* Bytes Operations */
 
 size_t bytes_length(const Value *v) {
     if (!v || v->type != VAL_BYTES) return 0;
     return v->as.bytes->length;
 }
 
-/**
- * Append data to a bytes buffer.
- * Returns true on success, false on allocation failure or overflow.
- */
 bool bytes_append(Value *v, const uint8_t *data, size_t length) {
     if (!v || v->type != VAL_BYTES) return false;
     Bytes *bytes = v->as.bytes;
 
-    /* Check for overflow in length calculation */
     if (bytes->length > SIZE_MAX - length) {
         return false;
     }
 
     while (bytes->length + length > bytes->capacity) {
-        /* Check for overflow before doubling */
         if (bytes->capacity > SIZE_MAX / 2) {
             return false;
         }
@@ -612,9 +587,7 @@ bool bytes_append(Value *v, const uint8_t *data, size_t length) {
     return true;
 }
 
-/*============================================================================
- * Debug
- *============================================================================*/
+/* Debug */
 
 void value_print(const Value *v) {
     if (!v) {
@@ -703,20 +676,14 @@ void value_print(const Value *v) {
     }
 }
 
-/**
- * Helper to append string to dynamically growing buffer.
- * Returns true on success, false on allocation failure or overflow.
- */
 static bool append_to_buf(char **buf, size_t *capacity, size_t *len, const char *str) {
     size_t str_len = strlen(str);
 
-    /* Check for overflow in length calculation */
     if (*len > SIZE_MAX - str_len - 1) {
         return false;
     }
 
     while (*len + str_len + 1 > *capacity) {
-        /* Check for overflow before doubling */
         if (*capacity > SIZE_MAX / 2) {
             return false;
         }
@@ -732,10 +699,9 @@ static bool append_to_buf(char **buf, size_t *capacity, size_t *len, const char 
     return true;
 }
 
-/* Helper to escape JSON string */
 static char *json_escape_string(const char *str) {
     size_t len = strlen(str);
-    size_t cap = len * 2 + 3;  /* Worst case: every char escaped + quotes */
+    size_t cap = len * 2 + 3;
     char *out = agim_alloc(cap);
     size_t j = 0;
     out[j++] = '"';
@@ -755,10 +721,6 @@ static char *json_escape_string(const char *str) {
     return out;
 }
 
-/**
- * Recursive JSON encoder.
- * Returns true on success, false on allocation failure.
- */
 static bool value_to_json_impl(const Value *v, char **buf, size_t *cap, size_t *len) {
     if (!v) {
         return append_to_buf(buf, cap, len, "null");
@@ -876,17 +838,14 @@ char *value_repr(const Value *v) {
     return buf;
 }
 
-/*============================================================================
- * Memory Management
- *============================================================================*/
+/* Memory Management */
 
 void value_free(Value *v) {
     if (!v) return;
 
-    /* With COW, respect reference counting - only free when refcount reaches 0 */
     uint32_t old_count = atomic_fetch_sub_explicit(&v->refcount, 1, memory_order_acq_rel);
     if (old_count > 1) {
-        return; /* Other references exist, don't free */
+        return;
     }
 
     switch (v->type) {
@@ -925,17 +884,14 @@ void value_free(Value *v) {
         break;
     case VAL_CLOSURE: {
         Closure *closure = (Closure *)v->as.closure;
-        /* Free upvalue array (but not upvalues themselves - managed separately) */
         agim_free(closure->upvalues);
         agim_free(closure);
         break;
     }
     case VAL_RESULT:
-        /* Note: Don't free the inner value here - GC handles it */
         agim_free(v->as.result);
         break;
     case VAL_OPTION:
-        /* Note: Don't free the inner value here - GC handles it */
         agim_free(v->as.option);
         break;
     case VAL_STRUCT: {
@@ -944,7 +900,6 @@ void value_free(Value *v) {
             agim_free(s->type_name);
             for (size_t i = 0; i < s->field_count; i++) {
                 agim_free(s->field_names[i]);
-                /* Don't free field values - GC handles them */
             }
             agim_free(s->field_names);
             agim_free(s->fields);
@@ -957,7 +912,6 @@ void value_free(Value *v) {
         if (e) {
             agim_free(e->type_name);
             agim_free(e->variant_name);
-            /* Don't free payload - GC handles it */
             agim_free(e);
         }
         break;
@@ -1017,8 +971,6 @@ Value *value_copy(const Value *v) {
         return value_vector_from(vec->data, vec->dim);
     }
     case VAL_CLOSURE:
-        /* Closures cannot be simply copied - upvalues reference stack slots */
-        /* Return nil to indicate non-copyable */
         return value_nil();
     case VAL_RESULT:
         if (v->as.result->is_ok) {
@@ -1053,77 +1005,52 @@ Value *value_copy(const Value *v) {
     }
 }
 
-/*============================================================================
- * Copy-on-Write (COW) Support
- *============================================================================*/
+/* Copy-on-Write Support */
 
-/**
- * Increment reference count (for sharing).
- * Returns the value for chaining, or NULL if the object is being freed.
- *
- * Uses CAS loop to handle:
- * 1. REFCOUNT_FREEING sentinel (object is being freed by GC)
- * 2. Saturation at REFCOUNT_SATURATED (never overflow)
- * 3. Race conditions with concurrent retain/release
- */
 Value *value_retain(Value *v) {
     if (!v) return NULL;
 
     uint32_t current = atomic_load_explicit(&v->refcount, memory_order_acquire);
 
     while (true) {
-        /* Check for sentinel values */
         if (current == REFCOUNT_FREEING) {
-            /* Object is being freed by GC - cannot retain */
             return NULL;
         }
         if (current >= REFCOUNT_SATURATED) {
-            /* Already saturated - no change needed */
             return v;
         }
 
-        /* Try to increment refcount */
         uint32_t new_count = current + 1;
         if (new_count >= REFCOUNT_SATURATED) {
-            new_count = REFCOUNT_SATURATED;  /* Saturate, don't overflow */
+            new_count = REFCOUNT_SATURATED;
         }
 
         if (atomic_compare_exchange_weak_explicit(
                 &v->refcount, &current, new_count,
                 memory_order_acq_rel, memory_order_acquire)) {
-            return v;  /* Success */
+            return v;
         }
-        /* CAS failed, current has been updated - retry */
     }
 }
 
-/**
- * Decrement reference count.
- * Does NOT free the value - GC handles that.
- *
- * Uses CAS loop to handle sentinel values and prevent underflow.
- */
 void value_release(Value *v) {
     if (!v) return;
 
     uint32_t current = atomic_load_explicit(&v->refcount, memory_order_acquire);
 
     while (true) {
-        /* Check for sentinel values that shouldn't be decremented */
         if (current == REFCOUNT_FREEING || current == REFCOUNT_SATURATED) {
-            return;  /* Don't touch sentinel/saturated values */
+            return;
         }
         if (current == 0) {
-            return;  /* Already at zero, nothing to do */
+            return;
         }
 
-        /* Try to decrement refcount */
         if (atomic_compare_exchange_weak_explicit(
                 &v->refcount, &current, current - 1,
                 memory_order_acq_rel, memory_order_acquire)) {
-            return;  /* Success */
+            return;
         }
-        /* CAS failed, current has been updated - retry */
     }
 }
 
@@ -1134,26 +1061,24 @@ bool value_needs_cow(const Value *v) {
 bool value_can_share(const Value *v) {
     if (!v) return false;
 
-    /* Immutable types can always be shared */
     switch (v->type) {
     case VAL_NIL:
     case VAL_BOOL:
     case VAL_INT:
     case VAL_FLOAT:
-    case VAL_STRING:  /* Strings are immutable */
+    case VAL_STRING:
     case VAL_PID:
     case VAL_FUNCTION:
-    case VAL_VECTOR:  /* Vectors are immutable */
+    case VAL_VECTOR:
         return true;
 
-    /* Mutable types need COW semantics */
     case VAL_ARRAY:
     case VAL_MAP:
     case VAL_BYTES:
-        return true;  /* Can be shared with COW */
+        return true;
 
     case VAL_CLOSURE:
-        return false;  /* Closures capture mutable state */
+        return false;
 
     default:
         return false;
@@ -1170,18 +1095,16 @@ bool value_is_immutable(const Value *v) {
     if (!v) return true;
 
     switch (v->type) {
-    /* Primitive types are always immutable */
     case VAL_NIL:
     case VAL_BOOL:
     case VAL_INT:
     case VAL_FLOAT:
-    case VAL_STRING:   /* Strings are immutable in Agim */
+    case VAL_STRING:
     case VAL_PID:
     case VAL_FUNCTION:
-    case VAL_VECTOR:   /* Vectors are immutable */
+    case VAL_VECTOR:
         return true;
 
-    /* Mutable types */
     case VAL_ARRAY:
     case VAL_MAP:
     case VAL_BYTES:
@@ -1196,12 +1119,10 @@ bool value_is_immutable(const Value *v) {
 Value *value_cow_share(Value *v) {
     if (!v) return NULL;
 
-    /* Immutable values can be shared directly */
     if (value_is_immutable(v)) {
         return value_retain(v);
     }
 
-    /* Mutable values need COW semantics */
     v->flags |= VALUE_COW_SHARED;
     return value_retain(v);
 }

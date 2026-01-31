@@ -8,57 +8,19 @@
 #include "vm/regvm.h"
 #include "vm/value.h"
 #include "vm/ic.h"
+#include "vm/nanbox_convert.h"
 #include "types/array.h"
 #include "types/map.h"
 #include "types/string.h"
+#include "types/closure.h"
 #include "util/alloc.h"
 
 #include <stdio.h>
 #include <string.h>
 
-/*============================================================================
- * NaN Boxing Helpers
- *============================================================================*/
-
-static Value *nanbox_to_value(NanValue v) {
-    if (nanbox_is_nil(v)) {
-        return value_nil();
-    } else if (nanbox_is_bool(v)) {
-        return value_bool(nanbox_as_bool(v));
-    } else if (nanbox_is_int(v)) {
-        return value_int(nanbox_as_int(v));
-    } else if (nanbox_is_double(v)) {
-        return value_float(nanbox_as_double(v));
-    } else if (nanbox_is_pid(v)) {
-        return value_pid(nanbox_as_pid(v));
-    } else if (nanbox_is_obj(v)) {
-        return (Value *)nanbox_as_obj(v);
-    }
-    return value_nil();
-}
-
-static NanValue value_to_nanbox(Value *val) {
-    if (!val) return NANBOX_NIL;
-
-    switch (val->type) {
-    case VAL_NIL:
-        return NANBOX_NIL;
-    case VAL_BOOL:
-        return nanbox_bool(val->as.boolean);
-    case VAL_INT:
-        return nanbox_int(val->as.integer);
-    case VAL_FLOAT:
-        return nanbox_double(val->as.floating);
-    case VAL_PID:
-        return nanbox_pid(val->as.pid);
-    default:
-        return nanbox_obj(val);
-    }
-}
-
-/*============================================================================
+/*
  * Register Chunk Implementation
- *============================================================================*/
+ */
 
 RegChunk *regchunk_new(void) {
     RegChunk *chunk = agim_alloc(sizeof(RegChunk));
@@ -127,9 +89,7 @@ size_t regchunk_add_constant(RegChunk *chunk, Value *value) {
     return chunk->constants_size++;
 }
 
-/*============================================================================
- * Register VM Lifecycle
- *============================================================================*/
+/* Register VM Lifecycle */
 
 RegVM *regvm_new(void) {
     RegVM *vm = agim_alloc(sizeof(RegVM));
@@ -161,9 +121,7 @@ void regvm_reset(RegVM *vm) {
     vm->reductions = 0;
 }
 
-/*============================================================================
- * Error Handling
- *============================================================================*/
+/* Error Handling */
 
 static void regvm_set_error(RegVM *vm, const char *msg) {
     vm->error = msg;
@@ -177,9 +135,7 @@ int regvm_error_line(const RegVM *vm) {
     return vm->error_line;
 }
 
-/*============================================================================
- * Arithmetic Helpers
- *============================================================================*/
+/* Arithmetic Helpers */
 
 static NanValue nanbox_add(NanValue a, NanValue b) {
     if (nanbox_is_int(a) && nanbox_is_int(b)) {
@@ -266,9 +222,7 @@ static NanValue nanbox_neg(NanValue a) {
     return NANBOX_NIL;
 }
 
-/*============================================================================
- * Comparison Helpers
- *============================================================================*/
+/* Comparison Helpers */
 
 static NanValue nanbox_eq(NanValue a, NanValue b) {
     if (nanbox_is_int(a) && nanbox_is_int(b)) {
@@ -344,9 +298,7 @@ static bool reg_nanbox_is_truthy(NanValue v) {
     return true; /* Objects are truthy */
 }
 
-/*============================================================================
- * Register VM Execution
- *============================================================================*/
+/* Register VM Execution */
 
 /* Check for computed goto support */
 #if defined(__GNUC__) || defined(__clang__)
@@ -374,9 +326,7 @@ RegVMResult regvm_run(RegVM *vm, RegChunk *chunk) {
     #define R(n) (frame->regs[n])
 
 #if USE_REG_COMPUTED_GOTO
-    /*========================================================================
-     * COMPUTED GOTO DISPATCH
-     *========================================================================*/
+    /* Computed goto dispatch */
 
     static void *dispatch_table[ROP_COUNT] = {
         [ROP_NOP] = &&op_nop,
@@ -595,9 +545,72 @@ RegVMResult regvm_run(RegVM *vm, RegChunk *chunk) {
     }
 
     op_call: {
-        /* TODO: Implement function calls */
-        regvm_set_error(vm, "function calls not yet implemented in register VM");
-        return REGVM_ERROR_RUNTIME;
+        /* ROP_CALL: rd = rs1(args starting at rs2)
+         * rs1 = register containing the function value (with RegChunk pointer)
+         * rs2 = first argument register
+         * rd = destination register for result
+         *
+         * The register VM uses a different function representation than the
+         * stack-based VM. Function values are RegChunk pointers wrapped as objects.
+         */
+        RegInstr i = frame->ip[-1];
+        NanValue func_val = R(i.rs1);
+        uint8_t first_arg_reg = i.rs2;
+        uint8_t result_reg = i.rd;
+
+        /* Get the function value - expect an object pointer */
+        if (!nanbox_is_obj(func_val)) {
+            regvm_set_error(vm, "cannot call non-function value");
+            return REGVM_ERROR_TYPE;
+        }
+
+        void *obj = nanbox_as_obj(func_val);
+        if (!obj) {
+            regvm_set_error(vm, "cannot call nil value");
+            return REGVM_ERROR_TYPE;
+        }
+
+        /* In the register VM, object pointers are RegChunk* for function calls. */
+        RegChunk *target_chunk = (RegChunk *)obj;
+
+        /* Validate the chunk (simple check - it should have code) */
+        if (!target_chunk->code || target_chunk->code_size == 0) {
+            regvm_set_error(vm, "invalid function: no code");
+            return REGVM_ERROR_RUNTIME;
+        }
+
+        /* Check frame limit */
+        if (vm->frame_count >= REG_MAX_FRAMES) {
+            regvm_set_error(vm, "stack overflow");
+            return REGVM_ERROR_OVERFLOW;
+        }
+
+        /* Get arity from the target chunk */
+        uint8_t arity = target_chunk->num_params;
+
+        /* Push new frame */
+        RegCallFrame *new_frame = &vm->frames[vm->frame_count++];
+        new_frame->ip = target_chunk->code;
+        new_frame->chunk = target_chunk;
+        new_frame->base = 0;
+        new_frame->result_reg = result_reg;
+
+        /* Initialize new frame registers to nil */
+        for (int j = 0; j < REG_MAX_REGISTERS; j++) {
+            new_frame->regs[j] = NANBOX_NIL;
+        }
+
+        /* Copy arguments to new frame registers (registers 0 to arity-1) */
+        for (uint8_t j = 0; j < arity; j++) {
+            new_frame->regs[j] = R(first_arg_reg + j);
+        }
+
+        /* Store caller's frame result register info */
+        frame->result_reg = result_reg;
+
+        /* Switch to new frame */
+        frame = new_frame;
+        DISPATCH();
     }
 
     op_ret: {
@@ -727,9 +740,7 @@ RegVMResult regvm_run(RegVM *vm, RegChunk *chunk) {
     #undef DISPATCH
 
 #else
-    /*========================================================================
-     * SWITCH-BASED DISPATCH (portable fallback)
-     *========================================================================*/
+    /* Switch-based dispatch (portable fallback) */
 
     for (;;) {
         RegInstr i = *frame->ip++;
@@ -968,9 +979,7 @@ RegVMResult regvm_run(RegVM *vm, RegChunk *chunk) {
     #undef R
 }
 
-/*============================================================================
- * Disassembly
- *============================================================================*/
+/* Disassembly */
 
 static const char *rop_names[] = {
     [ROP_NOP] = "NOP",

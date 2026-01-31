@@ -14,9 +14,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/*============================================================================
- * AST Node Types
- *============================================================================*/
+/* AST Node Types */
 
 typedef enum NodeType {
     /* Declarations */
@@ -24,14 +22,14 @@ typedef enum NodeType {
     NODE_TOOL_DECL,
     NODE_FN_DECL,
     NODE_PARAM,
-    NODE_IMPORT,        /* import "file.ag" */
-    NODE_IMPORT_FROM,   /* import { names } from "file.ag" */
-    NODE_EXPORT,        /* export let/fn/tool */
-    NODE_STRUCT_DECL,   /* struct Foo { field: Type } */
-    NODE_STRUCT_FIELD,  /* field: Type in struct */
-    NODE_ENUM_DECL,     /* enum Foo { A, B(Type) } */
-    NODE_ENUM_VARIANT,  /* variant in enum */
-    NODE_TYPE_ALIAS,    /* type Alias = Type */
+    NODE_IMPORT,
+    NODE_IMPORT_FROM,
+    NODE_EXPORT,
+    NODE_STRUCT_DECL,
+    NODE_STRUCT_FIELD,
+    NODE_ENUM_DECL,
+    NODE_ENUM_VARIANT,
+    NODE_TYPE_ALIAS,
 
     /* Statements */
     NODE_BLOCK,
@@ -46,11 +44,11 @@ typedef enum NodeType {
     NODE_EXPR_STMT,
 
     /* Type Expressions */
-    NODE_TYPE_NAME,     /* int, string, bool, etc. */
-    NODE_TYPE_GENERIC,  /* Option<T>, Result<T, E> */
-    NODE_TYPE_ARRAY,    /* [T] */
-    NODE_TYPE_MAP,      /* map<K, V> */
-    NODE_TYPE_FUNC,     /* fn(A, B) -> C */
+    NODE_TYPE_NAME,
+    NODE_TYPE_GENERIC,
+    NODE_TYPE_ARRAY,
+    NODE_TYPE_MAP,
+    NODE_TYPE_FUNC,
 
     /* Expressions */
     NODE_BINARY,
@@ -68,22 +66,20 @@ typedef enum NodeType {
     NODE_NIL,
     NODE_ARRAY,
     NODE_MAP,
-    NODE_MATCH,         /* match expr { arms } */
-    NODE_MATCH_ARM,     /* ok(x) => expr or err(e) => expr */
-    NODE_RESULT_OK,     /* ok(value) */
-    NODE_RESULT_ERR,    /* err(message) */
-    NODE_TRY,           /* try expr */
-    NODE_SOME,          /* some(value) */
-    NODE_NONE,          /* none */
-    NODE_STRUCT_INIT,   /* Foo { field: value } */
-    NODE_SPREAD,        /* ...expr */
-    NODE_ENUM_EXPR,     /* EnumType::Variant or EnumType::Variant(payload) */
-    NODE_RANGE,         /* start..end (exclusive) or start..=end (inclusive) */
+    NODE_MATCH,
+    NODE_MATCH_ARM,
+    NODE_RESULT_OK,
+    NODE_RESULT_ERR,
+    NODE_TRY,
+    NODE_SOME,
+    NODE_NONE,
+    NODE_STRUCT_INIT,
+    NODE_SPREAD,
+    NODE_ENUM_EXPR,
+    NODE_RANGE,
 } NodeType;
 
-/*============================================================================
- * AST Node Structure
- *============================================================================*/
+/* AST Node Structure */
 
 typedef struct AstNode AstNode;
 
@@ -92,481 +88,298 @@ struct AstNode {
     int line;
 
     union {
-        /* Program: list of declarations */
         struct {
             AstNode **decls;
             size_t count;
             size_t capacity;
         } program;
 
-        /* Tool/Function declaration */
         struct {
             char *name;
             AstNode **params;
             size_t param_count;
-            AstNode *return_type;   /* Type node (NODE_TYPE_*), NULL if not specified */
+            AstNode *return_type;
             AstNode *body;
-            char *description;      /* Tool description from @tool decorator */
+            char *description;
+            AstNode *params_map;  /* Parameter descriptions from @tool decorator */
         } fn_decl;
 
-        /* Parameter */
         struct {
             char *name;
-            AstNode *type_ann;  /* Type annotation (NODE_TYPE_*), NULL if not specified */
+            AstNode *type_ann;
         } param;
 
-        /* Block: list of statements */
         struct {
             AstNode **stmts;
             size_t count;
             size_t capacity;
         } block;
 
-        /* Let/Const with optional type and mutability */
         struct {
             char *name;
-            AstNode *type_ann;   /* Type annotation (NODE_TYPE_*), NULL if not specified */
+            AstNode *type_ann;
             AstNode *value;
-            bool is_mutable;     /* true for `let mut`, false for `let` */
+            bool is_mutable;
         } var_decl;
 
-        /* If */
         struct {
             AstNode *cond;
             AstNode *then_block;
-            AstNode *else_block;  /* NULL if no else */
+            AstNode *else_block;
         } if_stmt;
 
-        /* For */
         struct {
             char *var;
-            char *index_var;  /* NULL if not specified */
+            char *index_var;
             AstNode *iterable;
             AstNode *body;
         } for_stmt;
 
-        /* While */
         struct {
             AstNode *cond;
             AstNode *body;
         } while_stmt;
 
-        /* Return */
         struct {
-            AstNode *value;  /* NULL if bare return */
+            AstNode *value;
         } return_stmt;
 
-        /* Binary expression */
         struct {
             TokenType op;
             AstNode *left;
             AstNode *right;
         } binary;
 
-        /* Unary expression */
         struct {
             TokenType op;
             AstNode *operand;
         } unary;
 
-        /* Function call */
         struct {
             AstNode *callee;
             AstNode **args;
             size_t arg_count;
         } call;
 
-        /* Member access (a.b) */
         struct {
             AstNode *object;
             char *field;
         } member;
 
-        /* Index access (a[b]) */
         struct {
             AstNode *object;
             AstNode *index;
         } index_expr;
 
-        /* Ternary (cond ? a : b) */
         struct {
             AstNode *cond;
             AstNode *then_expr;
             AstNode *else_expr;
         } ternary;
 
-        /* Assignment */
         struct {
             AstNode *target;
-            TokenType op;  /* =, +=, -=, etc. */
+            TokenType op;
             AstNode *value;
         } assign;
 
-        /* Identifier */
         struct {
             char *name;
         } ident;
 
-        /* Literals */
         int64_t int_val;
         double float_val;
         char *string_val;
         bool bool_val;
 
-        /* Array literal */
         struct {
             AstNode **elements;
             size_t count;
         } array;
 
-        /* Map literal */
         struct {
             char **keys;
             AstNode **values;
             size_t count;
         } map;
 
-        /* Import: import "path.ag" */
         struct {
             char *path;
         } import_stmt;
 
-        /* Import from: import { name1, name2 } from "path.ag" */
         struct {
             char **names;
             size_t name_count;
             char *path;
         } import_from;
 
-        /* Export: export let/fn/tool */
         struct {
             AstNode *decl;
         } export_stmt;
 
-        /* Match expression */
         struct {
             AstNode *expr;
             AstNode **arms;
             size_t arm_count;
         } match_expr;
 
-        /* Match arm: ok(name) => expr, err(name) => expr, some(name) => expr, none => expr, or EnumVariant(name) => expr */
         struct {
             enum {
                 MATCH_PATTERN_OK,
                 MATCH_PATTERN_ERR,
                 MATCH_PATTERN_SOME,
                 MATCH_PATTERN_NONE,
-                MATCH_PATTERN_ENUM   /* Enum variant pattern: VariantName or VariantName(binding) */
+                MATCH_PATTERN_ENUM
             } pattern_kind;
-            char *binding_name;  /* variable name to bind the value (NULL for none/unit enum) */
-            char *variant_name;  /* For enum patterns: the variant name */
+            char *binding_name;
+            char *variant_name;
             AstNode *body;
         } match_arm;
 
-        /* Result ok/err: ok(value) or err(message) */
         struct {
             AstNode *value;
         } result_expr;
 
-        /* Try expression: try expr */
         struct {
             AstNode *expr;
         } try_expr;
 
-        /* Struct declaration: struct Foo { field: Type, ... } */
         struct {
             char *name;
-            AstNode **fields;    /* Array of NODE_STRUCT_FIELD */
+            AstNode **fields;
             size_t field_count;
         } struct_decl;
 
-        /* Struct field: name: Type */
         struct {
             char *name;
-            AstNode *type_ann;   /* Type annotation */
+            AstNode *type_ann;
         } struct_field;
 
-        /* Enum declaration: enum Foo { A, B(Type), ... } */
         struct {
             char *name;
-            AstNode **variants;  /* Array of NODE_ENUM_VARIANT */
+            AstNode **variants;
             size_t variant_count;
         } enum_decl;
 
-        /* Enum variant: Name or Name(Type) */
         struct {
             char *name;
-            AstNode *payload_type;  /* NULL for unit variant, type for tuple variant */
+            AstNode *payload_type;
         } enum_variant;
 
-        /* Type alias: type Alias = Type */
         struct {
             char *name;
-            AstNode *aliased;   /* The aliased type */
+            AstNode *aliased;
         } type_alias;
 
-        /* Type name: int, string, bool, CustomType */
         struct {
             char *name;
         } type_name;
 
-        /* Generic type: Option<T>, Result<T, E> */
         struct {
             char *name;
-            AstNode **type_args;  /* Array of type arguments */
+            AstNode **type_args;
             size_t arg_count;
         } type_generic;
 
-        /* Array type: [T] */
         struct {
             AstNode *elem_type;
         } type_array;
 
-        /* Map type: map<K, V> */
         struct {
             AstNode *key_type;
             AstNode *value_type;
         } type_map;
 
-        /* Function type: fn(A, B) -> C */
         struct {
             AstNode **param_types;
             size_t param_count;
             AstNode *return_type;
         } type_func;
 
-        /* Some: some(value) */
         struct {
             AstNode *value;
         } some_expr;
 
-        /* Struct initialization: Foo { field: value, ... } */
         struct {
             char *type_name;
             char **field_names;
             AstNode **field_values;
             size_t field_count;
-            AstNode *spread;     /* ...other_struct (NULL if not present) */
+            AstNode *spread;
         } struct_init;
 
-        /* Spread: ...expr */
         struct {
             AstNode *expr;
         } spread_expr;
 
-        /* Enum variant expression: EnumType::Variant or EnumType::Variant(payload) */
         struct {
-            char *enum_type;     /* The enum type name */
-            char *variant_name;  /* The variant name */
-            AstNode *payload;    /* NULL for unit variants, value for payload variants */
+            char *enum_type;
+            char *variant_name;
+            AstNode *payload;
         } enum_expr;
 
-        /* Range expression: start..end or start..=end */
         struct {
-            AstNode *start;      /* Start value (inclusive) */
-            AstNode *end;        /* End value */
-            bool inclusive;      /* true for ..= (inclusive), false for .. (exclusive) */
+            AstNode *start;
+            AstNode *end;
+            bool inclusive;
         } range;
 
-        /* Tool decorator metadata */
         struct {
             char *name;
             char *description;
-            AstNode *params_map;     /* Map of param schemas */
-            AstNode *fn_decl;        /* The decorated function */
+            AstNode *params_map;
+            AstNode *fn_decl;
         } tool_decl_meta;
     } as;
 };
 
-/*============================================================================
- * AST Node Construction
- *============================================================================*/
+/* AST Node Construction */
 
-/**
- * Create a new AST node.
- */
 AstNode *ast_new(NodeType type, int line);
-
-/**
- * Free an AST node and all children.
- */
 void ast_free(AstNode *node);
 
-/*============================================================================
- * AST Node Helpers
- *============================================================================*/
+/* AST Node Helpers */
 
-/**
- * Create program node.
- */
 AstNode *ast_program(int line);
-
-/**
- * Add declaration to program.
- */
 void ast_program_add(AstNode *program, AstNode *decl);
-
-/**
- * Create block node.
- */
 AstNode *ast_block(int line);
-
-/**
- * Add statement to block.
- */
 void ast_block_add(AstNode *block, AstNode *stmt);
-
-/**
- * Create binary expression.
- */
 AstNode *ast_binary(TokenType op, AstNode *left, AstNode *right, int line);
-
-/**
- * Create unary expression.
- */
 AstNode *ast_unary(TokenType op, AstNode *operand, int line);
-
-/**
- * Create integer literal.
- */
 AstNode *ast_int(int64_t value, int line);
-
-/**
- * Create float literal.
- */
 AstNode *ast_float(double value, int line);
-
-/**
- * Create string literal.
- */
 AstNode *ast_string(const char *value, size_t length, int line);
-
-/**
- * Create boolean literal.
- */
 AstNode *ast_bool(bool value, int line);
-
-/**
- * Create nil literal.
- */
 AstNode *ast_nil(int line);
-
-/**
- * Create identifier.
- */
 AstNode *ast_ident(const char *name, size_t length, int line);
 
-/*============================================================================
- * Type Node Helpers
- *============================================================================*/
+/* Type Node Helpers */
 
-/**
- * Create type name node (int, string, bool, CustomType).
- */
 AstNode *ast_type_name(const char *name, size_t length, int line);
-
-/**
- * Create generic type node (Option<T>, Result<T, E>).
- */
 AstNode *ast_type_generic(const char *name, AstNode **type_args, size_t arg_count, int line);
-
-/**
- * Create array type node ([T]).
- */
 AstNode *ast_type_array(AstNode *elem_type, int line);
-
-/**
- * Create map type node (map<K, V>).
- */
 AstNode *ast_type_map(AstNode *key_type, AstNode *value_type, int line);
-
-/**
- * Create function type node (fn(A, B) -> C).
- */
 AstNode *ast_type_func(AstNode **param_types, size_t param_count, AstNode *return_type, int line);
 
-/*============================================================================
- * Struct/Enum Helpers
- *============================================================================*/
+/* Struct/Enum Helpers */
 
-/**
- * Create struct declaration.
- */
 AstNode *ast_struct_decl(const char *name, int line);
-
-/**
- * Add field to struct declaration.
- */
 void ast_struct_add_field(AstNode *struct_decl, const char *name, AstNode *type_ann, int line);
-
-/**
- * Create enum declaration.
- */
 AstNode *ast_enum_decl(const char *name, int line);
-
-/**
- * Add variant to enum declaration.
- */
 void ast_enum_add_variant(AstNode *enum_decl, const char *name, AstNode *payload_type, int line);
-
-/**
- * Create type alias.
- */
 AstNode *ast_type_alias(const char *name, AstNode *aliased, int line);
-
-/**
- * Create struct initialization.
- */
 AstNode *ast_struct_init(const char *type_name, int line);
-
-/**
- * Add field to struct initialization.
- */
 void ast_struct_init_add_field(AstNode *init, const char *name, AstNode *value);
-
-/**
- * Set spread on struct initialization.
- */
 void ast_struct_init_set_spread(AstNode *init, AstNode *spread);
-
-/**
- * Create some(value) expression.
- */
 AstNode *ast_some(AstNode *value, int line);
-
-/**
- * Create none expression.
- */
 AstNode *ast_none(int line);
-
-/**
- * Create spread expression (...expr).
- */
 AstNode *ast_spread(AstNode *expr, int line);
-
-/**
- * Create enum variant expression (EnumType::Variant or EnumType::Variant(payload)).
- */
 AstNode *ast_enum_variant(const char *enum_type, const char *variant_name, AstNode *payload, int line);
-
-/**
- * Create range expression (start..end or start..=end).
- */
 AstNode *ast_range(AstNode *start, AstNode *end, bool inclusive, int line);
 
-/*============================================================================
- * Debug
- *============================================================================*/
+/* Debug */
 
-/**
- * Print AST for debugging.
- */
 void ast_print(AstNode *node, int indent);
-
-/**
- * Get string name of node type.
- */
 const char *ast_node_type_name(NodeType type);
 
 #endif /* AGIM_LANG_AST_H */

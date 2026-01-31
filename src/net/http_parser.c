@@ -14,17 +14,13 @@
 #include <string.h>
 #include <strings.h>
 
-/*============================================================================
- * Constants
- *============================================================================*/
+/* Constants */
 
 #define MAX_HEADERS 64
 #define MAX_STATUS_TEXT 128
 #define INITIAL_BUFFER_SIZE 4096
 
-/*============================================================================
- * Parser State
- *============================================================================*/
+/* Parser State */
 
 typedef enum {
     STATE_STATUS_LINE,
@@ -65,9 +61,7 @@ struct HttpParser {
     size_t buffer_capacity;
 };
 
-/*============================================================================
- * Helper Functions
- *============================================================================*/
+/* Helper Functions */
 
 static bool buffer_append(HttpParser *parser, const char *data, size_t len) {
     if (parser->buffer_len + len > parser->buffer_capacity) {
@@ -113,9 +107,7 @@ static int strcasecmp_safe(const char *a, const char *b) {
 #endif
 }
 
-/*============================================================================
- * Parser Lifecycle
- *============================================================================*/
+/* Parser Lifecycle */
 
 HttpParser *http_parser_new(void) {
     HttpParser *parser = calloc(1, sizeof(HttpParser));
@@ -176,9 +168,7 @@ void http_parser_reset(HttpParser *parser) {
     parser->buffer_len = 0;
 }
 
-/*============================================================================
- * Status Line Parsing
- *============================================================================*/
+/* Status Line Parsing */
 
 static HttpParseResult parse_status_line(HttpParser *parser) {
     char *line_end = find_line_end(parser->buffer, parser->buffer_len);
@@ -218,9 +208,7 @@ static HttpParseResult parse_status_line(HttpParser *parser) {
     return HTTP_PARSE_NEED_MORE;
 }
 
-/*============================================================================
- * Header Parsing
- *============================================================================*/
+/* Header Parsing */
 
 static HttpParseResult parse_headers(HttpParser *parser) {
     while (true) {
@@ -310,9 +298,7 @@ static HttpParseResult parse_headers(HttpParser *parser) {
     }
 }
 
-/*============================================================================
- * Body Parsing
- *============================================================================*/
+/* Body Parsing */
 
 static HttpParseResult parse_body_content_length(HttpParser *parser) {
     if (parser->buffer_len == 0) return HTTP_PARSE_NEED_MORE;
@@ -425,9 +411,7 @@ static HttpParseResult parse_chunked_trailer(HttpParser *parser) {
     return HTTP_PARSE_NEED_MORE;
 }
 
-/*============================================================================
- * Main Parse Function
- *============================================================================*/
+/* Main Parse Function */
 
 HttpParseResult http_parser_feed(HttpParser *parser, const char *data, size_t len, size_t *consumed) {
     if (!parser || !data) {
@@ -496,9 +480,7 @@ HttpParseResult http_parser_feed(HttpParser *parser, const char *data, size_t le
     return result;
 }
 
-/*============================================================================
- * Accessors
- *============================================================================*/
+/* Accessors */
 
 int http_parser_status_code(const HttpParser *parser) {
     return parser ? parser->status_code : 0;

@@ -9,25 +9,21 @@
 
 #include "runtime/module.h"
 #include "runtime/block.h"
+#include "runtime/timer.h"
+#include "vm/vm.h"
+
+#ifdef AGIM_WITH_COMPILER
+#include "lang/lexer.h"
+#include "lang/parser.h"
+#include "lang/compiler.h"
+#include "lang/ast.h"
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/time.h>
 
-/*============================================================================
- * Time Helper
- *============================================================================*/
-
-static uint64_t current_time_ms(void) {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (uint64_t)tv.tv_sec * 1000 + (uint64_t)tv.tv_usec / 1000;
-}
-
-/*============================================================================
- * Module Version
- *============================================================================*/
+/* Module Version */
 
 static ModuleVersion *module_version_new(const char *name, Bytecode *code, uint32_t version) {
     ModuleVersion *ver = calloc(1, sizeof(ModuleVersion));
@@ -37,7 +33,7 @@ static ModuleVersion *module_version_new(const char *name, Bytecode *code, uint3
     ver->version = version;
     ver->code = code ? bytecode_retain(code) : NULL;
     atomic_store(&ver->ref_count, 1);
-    ver->loaded_at = current_time_ms();
+    ver->loaded_at = timer_current_time_ms();
     ver->migrate_func_index = SIZE_MAX;
     ver->prev_version = NULL;
 
@@ -65,7 +61,6 @@ void module_version_release(ModuleVersion *ver) {
     if (!ver) return;
 
     if (atomic_fetch_sub(&ver->ref_count, 1) == 1) {
-        /* Last reference - free the version */
         module_version_free(ver);
     }
 }
@@ -76,19 +71,39 @@ bool module_version_has_migrate(ModuleVersion *ver) {
 
 Value *module_version_migrate(ModuleVersion *ver, Value *old_state, uint32_t from_version) {
     if (!ver || !module_version_has_migrate(ver)) {
-        return old_state;  /* No migration - keep old state */
+        return old_state;
     }
 
-    /* TODO: Actually call the migration function
-     * This requires creating a VM, loading the code, and calling the function.
-     * For now, return old state unchanged. */
-    (void)from_version;
-    return old_state;
+    if (!ver->code) {
+        return old_state;
+    }
+
+    VM *vm = vm_new();
+    if (!vm) {
+        return old_state;
+    }
+
+    vm_load(vm, ver->code);
+
+    vm_push(vm, old_state ? old_state : value_nil());
+    vm_push(vm, value_int((int64_t)from_version));
+
+    VMResult result = vm_run(vm);
+
+    Value *new_state = old_state;
+    if (result == VM_OK || result == VM_HALT) {
+        Value *stack_result = vm_pop(vm);
+        if (stack_result) {
+            new_state = value_copy(stack_result);
+        }
+    }
+
+    vm_free(vm);
+
+    return new_state;
 }
 
-/*============================================================================
- * Module
- *============================================================================*/
+/* Module */
 
 static Module *module_new(const char *name) {
     Module *mod = calloc(1, sizeof(Module));
@@ -110,7 +125,6 @@ static void module_free(Module *mod) {
 
     pthread_mutex_lock(&mod->lock);
 
-    /* Free all versions */
     if (mod->current) {
         module_version_release(mod->current);
     }
@@ -122,7 +136,6 @@ static void module_free(Module *mod) {
         old = prev;
     }
 
-    /* Free block associations */
     ModuleBlock *mb = mod->blocks;
     while (mb) {
         ModuleBlock *next = mb->next;
@@ -136,9 +149,7 @@ static void module_free(Module *mod) {
     free(mod);
 }
 
-/*============================================================================
- * Module Registry
- *============================================================================*/
+/* Module Registry */
 
 ModuleRegistry *module_registry_new(void) {
     ModuleRegistry *reg = calloc(1, sizeof(ModuleRegistry));
@@ -193,14 +204,12 @@ ModuleVersion *module_load(ModuleRegistry *reg, const char *name, Bytecode *code
 
     Module *mod = registry_find(reg, name);
     if (!mod) {
-        /* Create new module */
         mod = module_new(name);
         if (!mod) {
             pthread_rwlock_unlock(&reg->lock);
             return NULL;
         }
 
-        /* Add to registry */
         if (reg->count >= reg->capacity) {
             if (!registry_grow(reg)) {
                 module_free(mod);
@@ -214,17 +223,14 @@ ModuleVersion *module_load(ModuleRegistry *reg, const char *name, Bytecode *code
     pthread_mutex_lock(&mod->lock);
     pthread_rwlock_unlock(&reg->lock);
 
-    /* Determine version number */
     uint32_t version = mod->current ? mod->current->version + 1 : 1;
 
-    /* Create new version */
     ModuleVersion *ver = module_version_new(name, code, version);
     if (!ver) {
         pthread_mutex_unlock(&mod->lock);
         return NULL;
     }
 
-    /* Check for migrate function in bytecode */
     const ToolInfo *tools;
     size_t tool_count;
     tools = bytecode_get_tools(code, &tool_count);
@@ -235,9 +241,8 @@ ModuleVersion *module_load(ModuleRegistry *reg, const char *name, Bytecode *code
         }
     }
 
-    /* Push old version */
     if (mod->current) {
-        mod->current->prev_version = mod->old;
+        ver->prev_version = mod->current;
         mod->old = mod->current;
     }
 
@@ -247,14 +252,97 @@ ModuleVersion *module_load(ModuleRegistry *reg, const char *name, Bytecode *code
     return ver;
 }
 
+#ifdef AGIM_WITH_COMPILER
 ModuleVersion *module_load_file(ModuleRegistry *reg, const char *name, const char *path) {
-    /* TODO: Implement file loading
-     * This requires parsing and compiling the source file. */
-    (void)reg;
-    (void)name;
-    (void)path;
-    return NULL;
+    if (!reg || !name || !path) return NULL;
+
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    if (size <= 0 || size > 10 * 1024 * 1024) {
+        fclose(f);
+        return NULL;
+    }
+
+    char *source = malloc((size_t)size + 1);
+    if (!source) {
+        fclose(f);
+        return NULL;
+    }
+
+    size_t read = fread(source, 1, (size_t)size, f);
+    fclose(f);
+
+    if (read != (size_t)size) {
+        free(source);
+        return NULL;
+    }
+    source[size] = '\0';
+
+    Lexer *lexer = lexer_new(source);
+    if (!lexer) {
+        free(source);
+        return NULL;
+    }
+
+    Parser *parser = parser_new(lexer);
+    if (!parser) {
+        lexer_free(lexer);
+        free(source);
+        return NULL;
+    }
+
+    AstNode *ast = parser_parse(parser);
+    if (!ast) {
+        parser_free(parser);
+        lexer_free(lexer);
+        free(source);
+        return NULL;
+    }
+
+    Compiler *compiler = compiler_new();
+    if (!compiler) {
+        ast_free(ast);
+        parser_free(parser);
+        lexer_free(lexer);
+        free(source);
+        return NULL;
+    }
+
+    compiler_set_source_path(compiler, path);
+
+    Bytecode *code = compiler_compile(compiler, ast);
+    if (!code) {
+        compiler_free(compiler);
+        ast_free(ast);
+        parser_free(parser);
+        lexer_free(lexer);
+        free(source);
+        return NULL;
+    }
+
+    compiler_free(compiler);
+    ast_free(ast);
+    parser_free(parser);
+    lexer_free(lexer);
+    free(source);
+
+    ModuleVersion *ver = module_load(reg, name, code);
+
+    bytecode_release(code);
+
+    return ver;
 }
+#else
+ModuleVersion *module_load_file(ModuleRegistry *reg, const char *name, const char *path) {
+    (void)reg; (void)name; (void)path;
+    return NULL;  /* Compiler not available */
+}
+#endif /* AGIM_WITH_COMPILER */
 
 ModuleVersion *module_get(ModuleRegistry *reg, const char *name) {
     if (!reg || !name) return NULL;
@@ -283,7 +371,6 @@ ModuleVersion *module_get_version(ModuleRegistry *reg, const char *name, uint32_
     if (mod) {
         pthread_mutex_lock(&mod->lock);
 
-        /* Search current and old versions */
         if (mod->current && mod->current->version == version) {
             ver = mod->current;
         } else {
@@ -316,7 +403,6 @@ const Module **module_list(ModuleRegistry *reg, size_t *count) {
 
     pthread_rwlock_rdlock(&reg->lock);
     *count = reg->count;
-    /* Note: Caller should not free the returned array */
     pthread_rwlock_unlock(&reg->lock);
 
     return (const Module **)reg->modules;
@@ -331,16 +417,14 @@ bool module_unload(ModuleRegistry *reg, const char *name) {
         if (strcmp(reg->modules[i]->name, name) == 0) {
             Module *mod = reg->modules[i];
 
-            /* Check if any blocks are still using it */
             pthread_mutex_lock(&mod->lock);
             if (mod->block_count > 0) {
                 pthread_mutex_unlock(&mod->lock);
                 pthread_rwlock_unlock(&reg->lock);
-                return false;  /* Can't unload - still in use */
+                return false;
             }
             pthread_mutex_unlock(&mod->lock);
 
-            /* Remove from registry */
             reg->modules[i] = reg->modules[--reg->count];
 
             module_free(mod);
@@ -354,9 +438,7 @@ bool module_unload(ModuleRegistry *reg, const char *name) {
     return false;
 }
 
-/*============================================================================
- * Hot Reload
- *============================================================================*/
+/* Hot Reload */
 
 UpgradeConfig upgrade_config_default(void) {
     return (UpgradeConfig){
@@ -382,13 +464,11 @@ bool module_trigger_upgrade(ModuleRegistry *reg, const char *name, const Upgrade
     pthread_mutex_lock(&mod->lock);
     pthread_rwlock_unlock(&reg->lock);
 
-    /* Check if migration is required but not available */
     if (cfg.require_migrate && mod->current && !module_version_has_migrate(mod->current)) {
         pthread_mutex_unlock(&mod->lock);
         return false;
     }
 
-    /* Mark all blocks for upgrade */
     ModuleBlock *mb = mod->blocks;
     while (mb) {
         mb->pending_upgrade = true;
@@ -413,7 +493,6 @@ bool module_register_block(ModuleRegistry *reg, const char *name, uint64_t block
     pthread_mutex_lock(&mod->lock);
     pthread_rwlock_unlock(&reg->lock);
 
-    /* Check if already registered */
     ModuleBlock *mb = mod->blocks;
     while (mb) {
         if (mb->block_pid == block_pid) {
@@ -423,7 +502,6 @@ bool module_register_block(ModuleRegistry *reg, const char *name, uint64_t block
         mb = mb->next;
     }
 
-    /* Add new registration */
     mb = malloc(sizeof(ModuleBlock));
     if (!mb) {
         pthread_mutex_unlock(&mod->lock);
@@ -523,7 +601,6 @@ bool module_apply_upgrade(ModuleRegistry *reg, const char *name, uint64_t block_
     pthread_mutex_lock(&mod->lock);
     pthread_rwlock_unlock(&reg->lock);
 
-    /* Find the block */
     ModuleBlock *mb = mod->blocks;
     while (mb) {
         if (mb->block_pid == block_pid) {
@@ -537,7 +614,6 @@ bool module_apply_upgrade(ModuleRegistry *reg, const char *name, uint64_t block_
         return false;
     }
 
-    /* Get the old and new versions */
     ModuleVersion *old_ver = mb->version;
     ModuleVersion *new_ver = mod->current;
 
@@ -547,11 +623,9 @@ bool module_apply_upgrade(ModuleRegistry *reg, const char *name, uint64_t block_
         return false;
     }
 
-    /* Migrate state */
     uint32_t old_version = old_ver ? old_ver->version : 0;
     *new_state = module_version_migrate(new_ver, old_state, old_version);
 
-    /* Update block's version */
     if (old_ver) {
         module_version_release(old_ver);
     }
@@ -576,17 +650,17 @@ bool module_rollback(ModuleRegistry *reg, const char *name) {
     pthread_mutex_lock(&mod->lock);
     pthread_rwlock_unlock(&reg->lock);
 
-    if (!mod->old) {
+    /* Check if there's a previous version to rollback to */
+    if (!mod->current || !mod->current->prev_version) {
         pthread_mutex_unlock(&mod->lock);
-        return false;  /* No previous version to rollback to */
+        return false;
     }
 
-    /* Swap current and old */
-    ModuleVersion *current = mod->current;
-    mod->current = mod->old;
-    mod->old = current;
+    /* Rollback to previous version */
+    mod->old = mod->current;
+    mod->current = mod->current->prev_version;
 
-    /* Mark all blocks for upgrade (to the rolled-back version) */
+    /* Mark all blocks for upgrade */
     ModuleBlock *mb = mod->blocks;
     while (mb) {
         mb->pending_upgrade = true;
@@ -597,17 +671,56 @@ bool module_rollback(ModuleRegistry *reg, const char *name) {
     return true;
 }
 
-/*============================================================================
- * Block Integration
- *============================================================================*/
+/* Block Integration */
+
+static ModuleRegistry *g_module_registry = NULL;
+
+void module_registry_set_global(ModuleRegistry *reg) {
+    g_module_registry = reg;
+}
+
+ModuleRegistry *module_registry_get_global(void) {
+    return g_module_registry;
+}
 
 void module_apply_upgrade_block(Block *block) {
-    /* This would be called from safe points in the VM.
-     * For now, it's a placeholder that would:
-     * 1. Find the module this block uses
-     * 2. Call module_apply_upgrade
-     * 3. Update the block's bytecode pointer
-     * 4. Migrate any state if needed
-     */
-    (void)block;
+    if (!block || !block->pending_upgrade) {
+        return;
+    }
+
+    if (!g_module_registry) {
+        return;
+    }
+
+    if (!block->module_name) {
+        block->pending_upgrade = false;
+        return;
+    }
+
+    Value *old_state = NULL;
+    if (block->vm) {
+        old_state = block->vm->globals;
+    }
+
+    Value *new_state = NULL;
+    bool success = module_apply_upgrade(g_module_registry, block->module_name,
+                                         block->pid, old_state, &new_state);
+
+    if (success) {
+        ModuleVersion *new_ver = module_get(g_module_registry, block->module_name);
+        if (new_ver && new_ver->code) {
+            block->code = new_ver->code;
+
+            if (block->vm) {
+                vm_load(block->vm, new_ver->code);
+
+                if (new_state && new_state != old_state) {
+                    block->vm->globals = new_state;
+                }
+            }
+        }
+        module_version_release(new_ver);
+    }
+
+    block->pending_upgrade = false;
 }

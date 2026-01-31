@@ -10,6 +10,7 @@
 #include "../test_common.h"
 #include "lang/agim.h"
 #include "vm/vm.h"
+#include "vm/bytecode.h"
 
 static int64_t run_and_get_int(const char *source) {
     const char *error = NULL;
@@ -75,9 +76,7 @@ static const char *run_and_get_string(const char *source) {
     return buffer;
 }
 
-/*============================================================================
- * Basic Expression Tests
- *============================================================================*/
+/* Basic Expression Tests */
 
 void test_literals(void) {
     printf("  Testing literals...\n");
@@ -128,9 +127,7 @@ void test_logical(void) {
     ASSERT_EQ(1, run_and_get_int("not false ? 1 : 0"));
 }
 
-/*============================================================================
- * Variable Tests
- *============================================================================*/
+/* Variable Tests */
 
 void test_let(void) {
     printf("  Testing let...\n");
@@ -146,9 +143,7 @@ void test_const(void) {
     ASSERT_EQ(42, run_and_get_int("const x = 42\nx"));
 }
 
-/*============================================================================
- * Control Flow Tests
- *============================================================================*/
+/* Control Flow Tests */
 
 void test_if(void) {
     printf("  Testing if...\n");
@@ -199,9 +194,7 @@ void test_while_break(void) {
     ASSERT_EQ(55, run_and_get_int(source));
 }
 
-/*============================================================================
- * Function Tests
- *============================================================================*/
+/* Function Tests */
 
 void test_fn_simple(void) {
     printf("  Testing simple function...\n");
@@ -252,9 +245,7 @@ void test_fn_multiple(void) {
     ASSERT_EQ(20, run_and_get_int(source));
 }
 
-/*============================================================================
- * String Tests
- *============================================================================*/
+/* String Tests */
 
 void test_string_concat(void) {
     printf("  Testing string concatenation...\n");
@@ -273,9 +264,7 @@ void test_string_in_fn(void) {
     ASSERT_STR_EQ("Hello, World!", run_and_get_string(source));
 }
 
-/*============================================================================
- * Array Tests
- *============================================================================*/
+/* Array Tests */
 
 void test_array_literal(void) {
     printf("  Testing array literal...\n");
@@ -295,9 +284,7 @@ void test_array_assign(void) {
     ASSERT_EQ(42, run_and_get_int(source));
 }
 
-/*============================================================================
- * Map Tests
- *============================================================================*/
+/* Map Tests */
 
 void test_map_literal(void) {
     printf("  Testing map literal...\n");
@@ -316,9 +303,134 @@ void test_map_assign(void) {
     ASSERT_EQ(42, run_and_get_int(source));
 }
 
-/*============================================================================
- * Main
- *============================================================================*/
+/* Compound Assignment Tests */
+
+void test_compound_index_assign(void) {
+    printf("  Testing compound index assignment...\n");
+
+    /* += */
+    const char *source1 =
+        "let arr = [10, 20, 30]\n"
+        "arr[1] += 5\n"
+        "arr[1]";
+    ASSERT_EQ(25, run_and_get_int(source1));
+
+    /* -= */
+    const char *source2 =
+        "let arr = [10, 20, 30]\n"
+        "arr[0] -= 3\n"
+        "arr[0]";
+    ASSERT_EQ(7, run_and_get_int(source2));
+
+    /* *= */
+    const char *source3 =
+        "let arr = [10, 20, 30]\n"
+        "arr[2] *= 2\n"
+        "arr[2]";
+    ASSERT_EQ(60, run_and_get_int(source3));
+
+    /* /= */
+    const char *source4 =
+        "let arr = [10, 20, 30]\n"
+        "arr[1] /= 4\n"
+        "arr[1]";
+    ASSERT_EQ(5, run_and_get_int(source4));
+}
+
+void test_compound_member_assign(void) {
+    printf("  Testing compound member assignment...\n");
+
+    /* += */
+    const char *source1 =
+        "let obj = {x: 100}\n"
+        "obj.x += 50\n"
+        "obj.x";
+    ASSERT_EQ(150, run_and_get_int(source1));
+
+    /* -= */
+    const char *source2 =
+        "let obj = {val: 200}\n"
+        "obj.val -= 75\n"
+        "obj.val";
+    ASSERT_EQ(125, run_and_get_int(source2));
+
+    /* *= */
+    const char *source3 =
+        "let obj = {n: 7}\n"
+        "obj.n *= 6\n"
+        "obj.n";
+    ASSERT_EQ(42, run_and_get_int(source3));
+
+    /* /= */
+    const char *source4 =
+        "let obj = {score: 100}\n"
+        "obj.score /= 5\n"
+        "obj.score";
+    ASSERT_EQ(20, run_and_get_int(source4));
+}
+
+/* Tool Decorator Tests */
+
+void test_tool_basic(void) {
+    printf("  Testing basic tool decorator...\n");
+
+    const char *source =
+        "@tool(description: \"Add two numbers\")\n"
+        "fn add(a: int, b: int) -> int {\n"
+        "    return a + b\n"
+        "}\n"
+        "add(3, 5)";
+
+    const char *error = NULL;
+    Bytecode *code = agim_compile(source, &error);
+    ASSERT(code != NULL);
+
+    /* Check tool was registered */
+    size_t tool_count;
+    const ToolInfo *tools = bytecode_get_tools(code, &tool_count);
+    ASSERT_EQ(1, (int)tool_count);
+    ASSERT_STR_EQ("add", tools[0].name);
+    ASSERT_STR_EQ("Add two numbers", tools[0].description);
+    ASSERT_EQ(2, (int)tools[0].param_count);
+
+    bytecode_free(code);
+}
+
+void test_tool_params_map(void) {
+    printf("  Testing tool decorator with params map...\n");
+
+    const char *source =
+        "@tool(description: \"Greet someone\", params: {\n"
+        "    name: \"The name to greet\",\n"
+        "    count: \"How many times\"\n"
+        "})\n"
+        "fn greet(name: string, count: int) {\n"
+        "    return name\n"
+        "}\n"
+        "greet(\"World\", 1)";
+
+    const char *error = NULL;
+    Bytecode *code = agim_compile(source, &error);
+    ASSERT(code != NULL);
+
+    /* Check tool was registered with param descriptions */
+    size_t tool_count;
+    const ToolInfo *tools = bytecode_get_tools(code, &tool_count);
+    ASSERT_EQ(1, (int)tool_count);
+    ASSERT_STR_EQ("greet", tools[0].name);
+    ASSERT_STR_EQ("Greet someone", tools[0].description);
+    ASSERT_EQ(2, (int)tools[0].param_count);
+
+    /* Check parameter descriptions */
+    ASSERT_STR_EQ("name", tools[0].params[0].name);
+    ASSERT_STR_EQ("The name to greet", tools[0].params[0].description);
+    ASSERT_STR_EQ("count", tools[0].params[1].name);
+    ASSERT_STR_EQ("How many times", tools[0].params[1].description);
+
+    bytecode_free(code);
+}
+
+/* Main */
 
 int main(void) {
     printf("\n");
@@ -360,6 +472,14 @@ int main(void) {
     printf("\nMap tests:\n");
     RUN_TEST(test_map_literal);
     RUN_TEST(test_map_assign);
+
+    printf("\nCompound assignment tests:\n");
+    RUN_TEST(test_compound_index_assign);
+    RUN_TEST(test_compound_member_assign);
+
+    printf("\nTool decorator tests:\n");
+    RUN_TEST(test_tool_basic);
+    RUN_TEST(test_tool_params_map);
 
     printf("\n=================================================\n");
     return TEST_RESULT();

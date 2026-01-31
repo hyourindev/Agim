@@ -6,33 +6,14 @@
  */
 
 #include "net/url.h"
+#include "util/alloc.h"
 
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-/*============================================================================
- * Helper Functions
- *============================================================================*/
-
-static char *strndup_safe(const char *s, size_t n) {
-    if (!s) return NULL;
-    char *result = malloc(n + 1);
-    if (!result) return NULL;
-    memcpy(result, s, n);
-    result[n] = '\0';
-    return result;
-}
-
-static char *strdup_safe(const char *s) {
-    if (!s) return NULL;
-    return strndup_safe(s, strlen(s));
-}
-
-/*============================================================================
- * URL Parsing
- *============================================================================*/
+/* URL Parsing */
 
 ParsedURL *url_parse(const char *url) {
     if (!url || !*url) return NULL;
@@ -50,7 +31,7 @@ ParsedURL *url_parse(const char *url) {
     }
 
     size_t scheme_len = (size_t)(scheme_end - p);
-    parsed->scheme = strndup_safe(p, scheme_len);
+    parsed->scheme = agim_strndup(p, scheme_len);
     if (!parsed->scheme) {
         url_free(parsed);
         return NULL;
@@ -92,7 +73,7 @@ ParsedURL *url_parse(const char *url) {
 
         /* Extract host without brackets */
         size_t host_len = (size_t)(bracket_end - host_start);
-        parsed->host = strndup_safe(host_start, host_len);
+        parsed->host = agim_strndup(host_start, host_len);
 
         p = bracket_end + 1;
         if (*p == ':') {
@@ -110,7 +91,7 @@ ParsedURL *url_parse(const char *url) {
             return NULL; /* Empty host */
         }
 
-        parsed->host = strndup_safe(p, (size_t)(host_end - p));
+        parsed->host = agim_strndup(p, (size_t)(host_end - p));
 
         p = host_end;
         if (*p == ':') {
@@ -141,10 +122,10 @@ ParsedURL *url_parse(const char *url) {
         while (*path_end && *path_end != '?') {
             path_end++;
         }
-        parsed->path = strndup_safe(p, (size_t)(path_end - p));
+        parsed->path = agim_strndup(p, (size_t)(path_end - p));
         p = path_end;
     } else {
-        parsed->path = strdup_safe("/");
+        parsed->path = agim_strdup("/");
     }
 
     if (!parsed->path) {
@@ -156,7 +137,7 @@ ParsedURL *url_parse(const char *url) {
     if (*p == '?') {
         p++; /* Skip '?' */
         if (*p) {
-            parsed->query = strdup_safe(p);
+            parsed->query = agim_strdup(p);
         }
     }
 

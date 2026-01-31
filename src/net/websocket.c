@@ -15,7 +15,6 @@
 #include "net/url.h"
 #include "net/http_parser.h"
 
-#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,18 +29,14 @@
     #include <unistd.h>
 #endif
 
-/*============================================================================
- * Constants
- *============================================================================*/
+/* Constants */
 
 #define WS_TIMEOUT_MS 30000
 #define WS_BUFFER_SIZE 8192
 #define WS_MAX_HEADER_SIZE 14
 #define WS_GUID "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
-/*============================================================================
- * WebSocket Structure
- *============================================================================*/
+/* WebSocket Structure */
 
 struct WebSocket {
     TCPSocket *tcp;             /* Plain TCP socket (for ws://) */
@@ -60,9 +55,7 @@ struct WebSocket {
     int fragment_opcode;
 };
 
-/*============================================================================
- * Secure Random
- *============================================================================*/
+/* Secure Random */
 
 /**
  * Generate cryptographically secure random bytes.
@@ -89,9 +82,7 @@ static bool secure_random(void *buf, size_t len) {
 #endif
 }
 
-/*============================================================================
- * Base64 Encoding
- *============================================================================*/
+/* Base64 Encoding */
 
 static const char base64_table[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -118,11 +109,9 @@ static char *base64_encode(const void *data, size_t len) {
     return output;
 }
 
-/*============================================================================
- * SHA-1 (for WebSocket handshake)
- *============================================================================*/
+/* SHA-1 (for WebSocket handshake) */
 
-/* Simple SHA-1 implementation for WebSocket accept key verification */
+/* SHA-1 implementation for WebSocket accept key verification (RFC 3174) */
 typedef struct {
     uint32_t state[5];
     uint64_t count;
@@ -253,9 +242,7 @@ static char *sha1_base64(const char *input) {
     return base64_encode(digest, 20);
 }
 
-/*============================================================================
- * Socket I/O Wrappers
- *============================================================================*/
+/* Socket I/O Wrappers */
 
 /**
  * Get the underlying file descriptor for poll/select.
@@ -318,9 +305,7 @@ static bool ws_socket_write_all(WebSocket *ws, const void *data, size_t len) {
     }
 }
 
-/*============================================================================
- * WebSocket Frame Encoding
- *============================================================================*/
+/* WebSocket Frame Encoding */
 
 /**
  * Send a WebSocket frame.
@@ -395,9 +380,7 @@ static bool ws_send_frame(WebSocket *ws, uint8_t opcode, const void *data, size_
     return true;
 }
 
-/*============================================================================
- * WebSocket Frame Decoding
- *============================================================================*/
+/* WebSocket Frame Decoding */
 
 /**
  * Read exactly n bytes from socket.
@@ -511,9 +494,7 @@ static int ws_recv_frame(WebSocket *ws, char **out_data, size_t *out_len, bool *
     return opcode;
 }
 
-/*============================================================================
- * Connection
- *============================================================================*/
+/* Connection */
 
 WebSocket *ws_connect(const char *url, int timeout_ms, WSError *error) {
     if (!url) {
@@ -527,24 +508,26 @@ WebSocket *ws_connect(const char *url, int timeout_ms, WSError *error) {
 
     if (strncmp(url, "wss://", 6) == 0) {
         is_secure = true;
-        /* Convert wss:// to https:// for URL parsing */
-        char *temp = malloc(strlen(url) + 2);
+        /* Convert wss:// to https:// for URL parsing
+         * wss:// (6 chars) -> https:// (8 chars) = +2 chars needed */
+        size_t new_len = strlen(url) - 6 + 8 + 1;  /* url without wss:// + https:// + null */
+        char *temp = malloc(new_len);
         if (!temp) {
             if (error) *error = WS_ERROR_MEMORY;
             return NULL;
         }
-        strcpy(temp, "https://");
-        strcat(temp, url + 6);
+        snprintf(temp, new_len, "https://%s", url + 6);
         http_url = temp;
     } else if (strncmp(url, "ws://", 5) == 0) {
-        /* Convert ws:// to http:// for URL parsing */
-        char *temp = malloc(strlen(url) + 1);
+        /* Convert ws:// to http:// for URL parsing
+         * ws:// (5 chars) -> http:// (7 chars) = +2 chars needed */
+        size_t new_len = strlen(url) - 5 + 7 + 1;  /* url without ws:// + http:// + null */
+        char *temp = malloc(new_len);
         if (!temp) {
             if (error) *error = WS_ERROR_MEMORY;
             return NULL;
         }
-        strcpy(temp, "http://");
-        strcat(temp, url + 5);
+        snprintf(temp, new_len, "http://%s", url + 5);
         http_url = temp;
     } else {
         if (error) *error = WS_ERROR_URL;
@@ -747,9 +730,7 @@ void ws_close(WebSocket *ws, uint16_t code, const char *reason) {
     free(ws);
 }
 
-/*============================================================================
- * Send
- *============================================================================*/
+/* Send */
 
 bool ws_send_text(WebSocket *ws, const char *message) {
     if (!ws || !message) return false;
@@ -767,9 +748,7 @@ bool ws_send_ping(WebSocket *ws, const void *data, size_t len) {
     return ws_send_frame(ws, WS_OPCODE_PING, data, len, true);
 }
 
-/*============================================================================
- * Receive
- *============================================================================*/
+/* Receive */
 
 char *ws_recv(WebSocket *ws, size_t *len, int *opcode, int timeout_ms) {
     if (!ws || !ws->connected) {
@@ -906,9 +885,7 @@ char *ws_recv(WebSocket *ws, size_t *len, int *opcode, int timeout_ms) {
     }
 }
 
-/*============================================================================
- * Status
- *============================================================================*/
+/* Status */
 
 bool ws_is_connected(WebSocket *ws) {
     return ws && ws->connected;

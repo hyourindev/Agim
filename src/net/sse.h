@@ -13,9 +13,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-/*============================================================================
- * Types
- *============================================================================*/
+/* Types */
 
 typedef struct SSEParser SSEParser;
 
@@ -31,9 +29,7 @@ typedef struct {
     int retry;          /* Reconnection time in ms (-1 if not set) */
 } SSEEvent;
 
-/*============================================================================
- * Parser Lifecycle
- *============================================================================*/
+/* Parser Lifecycle */
 
 /**
  * Create a new SSE parser.
@@ -50,9 +46,7 @@ void sse_parser_free(SSEParser *parser);
  */
 void sse_parser_reset(SSEParser *parser);
 
-/*============================================================================
- * Parsing
- *============================================================================*/
+/* Parsing */
 
 /**
  * Feed data to the SSE parser.

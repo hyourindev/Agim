@@ -28,9 +28,7 @@
 #include "runtime/scheduler.h"
 #include "vm/primitives.h"
 
-/*============================================================================
- * Timing Utilities
- *============================================================================*/
+/* Timing Utilities */
 
 static double get_time_ms(void) {
     struct timespec ts;
@@ -46,10 +44,7 @@ static double get_time_ms(void) {
     printf("  %-30s %8.2f ms  %12.0f ops/sec\n", name, _bench_time, _ops_per_sec); \
 } while(0)
 
-/*============================================================================
- * Benchmark: Arithmetic Loop
- * Tests: OP_CONST, OP_ADD, OP_SUB, OP_LT, OP_JUMP_IF, OP_LOOP
- *============================================================================*/
+/* Benchmark: Arithmetic Loop */
 
 static Bytecode *make_arithmetic_loop(int iterations) {
     Bytecode *code = bytecode_new();
@@ -130,19 +125,13 @@ static void bench_arithmetic(int iterations) {
     bytecode_free(code);
 }
 
-/*============================================================================
- * Benchmark: Function Calls
- * Tests: OP_CALL, OP_RETURN, call stack management
- *============================================================================*/
+/* Benchmark: Function Calls */
 
 /* Note: Function call benchmarks are complex without a compiler.
  * The recursive fib implementation is omitted for now - would need
  * proper compiler support to set up call frames correctly. */
 
-/*============================================================================
- * Benchmark: Data Structures
- * Tests: OP_ARRAY_NEW, OP_ARRAY_PUSH, OP_MAP_NEW, OP_MAP_SET, OP_MAP_GET
- *============================================================================*/
+/* Benchmark: Data Structures */
 
 static Bytecode *make_array_benchmark(int size) {
     Bytecode *code = bytecode_new();
@@ -242,9 +231,7 @@ static void bench_map(int size) {
     bytecode_free(code);
 }
 
-/*============================================================================
- * Benchmark: Scheduler / Multiple Blocks
- *============================================================================*/
+/* Benchmark: Scheduler / Multiple Blocks */
 
 static Bytecode *make_simple_block(int64_t value) {
     Bytecode *code = bytecode_new();
@@ -283,9 +270,7 @@ static void bench_scheduler(int num_blocks) {
     free(codes);
 }
 
-/*============================================================================
- * Benchmark: Message Passing
- *============================================================================*/
+/* Benchmark: Message Passing */
 
 static Bytecode *make_sender(Pid target, int count) {
     Bytecode *code = bytecode_new();
@@ -428,9 +413,7 @@ static void bench_message_passing(int num_messages) {
     bytecode_free(send_code);
 }
 
-/*============================================================================
- * Benchmark: Primitives
- *============================================================================*/
+/* Benchmark: Primitives */
 
 static void bench_primitives_set(int iterations) {
     PrimitivesRuntime *rt = primitives_new();
@@ -472,9 +455,7 @@ static void bench_primitives_get(int iterations) {
     primitives_free(rt);
 }
 
-/*============================================================================
- * Benchmark: GC
- *============================================================================*/
+/* Benchmark: GC */
 
 static void bench_gc(int allocations) {
     GCConfig config = gc_config_default();
@@ -505,9 +486,7 @@ static void bench_gc(int allocations) {
     vm_free(vm);
 }
 
-/*============================================================================
- * Main
- *============================================================================*/
+/* Main */
 
 int main(int argc, char **argv) {
     int scale = 1;

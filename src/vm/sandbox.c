@@ -17,15 +17,12 @@
 #include <string.h>
 #include <unistd.h>
 
-/*============================================================================
- * Global Sandbox
- *============================================================================*/
+/* Global Sandbox */
 
 static Sandbox *g_sandbox = NULL;
 
 Sandbox *sandbox_global(void) {
     if (!g_sandbox) {
-        /* Create a permissive sandbox for AI agent workloads */
         g_sandbox = sandbox_new_permissive();
     }
     return g_sandbox;
@@ -38,9 +35,7 @@ void sandbox_set_global(Sandbox *sandbox) {
     g_sandbox = sandbox;
 }
 
-/*============================================================================
- * Sandbox Lifecycle
- *============================================================================*/
+/* Sandbox Lifecycle */
 
 Sandbox *sandbox_new(void) {
     Sandbox *sandbox = agim_alloc(sizeof(Sandbox));
@@ -85,16 +80,12 @@ void sandbox_free(Sandbox *sandbox) {
     agim_free(sandbox);
 }
 
-/*============================================================================
- * Sandbox Configuration
- *============================================================================*/
+/* Sandbox Configuration */
 
 static bool add_to_list(char ***list, size_t *count, size_t *capacity, const char *path) {
-    /* Canonicalize the path first */
     char *canonical = sandbox_canonicalize(path);
     if (!canonical) return false;
 
-    /* Grow array if needed */
     if (*count >= *capacity) {
         size_t new_capacity = *capacity == 0 ? 8 : *capacity * 2;
         char **new_list = agim_realloc(*list, sizeof(char *) * new_capacity);
@@ -136,22 +127,16 @@ void sandbox_enable(Sandbox *sandbox) {
     if (sandbox) sandbox->allow_all = false;
 }
 
-/*============================================================================
- * Path Utilities
- *============================================================================*/
+/* Path Utilities */
 
 char *sandbox_canonicalize(const char *path) {
     if (!path) return NULL;
 
-    /* Use realpath for existing paths */
     char *resolved = realpath(path, NULL);
     if (resolved) return resolved;
 
-    /* For non-existing paths (e.g., files to create), resolve the parent */
-    /* Find the last slash */
     const char *last_slash = strrchr(path, '/');
     if (!last_slash) {
-        /* No slash - path is relative to CWD */
         char *cwd = sandbox_getcwd();
         if (!cwd) return NULL;
 
@@ -167,10 +152,8 @@ char *sandbox_canonicalize(const char *path) {
         return result;
     }
 
-    /* Extract parent directory */
     size_t parent_len = (size_t)(last_slash - path);
     if (parent_len == 0) {
-        /* Root directory */
         parent_len = 1;
     }
 
@@ -179,12 +162,10 @@ char *sandbox_canonicalize(const char *path) {
     memcpy(parent, path, parent_len);
     parent[parent_len] = '\0';
 
-    /* Resolve the parent */
     char *resolved_parent = realpath(parent, NULL);
     agim_free(parent);
     if (!resolved_parent) return NULL;
 
-    /* Combine resolved parent with filename */
     const char *filename = last_slash + 1;
     size_t resolved_len = strlen(resolved_parent);
     size_t filename_len = strlen(filename);
@@ -204,18 +185,11 @@ bool sandbox_path_within(const char *parent_path, const char *child_path) {
     size_t parent_len = strlen(parent_path);
     size_t child_len = strlen(child_path);
 
-    /* Child must be at least as long as parent */
     if (child_len < parent_len) return false;
-
-    /* Check prefix match */
     if (strncmp(parent_path, child_path, parent_len) != 0) return false;
-
-    /* Child must either be exactly parent or have a slash after parent */
     if (child_len == parent_len) return true;
     if (child_path[parent_len] == '/') return true;
 
-    /* Handle case where parent doesn't end with slash but child continues */
-    /* e.g., parent="/foo" should not match child="/foobar" */
     return false;
 }
 
@@ -223,7 +197,6 @@ char *sandbox_getcwd(void) {
     char *cwd = getcwd(NULL, 0);
     if (cwd) return cwd;
 
-    /* Fallback for systems where getcwd(NULL, 0) doesn't work */
     char buffer[PATH_MAX];
     if (getcwd(buffer, PATH_MAX)) {
         return strdup(buffer);
@@ -231,9 +204,7 @@ char *sandbox_getcwd(void) {
     return NULL;
 }
 
-/*============================================================================
- * Path Validation
- *============================================================================*/
+/* Path Validation */
 
 static bool check_against_list(char **list, size_t count, const char *canonical_path) {
     for (size_t i = 0; i < count; i++) {
@@ -254,12 +225,10 @@ bool sandbox_check_read(Sandbox *sandbox, const char *path) {
 
     bool allowed = false;
 
-    /* Check explicit allow list */
     if (check_against_list(sandbox->allowed_read_dirs, sandbox->read_count, canonical)) {
         allowed = true;
     }
 
-    /* Check CWD if enabled */
     if (!allowed && sandbox->allow_cwd_read) {
         char *cwd = sandbox_getcwd();
         if (cwd) {
@@ -282,12 +251,10 @@ bool sandbox_check_write(Sandbox *sandbox, const char *path) {
 
     bool allowed = false;
 
-    /* Check explicit allow list */
     if (check_against_list(sandbox->allowed_write_dirs, sandbox->write_count, canonical)) {
         allowed = true;
     }
 
-    /* Check CWD if enabled */
     if (!allowed && sandbox->allow_cwd_write) {
         char *cwd = sandbox_getcwd();
         if (cwd) {
@@ -311,12 +278,10 @@ char *sandbox_resolve_read(Sandbox *sandbox, const char *path) {
         return canonical;
     }
 
-    /* Check explicit allow list */
     if (check_against_list(sandbox->allowed_read_dirs, sandbox->read_count, canonical)) {
         return canonical;
     }
 
-    /* Check CWD if enabled */
     if (sandbox->allow_cwd_read) {
         char *cwd = sandbox_getcwd();
         if (cwd) {
@@ -343,12 +308,10 @@ char *sandbox_resolve_write(Sandbox *sandbox, const char *path) {
         return canonical;
     }
 
-    /* Check explicit allow list */
     if (check_against_list(sandbox->allowed_write_dirs, sandbox->write_count, canonical)) {
         return canonical;
     }
 
-    /* Check CWD if enabled */
     if (sandbox->allow_cwd_write) {
         char *cwd = sandbox_getcwd();
         if (cwd) {

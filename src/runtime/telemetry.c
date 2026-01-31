@@ -9,21 +9,13 @@
 
 #include "runtime/telemetry.h"
 #include "runtime/scheduler.h"
+#include "runtime/block.h"
+#include "runtime/timer.h"
+#include "vm/gc.h"
 
 #include <stdlib.h>
 #include <string.h>
-#include <sys/time.h>
 #include <time.h>
-
-/*============================================================================
- * Time Helpers
- *============================================================================*/
-
-static uint64_t current_time_ms(void) {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (uint64_t)tv.tv_sec * 1000 + (uint64_t)tv.tv_usec / 1000;
-}
 
 static uint64_t current_time_ns(void) {
     struct timespec ts;
@@ -31,14 +23,12 @@ static uint64_t current_time_ns(void) {
     return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
 }
 
-/*============================================================================
- * Block Statistics
- *============================================================================*/
+/* Block Statistics */
 
 void stats_init(BlockStats *stats) {
     if (!stats) return;
     memset(stats, 0, sizeof(BlockStats));
-    stats->started_at = current_time_ms();
+    stats->started_at = timer_current_time_ms();
 }
 
 void stats_record_send(BlockStats *stats) {
@@ -77,12 +67,10 @@ void stats_record_gc(BlockStats *stats, size_t bytes_collected) {
 
 uint64_t stats_uptime_ms(const BlockStats *stats) {
     if (!stats) return 0;
-    return current_time_ms() - stats->started_at;
+    return timer_current_time_ms() - stats->started_at;
 }
 
-/*============================================================================
- * Trace Buffer
- *============================================================================*/
+/* Trace Buffer */
 
 static TraceBuffer *trace_buffer_new(size_t capacity) {
     TraceBuffer *buf = calloc(1, sizeof(TraceBuffer));
@@ -119,9 +107,7 @@ static void trace_buffer_push(TraceBuffer *buf, const TraceEvent *event) {
     }
 }
 
-/*============================================================================
- * Tracer
- *============================================================================*/
+/* Tracer */
 
 Tracer *tracer_new(TraceFlags flags, size_t buffer_capacity) {
     Tracer *tracer = calloc(1, sizeof(Tracer));
@@ -185,27 +171,20 @@ void tracer_record(Tracer *tracer, TraceEventType type, Pid source,
         .next = NULL,
     };
 
-    /* Copy type-specific data */
     if (data) {
         switch (type) {
         case TRACE_EVENT_SEND:
         case TRACE_EVENT_RECEIVE:
-            /* data is (msg_type, msg_size) */
-            break;
         case TRACE_EVENT_EXIT:
-            /* data is exit info */
-            break;
         default:
             break;
         }
     }
 
-    /* Store in buffer */
     if (tracer->buffer) {
         trace_buffer_push(tracer->buffer, &event);
     }
 
-    /* Invoke callback */
     if (tracer->callback) {
         tracer->callback(&event, tracer->callback_ctx);
     }
@@ -390,9 +369,7 @@ void tracer_record_return(Tracer *tracer, Pid pid, const char *func_name, int de
     }
 }
 
-/*============================================================================
- * Buffer Access
- *============================================================================*/
+/* Buffer Access */
 
 TraceEvent *tracer_get_events(Tracer *tracer, size_t *count) {
     if (!tracer || !tracer->buffer || !count) {
@@ -413,7 +390,6 @@ TraceEvent *tracer_get_events(Tracer *tracer, size_t *count) {
         return NULL;
     }
 
-    /* Copy events (may wrap around) */
     size_t write_idx = atomic_load(&buf->write_index);
     size_t start = (n == buf->capacity) ? (write_idx % buf->capacity) : 0;
 
@@ -432,20 +408,54 @@ void tracer_clear(Tracer *tracer) {
     atomic_store(&tracer->buffer->count, 0);
 }
 
-/*============================================================================
- * System-Wide Statistics
- *============================================================================*/
+/* System-Wide Statistics */
+
+typedef struct {
+    SystemStats *stats;
+} StatsAggContext;
+
+static void aggregate_block_stats(Block *block, void *ctx) {
+    StatsAggContext *agg = (StatsAggContext *)ctx;
+    if (!block || !agg->stats) return;
+
+    agg->stats->total_messages_sent += block->counters.messages_sent;
+    agg->stats->total_gc_cycles += block->counters.gc_collections;
+    agg->stats->total_yields += 1;
+
+    if (block->heap) {
+        agg->stats->total_heap_bytes += heap_used(block->heap);
+    }
+}
 
 void system_stats_get(Scheduler *sched, SystemStats *stats) {
     if (!sched || !stats) return;
 
     memset(stats, 0, sizeof(SystemStats));
 
-    /* Get scheduler stats */
     stats->active_blocks = scheduler_block_count(sched);
-    stats->uptime_ms = current_time_ms();  /* Would need to track start time */
+    stats->uptime_ms = timer_current_time_ms() - sched->start_time_ms;
 
-    /* TODO: Aggregate stats from all blocks
-     * This requires iterating over all blocks and summing their stats.
-     * For now, just return basic info. */
+    StatsAggContext ctx = { .stats = stats };
+
+    BlockRegistry *reg = &sched->registry;
+    for (size_t i = 0; i < REGISTRY_SHARDS; i++) {
+        RegistryShard *shard = &reg->shards[i];
+        pthread_mutex_lock(&shard->lock);
+
+        for (size_t j = 0; j < shard->capacity; j++) {
+            BlockEntry *entry = shard->buckets[j];
+            while (entry) {
+                if (entry->block) {
+                    aggregate_block_stats(entry->block, &ctx);
+                }
+                entry = entry->next;
+            }
+        }
+
+        pthread_mutex_unlock(&shard->lock);
+    }
+
+    stats->total_context_switches = atomic_load(&sched->context_switches);
+    stats->total_blocks_created = atomic_load(&sched->total_spawned);
+    stats->total_blocks_exited = atomic_load(&sched->total_terminated);
 }

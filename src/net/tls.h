@@ -15,9 +15,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-/*============================================================================
- * Types
- *============================================================================*/
+/* Types */
 
 typedef struct TLSSocket TLSSocket;
 
@@ -33,9 +31,7 @@ typedef enum {
     TLS_ERROR_TIMEOUT,      /* Operation timed out */
 } TLSError;
 
-/*============================================================================
- * Global Init
- *============================================================================*/
+/* Global Init */
 
 /**
  * Initialize TLS subsystem.
@@ -50,9 +46,7 @@ bool tls_init(void);
  */
 void tls_cleanup(void);
 
-/*============================================================================
- * Connection
- *============================================================================*/
+/* Connection */
 
 /**
  * Connect to a remote host over TLS.
@@ -71,9 +65,7 @@ TLSSocket *tls_connect(const char *host, uint16_t port,
  */
 void tls_close(TLSSocket *sock);
 
-/*============================================================================
- * I/O
- *============================================================================*/
+/* I/O */
 
 /**
  * Read data from TLS socket.
@@ -105,9 +97,7 @@ ssize_t tls_write(TLSSocket *sock, const void *data, size_t len);
  */
 bool tls_write_all(TLSSocket *sock, const void *data, size_t len);
 
-/*============================================================================
- * Info
- *============================================================================*/
+/* Info */
 
 /**
  * Get the underlying file descriptor (for select/poll).

@@ -11,9 +11,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/*============================================================================
- * Parsed URL Structure
- *============================================================================*/
+/* Parsed URL Structure */
 
 typedef struct {
     char *scheme;       /* "http" or "https" */
@@ -24,9 +22,7 @@ typedef struct {
     bool is_https;      /* Convenience flag */
 } ParsedURL;
 
-/*============================================================================
- * API
- *============================================================================*/
+/* API */
 
 /**
  * Parse a URL string into components.

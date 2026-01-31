@@ -14,9 +14,7 @@
 
 #include <string.h>
 
-/*============================================================================
- * Internal Helpers
- *============================================================================*/
+/* Internal Helpers */
 
 static MemoryEntry *memory_find(MemoryStore *store, const char *key) {
     size_t index = agim_hash_cstring(key) % store->capacity;
@@ -31,9 +29,7 @@ static MemoryEntry *memory_find(MemoryStore *store, const char *key) {
     return NULL;
 }
 
-/*============================================================================
- * Memory Store Lifecycle
- *============================================================================*/
+/* Memory Store Lifecycle */
 
 MemoryStore *memory_store_new(void) {
     MemoryStore *store = agim_alloc(sizeof(MemoryStore));
@@ -61,9 +57,7 @@ void memory_store_free(MemoryStore *store) {
     agim_free(store);
 }
 
-/*============================================================================
- * Memory Operations
- *============================================================================*/
+/* Memory Operations */
 
 Value *memory_get(MemoryStore *store, const char *key) {
     if (!store || !key) return NULL;

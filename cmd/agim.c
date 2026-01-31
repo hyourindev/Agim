@@ -8,6 +8,7 @@
 #include "lang/agim.h"
 #include "vm/vm.h"
 #include "vm/value.h"
+#include "vm/primitives.h"
 #include "runtime/scheduler.h"
 #include "runtime/block.h"
 
@@ -133,6 +134,14 @@ int main(int argc, char **argv) {
                 if (tools[i].description) {
                     printf("\n    \"%s\"", tools[i].description);
                 }
+                /* Show parameter descriptions if present */
+                for (size_t j = 0; j < tools[i].param_count; j++) {
+                    if (tools[i].params[j].description) {
+                        printf("\n    @param %s: %s",
+                               tools[i].params[j].name ? tools[i].params[j].name : "?",
+                               tools[i].params[j].description);
+                    }
+                }
                 printf("\n");
             }
         }
@@ -159,6 +168,13 @@ int main(int argc, char **argv) {
         fprintf(stderr, "agim: failed to create scheduler\n");
         bytecode_free(code);
         return 1;
+    }
+
+    /* Initialize primitives runtime for tool support */
+    PrimitivesRuntime *primitives = primitives_new();
+    if (primitives) {
+        primitives_register_builtins(primitives);
+        scheduler_set_primitives(scheduler, primitives);
     }
 
     /* Spawn main program as a block */
@@ -188,6 +204,9 @@ int main(int argc, char **argv) {
         }
     }
 
+    if (primitives) {
+        primitives_free(primitives);
+    }
     scheduler_free(scheduler);
     return exit_code;
 }

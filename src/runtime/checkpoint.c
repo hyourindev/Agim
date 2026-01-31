@@ -10,41 +10,33 @@
 #include "runtime/checkpoint.h"
 #include "runtime/block.h"
 #include "runtime/scheduler.h"
+#include "runtime/timer.h"
+
+#include <stdatomic.h>
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <sys/time.h>
 #include <errno.h>
+#include <dirent.h>
+#include <unistd.h>
 
-/*============================================================================
- * Time Helper
- *============================================================================*/
-
-static uint64_t current_time_ms(void) {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (uint64_t)tv.tv_sec * 1000 + (uint64_t)tv.tv_usec / 1000;
-}
-
-/*============================================================================
- * Checkpoint Configuration
- *============================================================================*/
+/*
+ * Configuration
+ */
 
 CheckpointConfig checkpoint_config_default(void) {
     return (CheckpointConfig){
         .enabled = false,
-        .interval_ms = 0,           /* Manual only */
+        .interval_ms = 0,
         .checkpoint_on_exit = false,
         .storage_path = NULL,
         .max_checkpoints = 5,
     };
 }
 
-/*============================================================================
- * Checkpoint Lifecycle
- *============================================================================*/
+/* Lifecycle */
 
 Checkpoint *checkpoint_create(Block *block) {
     if (!block) return NULL;
@@ -52,21 +44,17 @@ Checkpoint *checkpoint_create(Block *block) {
     Checkpoint *cp = calloc(1, sizeof(Checkpoint));
     if (!cp) return NULL;
 
-    /* Metadata */
-    cp->timestamp_ms = current_time_ms();
-    cp->checkpoint_id = cp->timestamp_ms;  /* Simple ID generation */
+    cp->timestamp_ms = timer_current_time_ms();
+    cp->checkpoint_id = cp->timestamp_ms;
     cp->version = CHECKPOINT_VERSION;
 
-    /* Block identity */
     cp->original_pid = block->pid;
     cp->name = block->name ? strdup(block->name) : NULL;
 
-    /* Initialize serialization buffers */
     serial_buffer_init(&cp->stack_state);
     serial_buffer_init(&cp->globals_state);
     serial_buffer_init(&cp->mailbox_state);
 
-    /* Serialize globals */
     if (block->vm && block->vm->globals) {
         SerializeResult res = serialize_value(block->vm->globals, &cp->globals_state);
         if (res != SERIALIZE_OK) {
@@ -75,12 +63,8 @@ Checkpoint *checkpoint_create(Block *block) {
         }
     }
 
-    /* Serialize pending mailbox messages */
-    /* Note: This is a simplified implementation - in production we'd need
-     * to handle the lock-free queue more carefully */
     cp->mailbox_count = mailbox_count(&block->mailbox);
 
-    /* Copy links */
     if (block->link_count > 0) {
         cp->links = malloc(sizeof(Pid) * block->link_count);
         if (cp->links) {
@@ -90,11 +74,8 @@ Checkpoint *checkpoint_create(Block *block) {
     }
 
     cp->parent = block->parent;
-
-    /* Capabilities */
     cp->capabilities = block->capabilities;
 
-    /* Counters */
     cp->reductions = block->counters.reductions;
     cp->messages_sent = block->counters.messages_sent;
     cp->messages_received = block->counters.messages_received;
@@ -117,64 +98,79 @@ void checkpoint_free(Checkpoint *cp) {
 Pid checkpoint_restore(Checkpoint *cp, Scheduler *sched) {
     if (!cp || !sched) return PID_INVALID;
 
-    /* For now, we can't fully restore execution state because we don't
-     * serialize the bytecode or stack frames. This is a simplified version
-     * that creates a new block with restored globals and links. */
+    BlockLimits limits = block_limits_default();
+    Pid new_pid = atomic_fetch_add(&sched->next_pid, 1);
 
-    /* In a full implementation, we would:
-     * 1. Recreate the bytecode from the original source or serialized form
-     * 2. Restore the stack and call frames
-     * 3. Restore the instruction pointer
-     * 4. Restore pending messages
-     */
+    Block *block = block_new(new_pid, cp->name, &limits);
+    if (!block) return PID_INVALID;
 
-    /* For now, return PID_INVALID to indicate restore is not implemented */
-    return PID_INVALID;
+    block->capabilities = cp->capabilities;
+    block->parent = cp->parent;
+
+    if (cp->globals_state.size > 0) {
+        cp->globals_state.read_pos = 0;
+        SerializeResult res = SERIALIZE_OK;
+        Value *globals = deserialize_value(&cp->globals_state, &res);
+        if (globals && res == SERIALIZE_OK && block->vm) {
+            if (block->vm->globals) {
+                value_free(block->vm->globals);
+            }
+            block->vm->globals = globals;
+        }
+    }
+
+    for (size_t i = 0; i < cp->link_count; i++) {
+        block_link(block, cp->links[i]);
+    }
+
+    block->counters.reductions = cp->reductions;
+    block->counters.messages_sent = cp->messages_sent;
+    block->counters.messages_received = cp->messages_received;
+
+    atomic_store(&block->state, BLOCK_WAITING);
+
+    block->vm->scheduler = sched;
+
+    if (!scheduler_register_block(sched, block)) {
+        block_free(block);
+        return PID_INVALID;
+    }
+
+    return new_pid;
 }
 
-/*============================================================================
- * Checkpoint Serialization
- *============================================================================*/
+/* Serialization */
 
 bool checkpoint_serialize(Checkpoint *cp, SerialBuffer *buf) {
     if (!cp || !buf) return false;
 
-    /* Magic number */
     if (!serial_write_u32(buf, CHECKPOINT_MAGIC)) return false;
-
-    /* Version */
     if (!serial_write_u32(buf, cp->version)) return false;
 
-    /* Metadata */
     if (!serial_write_u64(buf, cp->timestamp_ms)) return false;
     if (!serial_write_u64(buf, cp->checkpoint_id)) return false;
 
-    /* Block identity */
     if (!serial_write_u64(buf, cp->original_pid)) return false;
     if (!serial_write_string(buf, cp->name)) return false;
 
-    /* Globals state */
     if (!serial_write_u32(buf, (uint32_t)cp->globals_state.size)) return false;
     if (cp->globals_state.size > 0) {
         if (!serial_write_bytes(buf, cp->globals_state.data, cp->globals_state.size)) return false;
     }
 
-    /* Links */
     if (!serial_write_u32(buf, (uint32_t)cp->link_count)) return false;
     for (size_t i = 0; i < cp->link_count; i++) {
         if (!serial_write_u64(buf, cp->links[i])) return false;
     }
 
-    /* Parent */
     if (!serial_write_u64(buf, cp->parent)) return false;
-
-    /* Capabilities */
     if (!serial_write_u32(buf, cp->capabilities)) return false;
 
-    /* Counters */
     if (!serial_write_u64(buf, cp->reductions)) return false;
     if (!serial_write_u64(buf, cp->messages_sent)) return false;
     if (!serial_write_u64(buf, cp->messages_received)) return false;
+
+    if (!serial_write_u32(buf, (uint32_t)cp->mailbox_count)) return false;
 
     return true;
 }
@@ -189,28 +185,23 @@ Checkpoint *checkpoint_deserialize(SerialBuffer *buf) {
     serial_buffer_init(&cp->globals_state);
     serial_buffer_init(&cp->mailbox_state);
 
-    /* Magic number */
     uint32_t magic;
     if (!serial_read_u32(buf, &magic) || magic != CHECKPOINT_MAGIC) {
         checkpoint_free(cp);
         return NULL;
     }
 
-    /* Version */
     if (!serial_read_u32(buf, &cp->version) || cp->version > CHECKPOINT_VERSION) {
         checkpoint_free(cp);
         return NULL;
     }
 
-    /* Metadata */
     if (!serial_read_u64(buf, &cp->timestamp_ms)) goto error;
     if (!serial_read_u64(buf, &cp->checkpoint_id)) goto error;
 
-    /* Block identity */
     if (!serial_read_u64(buf, &cp->original_pid)) goto error;
     cp->name = serial_read_string(buf);
 
-    /* Globals state */
     uint32_t globals_size;
     if (!serial_read_u32(buf, &globals_size)) goto error;
     if (globals_size > 0) {
@@ -219,7 +210,6 @@ Checkpoint *checkpoint_deserialize(SerialBuffer *buf) {
         cp->globals_state.size = globals_size;
     }
 
-    /* Links */
     uint32_t link_count;
     if (!serial_read_u32(buf, &link_count)) goto error;
     if (link_count > 0) {
@@ -231,16 +221,16 @@ Checkpoint *checkpoint_deserialize(SerialBuffer *buf) {
         cp->link_count = link_count;
     }
 
-    /* Parent */
     if (!serial_read_u64(buf, &cp->parent)) goto error;
-
-    /* Capabilities */
     if (!serial_read_u32(buf, &cp->capabilities)) goto error;
 
-    /* Counters */
     if (!serial_read_u64(buf, &cp->reductions)) goto error;
     if (!serial_read_u64(buf, &cp->messages_sent)) goto error;
     if (!serial_read_u64(buf, &cp->messages_received)) goto error;
+
+    uint32_t mailbox_count;
+    if (!serial_read_u32(buf, &mailbox_count)) goto error;
+    cp->mailbox_count = mailbox_count;
 
     return cp;
 
@@ -249,9 +239,7 @@ error:
     return NULL;
 }
 
-/*============================================================================
- * File I/O
- *============================================================================*/
+/* File I/O */
 
 bool checkpoint_save(Checkpoint *cp, const char *path) {
     if (!cp || !path) return false;
@@ -270,11 +258,12 @@ bool checkpoint_save(Checkpoint *cp, const char *path) {
         return false;
     }
 
-    size_t written = fwrite(buf.data, 1, buf.size, f);
+    size_t expected = buf.size;
+    size_t written = fwrite(buf.data, 1, expected, f);
     fclose(f);
 
     serial_buffer_free(&buf);
-    return written == buf.size;
+    return written == expected;
 }
 
 Checkpoint *checkpoint_load(const char *path) {
@@ -283,7 +272,6 @@ Checkpoint *checkpoint_load(const char *path) {
     FILE *f = fopen(path, "rb");
     if (!f) return NULL;
 
-    /* Get file size */
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
@@ -293,7 +281,6 @@ Checkpoint *checkpoint_load(const char *path) {
         return NULL;
     }
 
-    /* Read file */
     uint8_t *data = malloc((size_t)size);
     if (!data) {
         fclose(f);
@@ -308,7 +295,6 @@ Checkpoint *checkpoint_load(const char *path) {
         return NULL;
     }
 
-    /* Deserialize */
     SerialBuffer buf;
     serial_buffer_init_data(&buf, data, (size_t)size);
 
@@ -318,9 +304,7 @@ Checkpoint *checkpoint_load(const char *path) {
     return cp;
 }
 
-/*============================================================================
- * Checkpoint Manager
- *============================================================================*/
+/* Manager */
 
 CheckpointManager *checkpoint_manager_new(const CheckpointConfig *config) {
     CheckpointManager *mgr = calloc(1, sizeof(CheckpointManager));
@@ -335,9 +319,8 @@ CheckpointManager *checkpoint_manager_new(const CheckpointConfig *config) {
         mgr->config = checkpoint_config_default();
     }
 
-    mgr->next_checkpoint_id = (uint64_t)current_time_ms();
+    mgr->next_checkpoint_id = (uint64_t)timer_current_time_ms();
 
-    /* Create storage directory if it doesn't exist */
     if (mgr->storage_path) {
         mkdir(mgr->storage_path, 0755);
     }
@@ -357,21 +340,26 @@ Checkpoint *checkpoint_manager_checkpoint(CheckpointManager *mgr, Block *block) 
     Checkpoint *cp = checkpoint_create(block);
     if (!cp) return NULL;
 
-    /* Assign unique ID */
     cp->checkpoint_id = mgr->next_checkpoint_id++;
 
-    /* Save to storage if configured */
     if (mgr->storage_path && block->name) {
         char path[512];
         snprintf(path, sizeof(path), "%s/%s_%lu.checkpoint",
                  mgr->storage_path, block->name, (unsigned long)cp->checkpoint_id);
         checkpoint_save(cp, path);
 
-        /* Cleanup old checkpoints */
         checkpoint_manager_cleanup(mgr, block->name);
     }
 
     return cp;
+}
+
+static int compare_uint64(const void *a, const void *b) {
+    uint64_t va = *(const uint64_t *)a;
+    uint64_t vb = *(const uint64_t *)b;
+    if (va < vb) return -1;
+    if (va > vb) return 1;
+    return 0;
 }
 
 uint64_t *checkpoint_manager_list(CheckpointManager *mgr, const char *block_name,
@@ -381,21 +369,123 @@ uint64_t *checkpoint_manager_list(CheckpointManager *mgr, const char *block_name
         return NULL;
     }
 
-    /* TODO: Implement directory scanning for checkpoint files */
-    *count = 0;
-    return NULL;
+    if (!mgr->storage_path) {
+        *count = 0;
+        return NULL;
+    }
+
+    DIR *dir = opendir(mgr->storage_path);
+    if (!dir) {
+        *count = 0;
+        return NULL;
+    }
+
+    size_t prefix_len = strlen(block_name) + 1;
+    char *prefix = malloc(prefix_len + 1);
+    if (!prefix) {
+        closedir(dir);
+        *count = 0;
+        return NULL;
+    }
+    snprintf(prefix, prefix_len + 1, "%s_", block_name);
+
+    size_t capacity = 16;
+    size_t n = 0;
+    uint64_t *ids = malloc(sizeof(uint64_t) * capacity);
+    if (!ids) {
+        free(prefix);
+        closedir(dir);
+        *count = 0;
+        return NULL;
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strncmp(entry->d_name, prefix, prefix_len) != 0) continue;
+
+        const char *suffix = strstr(entry->d_name, ".checkpoint");
+        if (!suffix || suffix[11] != '\0') continue;
+
+        const char *id_start = entry->d_name + prefix_len;
+        char *id_end;
+        unsigned long id = strtoul(id_start, &id_end, 10);
+        if (id_end != suffix) continue;
+
+        if (n >= capacity) {
+            capacity *= 2;
+            uint64_t *new_ids = realloc(ids, sizeof(uint64_t) * capacity);
+            if (!new_ids) {
+                free(ids);
+                free(prefix);
+                closedir(dir);
+                *count = 0;
+                return NULL;
+            }
+            ids = new_ids;
+        }
+        ids[n++] = (uint64_t)id;
+    }
+
+    free(prefix);
+    closedir(dir);
+
+    if (n > 1) {
+        qsort(ids, n, sizeof(uint64_t), compare_uint64);
+    }
+
+    *count = n;
+    return ids;
 }
 
 Checkpoint *checkpoint_manager_get(CheckpointManager *mgr, uint64_t checkpoint_id) {
     if (!mgr || !mgr->storage_path) return NULL;
 
-    /* TODO: Implement checkpoint lookup by ID */
-    (void)checkpoint_id;
+    DIR *dir = opendir(mgr->storage_path);
+    if (!dir) return NULL;
+
+    char suffix[64];
+    snprintf(suffix, sizeof(suffix), "_%lu.checkpoint", (unsigned long)checkpoint_id);
+    size_t suffix_len = strlen(suffix);
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        size_t name_len = strlen(entry->d_name);
+        if (name_len < suffix_len) continue;
+
+        if (strcmp(entry->d_name + name_len - suffix_len, suffix) == 0) {
+            char path[512];
+            snprintf(path, sizeof(path), "%s/%s", mgr->storage_path, entry->d_name);
+            closedir(dir);
+            return checkpoint_load(path);
+        }
+    }
+
+    closedir(dir);
     return NULL;
 }
 
 void checkpoint_manager_cleanup(CheckpointManager *mgr, const char *block_name) {
     if (!mgr || !block_name || mgr->config.max_checkpoints == 0) return;
+    if (!mgr->storage_path) return;
 
-    /* TODO: Implement cleanup of old checkpoints */
+    size_t count;
+    uint64_t *ids = checkpoint_manager_list(mgr, block_name, &count);
+    if (!ids || count == 0) {
+        free(ids);
+        return;
+    }
+
+    if (count > mgr->config.max_checkpoints) {
+        size_t to_delete = count - mgr->config.max_checkpoints;
+
+        for (size_t i = 0; i < to_delete; i++) {
+            char path[512];
+            snprintf(path, sizeof(path), "%s/%s_%lu.checkpoint",
+                     mgr->storage_path, block_name, (unsigned long)ids[i]);
+
+            unlink(path);
+        }
+    }
+
+    free(ids);
 }

@@ -32,16 +32,12 @@
 #include <bearssl.h>
 #include "net/cacerts.h"
 
-/*============================================================================
- * Constants
- *============================================================================*/
+/* Constants */
 
 #define TLS_IO_BUF_SIZE  BR_SSL_BUFSIZE_BIDI
 #define TLS_READ_TIMEOUT_MS 30000
 
-/*============================================================================
- * TLS Socket Structure
- *============================================================================*/
+/* TLS Socket Structure */
 
 struct TLSSocket {
     TCPSocket *tcp;                     /* Underlying TCP socket */
@@ -54,20 +50,11 @@ struct TLSSocket {
     int timeout_ms;                     /* Operation timeout */
 };
 
-/*============================================================================
- * Global State
- *============================================================================*/
+/* Global State */
 
 static bool g_tls_initialized = false;
 
-/*============================================================================
- * BearSSL I/O Callbacks
- *============================================================================*/
-
-/**
- * Low-level data read callback for BearSSL.
- * Reads data from the underlying TCP socket.
- */
+/* BearSSL I/O Callbacks */
 static int tls_sock_read(void *ctx, unsigned char *buf, size_t len) {
     TLSSocket *sock = (TLSSocket *)ctx;
 
@@ -89,10 +76,6 @@ static int tls_sock_read(void *ctx, unsigned char *buf, size_t len) {
     }
 }
 
-/**
- * Low-level data write callback for BearSSL.
- * Writes data to the underlying TCP socket.
- */
 static int tls_sock_write(void *ctx, const unsigned char *buf, size_t len) {
     TLSSocket *sock = (TLSSocket *)ctx;
 
@@ -108,9 +91,7 @@ static int tls_sock_write(void *ctx, const unsigned char *buf, size_t len) {
     }
 }
 
-/*============================================================================
- * Initialization
- *============================================================================*/
+/* Initialization */
 
 bool tls_init(void) {
     if (g_tls_initialized) return true;
@@ -129,9 +110,7 @@ void tls_cleanup(void) {
     g_tls_initialized = false;
 }
 
-/*============================================================================
- * Connection
- *============================================================================*/
+/* Connection */
 
 TLSSocket *tls_connect(const char *host, uint16_t port,
                        int timeout_ms, TLSError *error) {
@@ -224,9 +203,7 @@ void tls_close(TLSSocket *sock) {
     free(sock);
 }
 
-/*============================================================================
- * I/O Operations
- *============================================================================*/
+/* I/O Operations */
 
 ssize_t tls_read(TLSSocket *sock, void *buf, size_t len) {
     if (!sock || !buf || len == 0) {
@@ -314,9 +291,7 @@ bool tls_write_all(TLSSocket *sock, const void *data, size_t len) {
     return true;
 }
 
-/*============================================================================
- * Info
- *============================================================================*/
+/* Info */
 
 int tls_get_fd(TLSSocket *sock) {
     if (!sock || !sock->tcp) return -1;

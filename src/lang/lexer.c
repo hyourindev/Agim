@@ -12,24 +12,20 @@
 #include <string.h>
 #include <stdbool.h>
 
-/*============================================================================
- * Lexer Structure
- *============================================================================*/
+/* Lexer Structure */
 
 struct Lexer {
     const char *source;
-    const char *start;      /* Start of current token */
-    const char *current;    /* Current position */
+    const char *start;
+    const char *current;
     int line;
     int column;
-    int start_column;       /* Column at start of token */
-    Token peeked;           /* Peeked token (if valid) */
+    int start_column;
+    Token peeked;
     bool has_peeked;
 };
 
-/*============================================================================
- * Keywords Table
- *============================================================================*/
+/* Keywords Table */
 
 static struct {
     const char *name;
@@ -66,7 +62,6 @@ static struct {
     {"alias", TOK_ALIAS},
     {"some", TOK_SOME},
     {"none", TOK_NONE},
-    /* Built-in type names */
     {"int", TOK_TYPE_INT},
     {"float", TOK_TYPE_FLOAT},
     {"string", TOK_TYPE_STRING},
@@ -80,9 +75,7 @@ static struct {
     {NULL, TOK_ERROR},
 };
 
-/*============================================================================
- * Token Type Names
- *============================================================================*/
+/* Token Type Names */
 
 const char *token_type_name(TokenType type) {
     static const char *names[] = {
@@ -121,7 +114,6 @@ const char *token_type_name(TokenType type) {
         [TOK_ALIAS] = "ALIAS",
         [TOK_SOME] = "SOME",
         [TOK_NONE] = "NONE",
-        /* Built-in type names */
         [TOK_TYPE_INT] = "TYPE_INT",
         [TOK_TYPE_FLOAT] = "TYPE_FLOAT",
         [TOK_TYPE_STRING] = "TYPE_STRING",
@@ -132,7 +124,6 @@ const char *token_type_name(TokenType type) {
         [TOK_TYPE_RESULT] = "TYPE_RESULT",
         [TOK_TYPE_MAP] = "TYPE_MAP",
         [TOK_TYPE_PID] = "TYPE_PID",
-        /* Operators */
         [TOK_PLUS] = "PLUS",
         [TOK_MINUS] = "MINUS",
         [TOK_STAR] = "STAR",
@@ -149,7 +140,6 @@ const char *token_type_name(TokenType type) {
         [TOK_MINUS_ASSIGN] = "MINUS_ASSIGN",
         [TOK_STAR_ASSIGN] = "STAR_ASSIGN",
         [TOK_SLASH_ASSIGN] = "SLASH_ASSIGN",
-        /* Delimiters */
         [TOK_LPAREN] = "LPAREN",
         [TOK_RPAREN] = "RPAREN",
         [TOK_LBRACE] = "LBRACE",
@@ -168,7 +158,6 @@ const char *token_type_name(TokenType type) {
         [TOK_AT] = "AT",
         [TOK_FAT_ARROW] = "FAT_ARROW",
         [TOK_SEMICOLON] = "SEMICOLON",
-        /* Special */
         [TOK_NEWLINE] = "NEWLINE",
         [TOK_EOF] = "EOF",
         [TOK_ERROR] = "ERROR",
@@ -176,9 +165,7 @@ const char *token_type_name(TokenType type) {
     return names[type];
 }
 
-/*============================================================================
- * Lexer Lifecycle
- *============================================================================*/
+/* Lexer Lifecycle */
 
 Lexer *lexer_new(const char *source) {
     Lexer *lexer = agim_alloc(sizeof(Lexer));
@@ -206,9 +193,7 @@ int lexer_column(Lexer *lexer) {
     return lexer->column;
 }
 
-/*============================================================================
- * Character Helpers
- *============================================================================*/
+/* Character Helpers */
 
 static bool is_at_end(Lexer *lexer) {
     return *lexer->current == '\0';
@@ -237,9 +222,7 @@ static bool match(Lexer *lexer, char expected) {
     return true;
 }
 
-/*============================================================================
- * Token Creation
- *============================================================================*/
+/* Token Creation */
 
 static Token make_token(Lexer *lexer, TokenType type) {
     Token token;
@@ -261,9 +244,7 @@ static Token error_token(Lexer *lexer, const char *message) {
     return token;
 }
 
-/*============================================================================
- * Whitespace and Comments
- *============================================================================*/
+/* Whitespace and Comments */
 
 static void skip_whitespace(Lexer *lexer) {
     for (;;) {
@@ -276,18 +257,16 @@ static void skip_whitespace(Lexer *lexer) {
             break;
         case '/':
             if (peek_next(lexer) == '/') {
-                /* Single-line comment */
                 while (peek_char(lexer) != '\n' && !is_at_end(lexer)) {
                     advance(lexer);
                 }
             } else if (peek_next(lexer) == '*') {
-                /* Multi-line comment */
-                advance(lexer); /* / */
-                advance(lexer); /* * */
+                advance(lexer);
+                advance(lexer);
                 while (!is_at_end(lexer)) {
                     if (peek_char(lexer) == '*' && peek_next(lexer) == '/') {
-                        advance(lexer); /* * */
-                        advance(lexer); /* / */
+                        advance(lexer);
+                        advance(lexer);
                         break;
                     }
                     if (peek_char(lexer) == '\n') {
@@ -306,28 +285,23 @@ static void skip_whitespace(Lexer *lexer) {
     }
 }
 
-/*============================================================================
- * Number Scanning
- *============================================================================*/
+/* Number Scanning */
 
 static Token scan_number(Lexer *lexer) {
     bool is_float = false;
 
-    /* Integer part */
     while (isdigit(peek_char(lexer)) || peek_char(lexer) == '_') {
         advance(lexer);
     }
 
-    /* Fractional part */
     if (peek_char(lexer) == '.' && isdigit(peek_next(lexer))) {
         is_float = true;
-        advance(lexer); /* . */
+        advance(lexer);
         while (isdigit(peek_char(lexer)) || peek_char(lexer) == '_') {
             advance(lexer);
         }
     }
 
-    /* Exponent */
     if (peek_char(lexer) == 'e' || peek_char(lexer) == 'E') {
         is_float = true;
         advance(lexer);
@@ -342,9 +316,7 @@ static Token scan_number(Lexer *lexer) {
     return make_token(lexer, is_float ? TOK_FLOAT : TOK_INT);
 }
 
-/*============================================================================
- * String Scanning
- *============================================================================*/
+/* String Scanning */
 
 static Token scan_string(Lexer *lexer) {
     while (peek_char(lexer) != '"' && !is_at_end(lexer)) {
@@ -353,7 +325,7 @@ static Token scan_string(Lexer *lexer) {
             lexer->column = 0;
         }
         if (peek_char(lexer) == '\\' && peek_next(lexer) != '\0') {
-            advance(lexer); /* Skip backslash */
+            advance(lexer);
         }
         advance(lexer);
     }
@@ -362,13 +334,11 @@ static Token scan_string(Lexer *lexer) {
         return error_token(lexer, "unterminated string");
     }
 
-    advance(lexer); /* Closing quote */
+    advance(lexer);
     return make_token(lexer, TOK_STRING);
 }
 
-/*============================================================================
- * Identifier and Keyword Scanning
- *============================================================================*/
+/* Identifier and Keyword Scanning */
 
 static bool is_alpha(char c) {
     return (c >= 'a' && c <= 'z') ||
@@ -400,9 +370,7 @@ static Token scan_identifier(Lexer *lexer) {
     return make_token(lexer, check_keyword(lexer));
 }
 
-/*============================================================================
- * Main Scanning
- *============================================================================*/
+/* Main Scanning */
 
 static Token scan_token(Lexer *lexer) {
     skip_whitespace(lexer);
@@ -416,24 +384,20 @@ static Token scan_token(Lexer *lexer) {
 
     char c = advance(lexer);
 
-    /* Identifiers and keywords */
     if (is_alpha(c)) {
         return scan_identifier(lexer);
     }
 
-    /* Numbers */
     if (isdigit(c)) {
         return scan_number(lexer);
     }
 
     switch (c) {
-    /* Newline */
     case '\n':
         lexer->line++;
         lexer->column = 1;
         return make_token(lexer, TOK_NEWLINE);
 
-    /* Single character tokens */
     case '(': return make_token(lexer, TOK_LPAREN);
     case ')': return make_token(lexer, TOK_RPAREN);
     case '{': return make_token(lexer, TOK_LBRACE);
@@ -447,7 +411,6 @@ static Token scan_token(Lexer *lexer) {
     case '?': return make_token(lexer, TOK_QUESTION);
     case '%': return make_token(lexer, TOK_PERCENT);
 
-    /* Two character tokens */
     case '+':
         return make_token(lexer, match(lexer, '=') ? TOK_PLUS_ASSIGN : TOK_PLUS);
     case '-':
@@ -469,7 +432,6 @@ static Token scan_token(Lexer *lexer) {
     case '>':
         return make_token(lexer, match(lexer, '=') ? TOK_GE : TOK_GT);
 
-    /* Dot, range, and spread */
     case '.':
         if (match(lexer, '.')) {
             if (match(lexer, '.')) return make_token(lexer, TOK_SPREAD);
@@ -478,15 +440,12 @@ static Token scan_token(Lexer *lexer) {
         }
         return make_token(lexer, TOK_DOT);
 
-    /* Semicolon */
     case ';':
         return make_token(lexer, TOK_SEMICOLON);
 
-    /* Strings */
     case '"':
         return scan_string(lexer);
 
-    /* At sign for decorators */
     case '@':
         return make_token(lexer, TOK_AT);
     }
@@ -494,9 +453,7 @@ static Token scan_token(Lexer *lexer) {
     return error_token(lexer, "unexpected character");
 }
 
-/*============================================================================
- * Public API
- *============================================================================*/
+/* Public API */
 
 Token lexer_next(Lexer *lexer) {
     if (lexer->has_peeked) {
