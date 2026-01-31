@@ -92,6 +92,9 @@ static void deque_grow(WorkDeque *deque) {
 
     Block **old_buf = atomic_load(&deque->buffer);
     Block **new_buf = malloc(sizeof(Block *) * new_cap);
+    if (!new_buf) {
+        return;  /* Gracefully handle allocation failure */
+    }
 
     size_t top = atomic_load(&deque->top);
     size_t bottom = atomic_load(&deque->bottom);
@@ -326,7 +329,7 @@ static void *worker_loop(void *arg) {
     worker_alloc_set_current(&worker->allocator);
 
     size_t idle_spins = 0;
-    const size_t SPIN_THRESHOLD = 100;
+    const size_t SPIN_THRESHOLD = 20;  /* Reduced from 100 for better performance */
     const size_t TERMINATION_CHECK_INTERVAL = 100;
 
     size_t backoff_us = 10;

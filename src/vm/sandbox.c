@@ -23,7 +23,10 @@ static Sandbox *g_sandbox = NULL;
 
 Sandbox *sandbox_global(void) {
     if (!g_sandbox) {
-        g_sandbox = sandbox_new_permissive();
+        /* Use restrictive sandbox by default for security.
+         * Callers should use sandbox_set_global with sandbox_new_permissive
+         * or configure specific allowed paths for privileged operations. */
+        g_sandbox = sandbox_new();
     }
     return g_sandbox;
 }
@@ -129,8 +132,38 @@ void sandbox_enable(Sandbox *sandbox) {
 
 /* Path Utilities */
 
+/**
+ * Check if a path contains ".." components that could be used for traversal.
+ * This catches attempts to escape sandboxed directories via filenames like
+ * "foo/../../../etc/passwd" when the parent directory exists but the target doesn't.
+ */
+static bool path_has_traversal(const char *path) {
+    if (!path) return true;
+
+    const char *p = path;
+    while (*p) {
+        /* Check for ".." at start of path or after a slash */
+        if (p[0] == '.' && p[1] == '.') {
+            if (p == path || p[-1] == '/') {
+                if (p[2] == '\0' || p[2] == '/') {
+                    return true;  /* Found ".." component */
+                }
+            }
+        }
+        p++;
+    }
+    return false;
+}
+
 char *sandbox_canonicalize(const char *path) {
     if (!path) return NULL;
+
+    /* First, check for embedded path traversal in any component.
+     * This is critical for security as it prevents attackers from
+     * using non-existent files with ".." in the filename portion. */
+    if (path_has_traversal(path)) {
+        return NULL;  /* Reject paths with ".." components */
+    }
 
     char *resolved = realpath(path, NULL);
     if (resolved) return resolved;
@@ -167,6 +200,13 @@ char *sandbox_canonicalize(const char *path) {
     if (!resolved_parent) return NULL;
 
     const char *filename = last_slash + 1;
+
+    /* Double-check filename doesn't contain ".." (should be caught above, belt-and-suspenders) */
+    if (path_has_traversal(filename)) {
+        free(resolved_parent);
+        return NULL;
+    }
+
     size_t resolved_len = strlen(resolved_parent);
     size_t filename_len = strlen(filename);
     char *result = agim_alloc(resolved_len + 1 + filename_len + 1);

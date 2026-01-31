@@ -20,6 +20,8 @@
 
 Value *value_string_n(const char *str, size_t length) {
     Value *v = agim_alloc(sizeof(Value));
+    if (!v) return NULL;
+
     v->type = VAL_STRING;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
     v->flags = VALUE_IMMUTABLE;
@@ -27,6 +29,10 @@ Value *value_string_n(const char *str, size_t length) {
     v->next = NULL;
 
     String *s = agim_alloc(sizeof(String) + length + 1);
+    if (!s) {
+        agim_free(v);
+        return NULL;
+    }
     s->length = length;
     s->hash = agim_hash_string(str, length);
     memcpy(s->data, str, length);
@@ -41,35 +47,65 @@ Value *value_string(const char *str) {
 }
 
 /* String Interning Cache
- * Direct-mapped cache for commonly used strings to reduce allocation overhead.
- * Uses hash-based indexing with 1024 entries for fast O(1) lookup.
+ * 4-way set-associative cache for commonly used strings to reduce allocation
+ * overhead. Thread-safe using atomic operations with CAS pattern.
+ * Uses 1024 sets x 4 ways = 4096 total entries for better hit rate.
  */
 
-#define INTERN_CACHE_SIZE 1024
-static Value *intern_cache[INTERN_CACHE_SIZE];
+#define INTERN_CACHE_SETS 1024
+#define INTERN_CACHE_WAYS 4
+
+typedef struct {
+    _Atomic(Value *) entries[INTERN_CACHE_WAYS];
+} InternCacheSet;
+
+static InternCacheSet intern_cache[INTERN_CACHE_SETS];
 
 Value *string_intern(const char *str, size_t len) {
     if (!str) return NULL;
 
     uint64_t hash = agim_hash_string(str, len);
-    size_t idx = hash % INTERN_CACHE_SIZE;
+    size_t set_idx = hash % INTERN_CACHE_SETS;
+    InternCacheSet *set = &intern_cache[set_idx];
 
-    /* Check cache hit */
-    Value *cached = intern_cache[idx];
-    if (cached &&
-        cached->type == VAL_STRING &&
-        cached->as.string->length == len &&
-        memcmp(cached->as.string->data, str, len) == 0) {
-        /* Increment refcount and return cached value */
-        atomic_fetch_add_explicit(&cached->refcount, 1, memory_order_relaxed);
-        return cached;
+    /* Check all ways in the set */
+    for (int way = 0; way < INTERN_CACHE_WAYS; way++) {
+        Value *cached = atomic_load_explicit(&set->entries[way], memory_order_acquire);
+        if (cached &&
+            cached->type == VAL_STRING &&
+            cached->as.string->length == len &&
+            memcmp(cached->as.string->data, str, len) == 0) {
+            /* Use safe retain that handles concurrent freeing */
+            Value *retained = value_retain(cached);
+            if (retained) return retained;
+            /* If retain failed, cached value is being freed - continue search */
+        }
     }
 
-    /* Cache miss: create new string and cache it */
+    /* Cache miss: create new string with refcount=1 for caller */
     Value *v = value_string_n(str, len);
     if (v) {
-        /* Store in cache (may evict previous entry) */
-        intern_cache[idx] = v;
+        /* Retain once more for the cache's reference (refcount=2)
+         * This ensures the value stays alive even if the caller frees their ref */
+        value_retain(v);
+
+        /* Insert in a way based on hash (simple LRU approximation) */
+        int way = (int)((hash >> 8) % INTERN_CACHE_WAYS);
+
+        /* CAS to store in cache. If we fail, another thread already inserted,
+         * so release our extra cache reference */
+        Value *expected = atomic_load_explicit(&set->entries[way], memory_order_relaxed);
+        if (!atomic_compare_exchange_strong_explicit(
+                &set->entries[way], &expected, v,
+                memory_order_release, memory_order_relaxed)) {
+            /* CAS failed - release the cache's reference */
+            value_release(v);
+        } else if (expected != NULL) {
+            /* CAS succeeded and evicted an old value - release its cache reference.
+             * This prevents memory leaks from long-running processes with
+             * changing string patterns. */
+            value_release(expected);
+        }
     }
     return v;
 }
@@ -115,16 +151,37 @@ Value *string_concat(const Value *a, const Value *b) {
 
     size_t len_a = a->as.string->length;
     size_t len_b = b->as.string->length;
+
+    /* Overflow check: ensure len_a + len_b + 1 doesn't overflow */
+    if (len_a > SIZE_MAX - len_b - 1) {
+        return value_nil();  /* Overflow would occur */
+    }
+
     size_t total = len_a + len_b;
 
-    char *buf = agim_alloc(total + 1);
-    memcpy(buf, a->as.string->data, len_a);
-    memcpy(buf + len_a, b->as.string->data, len_b);
-    buf[total] = '\0';
+    /* Allocate Value and String directly without temporary buffer */
+    Value *v = agim_alloc(sizeof(Value));
+    if (!v) return value_nil();
 
-    Value *result = value_string_n(buf, total);
-    agim_free(buf);
-    return result;
+    v->type = VAL_STRING;
+    atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
+    v->flags = VALUE_IMMUTABLE;
+    v->gc_state = 0;
+    v->next = NULL;
+
+    String *s = agim_alloc(sizeof(String) + total + 1);
+    if (!s) {
+        agim_free(v);
+        return value_nil();
+    }
+    s->length = total;
+    memcpy(s->data, a->as.string->data, len_a);
+    memcpy(s->data + len_a, b->as.string->data, len_b);
+    s->data[total] = '\0';
+    s->hash = agim_hash_string(s->data, total);
+
+    v->as.string = s;
+    return v;
 }
 
 Value *string_slice(const Value *v, size_t start, size_t end) {
@@ -333,8 +390,33 @@ Value *string_replace(const Value *v, const char *old_str, const char *new_str) 
         return value_string_n(str, v->as.string->length);
     }
 
-    size_t result_len = v->as.string->length + count * (new_len - old_len);
+    /* Calculate result length with overflow protection.
+     * Handle both cases: new_len > old_len (grows) and new_len < old_len (shrinks) */
+    size_t result_len;
+    if (new_len >= old_len) {
+        size_t diff = new_len - old_len;
+        /* Check for overflow: count * diff */
+        if (diff > 0 && count > SIZE_MAX / diff) {
+            return value_nil();  /* Overflow would occur */
+        }
+        size_t growth = count * diff;
+        /* Check for overflow: base + growth */
+        if (growth > SIZE_MAX - v->as.string->length) {
+            return value_nil();  /* Overflow would occur */
+        }
+        result_len = v->as.string->length + growth;
+    } else {
+        /* Shrinking: new_len < old_len, so result is smaller */
+        size_t diff = old_len - new_len;
+        size_t shrinkage = count * diff;
+        /* Shrinkage can't exceed original length (count * old_len <= original) */
+        result_len = v->as.string->length - shrinkage;
+    }
+
     char *buf = agim_alloc(result_len + 1);
+    if (!buf) {
+        return value_nil();
+    }
 
     char *dest = buf;
     const char *src = str;
@@ -350,7 +432,9 @@ Value *string_replace(const Value *v, const char *old_str, const char *new_str) 
         src = pos + old_len;
     }
 
-    strcpy(dest, src);
+    /* Copy remaining part using memcpy with known length */
+    size_t remaining = strlen(src);
+    memcpy(dest, src, remaining + 1);  /* +1 for null terminator */
 
     Value *result = value_string_n(buf, result_len);
     agim_free(buf);

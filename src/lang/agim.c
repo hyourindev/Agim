@@ -36,8 +36,9 @@ Bytecode *agim_compile(const char *source, const char **error) {
 
     if (!ast) {
         if (error && parser_error(parser)) {
-            *error = agim_alloc(strlen(parser_error(parser)) + 1);
-            strcpy((char *)*error, parser_error(parser));
+            size_t len = strlen(parser_error(parser));
+            *error = agim_alloc(len + 1);
+            memcpy((char *)*error, parser_error(parser), len + 1);
         }
         parser_free(parser);
         lexer_free(lexer);
@@ -52,8 +53,9 @@ Bytecode *agim_compile(const char *source, const char **error) {
                 char buffer[512];
                 snprintf(buffer, sizeof(buffer), "line %d: type error: %s",
                          typechecker_error_line(tc), typechecker_error(tc));
-                *error = agim_alloc(strlen(buffer) + 1);
-                strcpy((char *)*error, buffer);
+                size_t len = strlen(buffer);
+                *error = agim_alloc(len + 1);
+                memcpy((char *)*error, buffer, len + 1);
             }
             typechecker_free(tc);
             ast_free(ast);
@@ -70,8 +72,9 @@ Bytecode *agim_compile(const char *source, const char **error) {
 
     if (!code) {
         if (error && compiler_error(compiler)) {
-            *error = agim_alloc(strlen(compiler_error(compiler)) + 1);
-            strcpy((char *)*error, compiler_error(compiler));
+            size_t len = strlen(compiler_error(compiler));
+            *error = agim_alloc(len + 1);
+            memcpy((char *)*error, compiler_error(compiler), len + 1);
         }
     }
 
@@ -91,8 +94,9 @@ Bytecode *agim_compile_file(const char *path, const char **error) {
         if (error) {
             char buffer[256];
             snprintf(buffer, sizeof(buffer), "could not open file: %s", path);
-            *error = agim_alloc(strlen(buffer) + 1);
-            strcpy((char *)*error, buffer);
+            size_t len = strlen(buffer);
+            *error = agim_alloc(len + 1);
+            memcpy((char *)*error, buffer, len + 1);
         }
         return NULL;
     }
@@ -115,8 +119,9 @@ Bytecode *agim_compile_file(const char *path, const char **error) {
 
     if (!ast) {
         if (error && parser_error(parser)) {
-            *error = agim_alloc(strlen(parser_error(parser)) + 1);
-            strcpy((char *)*error, parser_error(parser));
+            size_t len = strlen(parser_error(parser));
+            *error = agim_alloc(len + 1);
+            memcpy((char *)*error, parser_error(parser), len + 1);
         }
         parser_free(parser);
         lexer_free(lexer);
@@ -132,8 +137,9 @@ Bytecode *agim_compile_file(const char *path, const char **error) {
                 char buffer[512];
                 snprintf(buffer, sizeof(buffer), "line %d: type error: %s",
                          typechecker_error_line(tc), typechecker_error(tc));
-                *error = agim_alloc(strlen(buffer) + 1);
-                strcpy((char *)*error, buffer);
+                size_t len = strlen(buffer);
+                *error = agim_alloc(len + 1);
+                memcpy((char *)*error, buffer, len + 1);
             }
             typechecker_free(tc);
             ast_free(ast);
@@ -152,8 +158,9 @@ Bytecode *agim_compile_file(const char *path, const char **error) {
 
     if (!code) {
         if (error && compiler_error(compiler)) {
-            *error = agim_alloc(strlen(compiler_error(compiler)) + 1);
-            strcpy((char *)*error, compiler_error(compiler));
+            size_t len = strlen(compiler_error(compiler));
+            *error = agim_alloc(len + 1);
+            memcpy((char *)*error, compiler_error(compiler), len + 1);
         }
     }
 
@@ -202,9 +209,10 @@ AgimResult agim_run_with_result(const char *source, Value **result, const char *
 
     if (vm_result != VM_OK && vm_result != VM_HALT) {
         if (error && vm_error(vm)) {
-            *error = agim_alloc(strlen(vm_error(vm)) + 1);
+            size_t len = strlen(vm_error(vm));
+            *error = agim_alloc(len + 1);
             if (*error) {
-                strcpy((char *)*error, vm_error(vm));
+                memcpy((char *)*error, vm_error(vm), len + 1);
             }
         }
         agim_result = AGIM_ERROR_RUNTIME;

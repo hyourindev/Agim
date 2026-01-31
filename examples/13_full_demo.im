@@ -117,7 +117,7 @@ fn tool_create_todo(title: string, id: int) -> map<string, any> {
 // === Main Program ===
 
 print("=" + repeat_string("=", 50))
-print("  TOFULANG FULL FEATURE DEMO")
+print("  AGIM FULL FEATURE DEMO")
 print("=" + repeat_string("=", 50))
 print("")
 
@@ -161,7 +161,7 @@ print("--- 3. Todo List Management ---")
 print("")
 
 // Use create_todo helper function
-let todo1 = create_todo(1, "Learn Tofulang", ["learning", "programming"])
+let todo1 = create_todo(1, "Learn Agim", ["learning", "programming"])
 let todo2 = create_todo(2, "Build an agent", ["project", "ai"])
 let todo3 = create_todo(3, "Write documentation", ["docs", "project"])
 let todo4 = create_todo(4, "Test features", ["testing", "programming"])

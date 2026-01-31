@@ -348,6 +348,11 @@ void ast_free(AstNode *node) {
         agim_free(node->as.enum_expr.variant_name);
         ast_free(node->as.enum_expr.payload);
         break;
+
+    case NODE_RANGE:
+        ast_free(node->as.range.start);
+        ast_free(node->as.range.end);
+        break;
     }
 
     agim_free(node);

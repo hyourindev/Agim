@@ -5,6 +5,8 @@
  * SPDX-License-Identifier: MIT
  */
 
+#define _POSIX_C_SOURCE 200809L
+
 #include "runtime/serialize.h"
 #include "types/string.h"
 #include "types/array.h"

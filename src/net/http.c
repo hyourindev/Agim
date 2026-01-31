@@ -221,6 +221,63 @@ static bool is_private_ip(const char *host) {
     return false;
 }
 
+/* SSRF DNS Rebinding Protection
+ * Check resolved IP addresses after DNS resolution to prevent attackers
+ * from using DNS rebinding to reach internal services.
+ */
+
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+
+static bool is_resolved_ip_private(struct addrinfo *res) {
+    for (struct addrinfo *rp = res; rp != NULL; rp = rp->ai_next) {
+        if (rp->ai_family == AF_INET) {
+            struct sockaddr_in *addr = (struct sockaddr_in *)rp->ai_addr;
+            uint32_t ip = ntohl(addr->sin_addr.s_addr);
+            if (is_private_ipv4(ip)) return true;
+        } else if (rp->ai_family == AF_INET6) {
+            struct sockaddr_in6 *addr = (struct sockaddr_in6 *)rp->ai_addr;
+            /* Check for IPv6 loopback */
+            if (IN6_IS_ADDR_LOOPBACK(&addr->sin6_addr)) return true;
+            /* Check for IPv6 link-local */
+            if (IN6_IS_ADDR_LINKLOCAL(&addr->sin6_addr)) return true;
+            /* Check for IPv4-mapped addresses */
+            if (IN6_IS_ADDR_V4MAPPED(&addr->sin6_addr)) {
+                /* Extract IPv4 address from mapped address (last 4 bytes) */
+                const uint8_t *bytes = addr->sin6_addr.s6_addr;
+                uint32_t ip = ((uint32_t)bytes[12] << 24) |
+                              ((uint32_t)bytes[13] << 16) |
+                              ((uint32_t)bytes[14] << 8) |
+                              ((uint32_t)bytes[15]);
+                if (is_private_ipv4(ip)) return true;
+            }
+        }
+    }
+    return false;
+}
+
+static bool resolve_and_check_private(const char *host, uint16_t port, bool allow_private) {
+    if (allow_private) return false;  /* Skip check if private IPs are allowed */
+
+    struct addrinfo hints, *result;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+
+    char port_str[8];
+    snprintf(port_str, sizeof(port_str), "%u", port);
+
+    int gai_result = getaddrinfo(host, port_str, &hints, &result);
+    if (gai_result != 0) {
+        return true;  /* Treat resolution failure as blocked */
+    }
+
+    bool is_private = is_resolved_ip_private(result);
+    freeaddrinfo(result);
+    return is_private;
+}
+
 bool http_url_valid(const char *url, bool allow_private) {
     if (!url) return false;
     if (strncmp(url, "http://", 7) != 0 && strncmp(url, "https://", 8) != 0) return false;
@@ -241,6 +298,12 @@ bool http_url_valid(const char *url, bool allow_private) {
 char *http_url_encode(const char *str) {
     if (!str) return NULL;
     size_t len = strlen(str);
+
+    /* Overflow check: worst case each char becomes %XX (3 chars) + null */
+    if (len > (SIZE_MAX - 1) / 3) {
+        return NULL;  /* Would overflow */
+    }
+
     char *encoded = malloc(len * 3 + 1);
     if (!encoded) return NULL;
 
@@ -357,6 +420,12 @@ static HttpResponse *http_request(const char *method, const char *url_str,
     /* Parse URL */
     ParsedURL *url = url_parse(url_str);
     if (!url) return response_error("Failed to parse URL");
+
+    /* SSRF DNS rebinding protection: check resolved IP addresses */
+    if (resolve_and_check_private(url->host, url->port, false)) {
+        url_free(url);
+        return response_error("SSRF: resolved to private IP");
+    }
 
     /* Connect - use TLS for HTTPS, plain TCP for HTTP */
     TCPSocket *tcp_sock = NULL;
@@ -684,6 +753,12 @@ static HttpStream *http_stream_request(const char *method, const char *url_str,
     ParsedURL *url = url_parse(url_str);
     if (!url) return NULL;
 
+    /* SSRF DNS rebinding protection: check resolved IP addresses */
+    if (resolve_and_check_private(url->host, url->port, false)) {
+        url_free(url);
+        return NULL;
+    }
+
     /* Allocate stream */
     HttpStream *stream = calloc(1, sizeof(HttpStream));
     if (!stream) {
@@ -735,6 +810,9 @@ static HttpStream *http_stream_request(const char *method, const char *url_str,
     /* Build and send request */
     char *request = build_request(method, url, body, headers);
     if (!request) {
+        /* Close socket immediately on error to prevent resource leak */
+        if (stream->tls_socket) { tls_close(stream->tls_socket); stream->tls_socket = NULL; }
+        if (stream->tcp_socket) { tcp_close(stream->tcp_socket); stream->tcp_socket = NULL; }
         stream->error_msg = strdup("Failed to build request");
         atomic_store(&stream->error, true);
         atomic_store(&stream->done, true);
@@ -750,6 +828,9 @@ static HttpStream *http_stream_request(const char *method, const char *url_str,
     free(request);
 
     if (!send_ok) {
+        /* Close socket immediately on error */
+        if (stream->tls_socket) { tls_close(stream->tls_socket); stream->tls_socket = NULL; }
+        if (stream->tcp_socket) { tcp_close(stream->tcp_socket); stream->tcp_socket = NULL; }
         stream->error_msg = strdup("Failed to send request");
         atomic_store(&stream->error, true);
         atomic_store(&stream->done, true);
@@ -759,6 +840,9 @@ static HttpStream *http_stream_request(const char *method, const char *url_str,
     /* Create HTTP parser */
     stream->parser = http_parser_new();
     if (!stream->parser) {
+        /* Close socket immediately on error */
+        if (stream->tls_socket) { tls_close(stream->tls_socket); stream->tls_socket = NULL; }
+        if (stream->tcp_socket) { tcp_close(stream->tcp_socket); stream->tcp_socket = NULL; }
         stream->error_msg = strdup("Out of memory");
         atomic_store(&stream->error, true);
         atomic_store(&stream->done, true);
@@ -767,6 +851,10 @@ static HttpStream *http_stream_request(const char *method, const char *url_str,
 
     /* Start background reader thread */
     if (pthread_create(&stream->thread, NULL, stream_reader_thread, stream) != 0) {
+        /* Close socket and free parser immediately on error */
+        if (stream->tls_socket) { tls_close(stream->tls_socket); stream->tls_socket = NULL; }
+        if (stream->tcp_socket) { tcp_close(stream->tcp_socket); stream->tcp_socket = NULL; }
+        http_parser_free(stream->parser); stream->parser = NULL;
         stream->error_msg = strdup("Failed to create reader thread");
         atomic_store(&stream->error, true);
         atomic_store(&stream->done, true);

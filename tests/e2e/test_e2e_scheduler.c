@@ -235,7 +235,7 @@ void test_scheduler_step(void)
 
 	/* Should complete in one step */
 	bool more_work = scheduler_step(sched);
-	/* May or may not have more work depending on cleanup */
+	(void)more_work;  /* May or may not have more work depending on cleanup */
 
 	bytecode_free(code);
 	scheduler_free(sched);
@@ -496,6 +496,7 @@ void test_work_stealing(void)
 
 	Worker *w0 = scheduler_get_worker(sched, 0);
 	Worker *w1 = scheduler_get_worker(sched, 1);
+	(void)w1;  /* w1 exists to verify multi-worker setup */
 
 	/* Add work to worker 0 */
 	Block *b1 = block_new(1, "steal1", NULL);

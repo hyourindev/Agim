@@ -514,6 +514,12 @@ bool node_connect(DistributedNode *node, const char *peer_name,
         conn->state = NODE_FAILED;
         return false;
     }
+    /* Validate h_length before memcpy to prevent buffer overflow */
+    if ((size_t)he->h_length > sizeof(addr.sin_addr)) {
+        close(sock);
+        conn->state = NODE_FAILED;
+        return false;
+    }
     memcpy(&addr.sin_addr, he->h_addr_list[0], (size_t)he->h_length);
 
     /* Connect */

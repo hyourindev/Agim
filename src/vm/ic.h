@@ -28,7 +28,7 @@ typedef enum ICState {
 
 /* Inline Cache Entry */
 
-#define IC_MAX_ENTRIES 4
+#define IC_MAX_ENTRIES 8
 
 typedef struct ICEntry {
     uint64_t shape_id;

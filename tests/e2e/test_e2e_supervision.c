@@ -19,6 +19,7 @@
 /*
  * Helper: Create bytecode that returns immediately
  */
+__attribute__((unused))
 static Bytecode *make_simple_bytecode(void)
 {
 	Bytecode *code = bytecode_new();

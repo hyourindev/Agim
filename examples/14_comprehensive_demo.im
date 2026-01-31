@@ -69,7 +69,7 @@ fn print_subsection(title: string) -> string {
 
 // === Main Program ===
 
-print_section("TOFULANG COMPREHENSIVE FEATURE DEMO")
+print_section("AGIM COMPREHENSIVE FEATURE DEMO")
 
 // Range Loops
 print_subsection("1. Range Loops")
@@ -358,7 +358,7 @@ if ws_handle == nil {
     print("  Connected!")
 
     // Send a message
-    let ws_message = "Hello from Tofulang!"
+    let ws_message = "Hello from Agim!"
     print("  Sending: " + ws_message)
     let send_ok: bool = ws.send(ws_handle, ws_message)
     print("  Send result: " + str(send_ok))

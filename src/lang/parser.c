@@ -1449,7 +1449,7 @@ static AstNode *parse_fn_decl(Parser *parser, bool is_tool) {
 }
 
 static AstNode *parse_tool_decorator(Parser *parser) {
-    int line = parser->previous.line;
+    (void)parser->previous.line;  /* Line available for future error reporting */
 
     char *description = NULL;
     AstNode *params_map = NULL;

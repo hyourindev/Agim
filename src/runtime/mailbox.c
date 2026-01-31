@@ -138,7 +138,7 @@ Message *mailbox_pop(Mailbox *mailbox) {
     Message *tail = atomic_load_explicit(&mailbox->tail, memory_order_acquire);
     if (head != tail) {
         int spin_count = 0;
-        const int max_spins = 1000;
+        const int max_spins = 100;  /* Reduced from 1000 for better performance */
         int backoff = 1;
 
         do {
@@ -344,17 +344,17 @@ Message *mailbox_receive(Mailbox *mailbox, uint64_t timeout_ms) {
         deadline.tv_nsec -= 1000000000;
     }
 
-    while (mailbox_empty(mailbox)) {
+    /* TOCTOU fix: Pop inside the critical section to prevent message theft.
+     * The message could be stolen by another thread between mutex unlock
+     * and the final pop if we pop outside the critical section. */
+    while ((msg = mailbox_pop(mailbox)) == NULL) {
         int rc = pthread_cond_timedwait(&mailbox->cond, &mailbox->cond_mutex, &deadline);
         if (rc != 0) {
-            /* Timeout or error */
-            pthread_mutex_unlock(&mailbox->cond_mutex);
-            return NULL;
+            /* Timeout or error - msg is already NULL */
+            break;
         }
     }
 
     pthread_mutex_unlock(&mailbox->cond_mutex);
-
-    /* Try to pop again after wakeup */
-    return mailbox_pop(mailbox);
+    return msg;
 }

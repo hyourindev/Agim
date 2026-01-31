@@ -29,6 +29,7 @@ typedef struct TimerEntry {
     struct TimerEntry *next;
     struct TimerEntry *prev;
     bool cancelled;
+    size_t slot;  /* Stored slot for O(1) removal during cancel */
 } TimerEntry;
 
 typedef struct TimerBucket {
@@ -51,6 +52,7 @@ typedef struct TimerWheel {
     TimerEntry *free_list;
     size_t allocated;
     pthread_mutex_t lock;
+    _Atomic(uint64_t) min_deadline;  /* Track minimum deadline for O(1) next_deadline */
 } TimerWheel;
 
 /* Timer Wheel API */

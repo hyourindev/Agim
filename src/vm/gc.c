@@ -103,6 +103,8 @@ void heap_free(Heap *heap) {
 /* Allocation */
 
 static size_t value_size(ValueType type) {
+    /* Use base sizes without conservative padding to avoid excessive GC triggers.
+     * Actual allocation sizes are tracked at allocation time where applicable. */
     switch (type) {
     case VAL_NIL:
     case VAL_BOOL:
@@ -111,15 +113,15 @@ static size_t value_size(ValueType type) {
     case VAL_PID:
         return sizeof(Value);
     case VAL_STRING:
-        return sizeof(Value) + sizeof(String) + 64;
+        return sizeof(Value) + sizeof(String);  /* Base only, actual tracked elsewhere */
     case VAL_ARRAY:
-        return sizeof(Value) + sizeof(Array) + 8 * sizeof(Value *);
+        return sizeof(Value) + sizeof(Array);   /* Base only */
     case VAL_MAP:
-        return sizeof(Value) + sizeof(Map) + 16 * sizeof(MapEntry *);
+        return sizeof(Value) + sizeof(Map);     /* Base only */
     case VAL_FUNCTION:
         return sizeof(Value) + sizeof(Function);
     case VAL_BYTES:
-        return sizeof(Value) + sizeof(Bytes) + 64;
+        return sizeof(Value) + sizeof(Bytes);   /* Base only */
     default:
         return sizeof(Value);
     }
@@ -206,6 +208,9 @@ Value *heap_alloc_with_gc(Heap *heap, ValueType type, VM *vm) {
         break;
     case VAL_CLOSURE:
     case VAL_RESULT:
+    case VAL_OPTION:
+    case VAL_STRUCT:
+    case VAL_ENUM:
         return NULL;
     }
 
@@ -280,6 +285,9 @@ Value *heap_alloc(Heap *heap, ValueType type) {
         break;
     case VAL_CLOSURE:
     case VAL_RESULT:
+    case VAL_OPTION:
+    case VAL_STRUCT:
+    case VAL_ENUM:
         return NULL;
     }
 
@@ -311,7 +319,9 @@ void gc_mark_value(Value *value) {
     case VAL_ARRAY: {
         Array *arr = value->as.array;
         for (size_t i = 0; i < arr->length; i++) {
-            gc_mark_value(arr->items[i]);
+            if (arr->items[i]) {  /* NULL check for safety */
+                gc_mark_value(arr->items[i]);
+            }
         }
         break;
     }

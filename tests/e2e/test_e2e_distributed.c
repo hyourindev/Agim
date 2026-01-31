@@ -10,6 +10,7 @@
  */
 
 #define _POSIX_C_SOURCE 200809L
+#define _DEFAULT_SOURCE
 
 #include "../test_common.h"
 #include "dist/node.h"

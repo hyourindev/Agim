@@ -515,7 +515,7 @@ static Value *bytecode_tool_call(Block *block, Value **args, size_t arg_count,
     (void)block;
 
     /* Run until function returns */
-    size_t initial_frame_count = vm->frame_count;
+    int initial_frame_count = vm->frame_count;
     size_t saved_limit = vm->reduction_limit;
     vm->reduction_limit = 1000000;
 

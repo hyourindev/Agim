@@ -1179,13 +1179,13 @@ VMResult vm_run(VM *vm) {
 
         case OP_GET_LOCAL: {
             uint16_t slot = read_short(frame);
-            vm_push(vm, frame->slots[slot]);
+            vm_push_nan(vm, frame->slots[slot]);
             break;
         }
 
         case OP_SET_LOCAL: {
             uint16_t slot = read_short(frame);
-            frame->slots[slot] = vm_peek(vm, 0);
+            frame->slots[slot] = vm_peek_nan(vm, 0);
             break;
         }
 
@@ -1683,6 +1683,12 @@ VMResult vm_run(VM *vm) {
         }
 
         case OP_FILE_READ: {
+            /* Capability check: require CAP_FILE_READ */
+            Block *block = (Block *)vm->block;
+            if (block && !block_has_cap(block, CAP_FILE_READ)) {
+                vm_push(vm, value_result_err(value_string("file read requires CAP_FILE_READ")));
+                break;
+            }
             Value *path = vm_pop(vm);
             if (!value_is_string(path)) {
                 vm_set_error(vm, "file path must be string");
@@ -1722,6 +1728,12 @@ VMResult vm_run(VM *vm) {
         }
 
         case OP_FILE_WRITE: {
+            /* Capability check: require CAP_FILE_WRITE */
+            Block *block = (Block *)vm->block;
+            if (block && !block_has_cap(block, CAP_FILE_WRITE)) {
+                vm_push(vm, value_result_err(value_string("file write requires CAP_FILE_WRITE")));
+                break;
+            }
             Value *content = vm_pop(vm);
             Value *path = vm_pop(vm);
             if (!value_is_string(path) || !value_is_string(content)) {
@@ -1756,6 +1768,12 @@ VMResult vm_run(VM *vm) {
         }
 
         case OP_FILE_EXISTS: {
+            /* Capability check: require CAP_FILE_READ */
+            Block *block = (Block *)vm->block;
+            if (block && !block_has_cap(block, CAP_FILE_READ)) {
+                vm_push(vm, value_bool(false));
+                break;
+            }
             Value *path = vm_pop(vm);
             if (!value_is_string(path)) {
                 vm_set_error(vm, "file path must be string");
@@ -1785,6 +1803,12 @@ VMResult vm_run(VM *vm) {
         }
 
         case OP_FILE_LINES: {
+            /* Capability check: require CAP_FILE_READ */
+            Block *block = (Block *)vm->block;
+            if (block && !block_has_cap(block, CAP_FILE_READ)) {
+                vm_push(vm, value_result_err(value_string("file read requires CAP_FILE_READ")));
+                break;
+            }
             Value *path = vm_pop(vm);
             if (!value_is_string(path)) {
                 vm_set_error(vm, "file path must be string");
@@ -1825,6 +1849,12 @@ VMResult vm_run(VM *vm) {
         }
 
         case OP_FILE_WRITE_BYTES: {
+            /* Capability check: require CAP_FILE_WRITE */
+            Block *block = (Block *)vm->block;
+            if (block && !block_has_cap(block, CAP_FILE_WRITE)) {
+                vm_push(vm, value_result_err(value_string("file write requires CAP_FILE_WRITE")));
+                break;
+            }
             Value *bytes_val = vm_pop(vm);
             Value *path = vm_pop(vm);
 
@@ -2074,7 +2104,14 @@ VMResult vm_run(VM *vm) {
                                 const char *key_str = entry->key->data;
                                 const char *val_str = value_to_string(entry->value);
                                 if (key_str && val_str) {
-                                    size_t len = strlen(key_str) + strlen(val_str) + 3;
+                                    size_t key_len = strlen(key_str);
+                                    size_t val_len = strlen(val_str);
+                                    /* Overflow check: ensure key_len + val_len + 3 doesn't overflow */
+                                    if (key_len > SIZE_MAX - val_len - 3) {
+                                        entry = entry->next;
+                                        continue;  /* Skip header on overflow */
+                                    }
+                                    size_t len = key_len + val_len + 3;
                                     header_storage[idx] = malloc(len);
                                     if (header_storage[idx]) {
                                         snprintf(header_storage[idx], len, "%s: %s", key_str, val_str);
@@ -2478,27 +2515,47 @@ VMResult vm_run(VM *vm) {
                 vm_set_error(vm, "join requires array and string");
                 return VM_ERROR_TYPE;
             }
+            /* Calculate total with overflow checking */
             size_t total = 0;
+            size_t delim_len = strlen(delim->as.string->data);
             for (size_t i = 0; i < arr->as.array->length; i++) {
                 Value *v = arr->as.array->items[i];
                 if (v && value_is_string(v)) {
-                    total += strlen(v->as.string->data);
+                    size_t item_len = strlen(v->as.string->data);
+                    if (item_len > SIZE_MAX - total) {
+                        vm_set_error(vm, "string size overflow");
+                        return VM_ERROR_RUNTIME;
+                    }
+                    total += item_len;
                 }
-                if (i > 0) total += strlen(delim->as.string->data);
+                if (i > 0) {
+                    if (delim_len > SIZE_MAX - total) {
+                        vm_set_error(vm, "string size overflow");
+                        return VM_ERROR_RUNTIME;
+                    }
+                    total += delim_len;
+                }
             }
             char *result = malloc(total + 1);
             if (!result) {
                 vm_set_error(vm, "out of memory");
                 return VM_ERROR_RUNTIME;
             }
-            result[0] = '\0';
+            /* Use memcpy with offset tracking instead of strcat */
+            size_t offset = 0;
             for (size_t i = 0; i < arr->as.array->length; i++) {
-                if (i > 0) strcat(result, delim->as.string->data);
+                if (i > 0) {
+                    memcpy(result + offset, delim->as.string->data, delim_len);
+                    offset += delim_len;
+                }
                 Value *v = arr->as.array->items[i];
                 if (v && value_is_string(v)) {
-                    strcat(result, v->as.string->data);
+                    size_t slen = strlen(v->as.string->data);
+                    memcpy(result + offset, v->as.string->data, slen);
+                    offset += slen;
                 }
             }
+            result[offset] = '\0';
             vm_push(vm, value_string(result));
             free(result);
             break;
@@ -2584,7 +2641,7 @@ VMResult vm_run(VM *vm) {
                 r += repllen;
                 p = found + findlen;
             }
-            strcpy(r, p);
+            memcpy(r, p, strlen(p) + 1);  /* +1 for null terminator */
             vm_push(vm, value_string(result));
             free(result);
             break;
@@ -2906,6 +2963,12 @@ VMResult vm_run(VM *vm) {
 
         /* WebSocket operations using native WebSocket implementation */
         case OP_WS_CONNECT: {
+            /* Capability check: require CAP_WEBSOCKET */
+            Block *block = (Block *)vm->block;
+            if (block && !block_has_cap(block, CAP_WEBSOCKET)) {
+                vm_set_error(vm, "WebSocket requires CAP_WEBSOCKET");
+                return VM_ERROR_CAPABILITY;
+            }
             Value *url = vm_pop(vm);
             if (!url || !value_is_string(url)) {
                 vm_set_error(vm, "ws_connect requires URL string");
@@ -2928,6 +2991,12 @@ VMResult vm_run(VM *vm) {
         }
 
         case OP_WS_SEND: {
+            /* Capability check: require CAP_WEBSOCKET */
+            Block *block = (Block *)vm->block;
+            if (block && !block_has_cap(block, CAP_WEBSOCKET)) {
+                vm_set_error(vm, "WebSocket requires CAP_WEBSOCKET");
+                return VM_ERROR_CAPABILITY;
+            }
             Value *msg = vm_pop(vm);
             Value *handle = vm_pop(vm);
             if (!handle || !value_is_map(handle) || !msg || !value_is_string(msg)) {
@@ -2951,6 +3020,12 @@ VMResult vm_run(VM *vm) {
         }
 
         case OP_WS_RECV: {
+            /* Capability check: require CAP_WEBSOCKET */
+            Block *block = (Block *)vm->block;
+            if (block && !block_has_cap(block, CAP_WEBSOCKET)) {
+                vm_set_error(vm, "WebSocket requires CAP_WEBSOCKET");
+                return VM_ERROR_CAPABILITY;
+            }
             Value *timeout_val = vm_pop(vm);
             Value *handle = vm_pop(vm);
             if (!handle || !value_is_map(handle)) {
@@ -2986,6 +3061,12 @@ VMResult vm_run(VM *vm) {
         }
 
         case OP_WS_CLOSE: {
+            /* Capability check: require CAP_WEBSOCKET */
+            Block *block = (Block *)vm->block;
+            if (block && !block_has_cap(block, CAP_WEBSOCKET)) {
+                vm_set_error(vm, "WebSocket requires CAP_WEBSOCKET");
+                return VM_ERROR_CAPABILITY;
+            }
             Value *handle = vm_pop(vm);
             if (handle && value_is_map(handle)) {
                 Value *ws_ptr = map_get(handle, "_ws");
@@ -3003,6 +3084,12 @@ VMResult vm_run(VM *vm) {
 
         /* HTTP Streaming (SSE) - uses safe HTTP client */
         case OP_HTTP_STREAM: {
+            /* Capability check: require CAP_HTTP */
+            Block *block = (Block *)vm->block;
+            if (block && !block_has_cap(block, CAP_HTTP)) {
+                vm_set_error(vm, "HTTP streaming requires CAP_HTTP");
+                return VM_ERROR_CAPABILITY;
+            }
             Value *url = vm_pop(vm);
             if (!url || !value_is_string(url)) {
                 vm_set_error(vm, "http_stream requires URL string");
@@ -3025,6 +3112,12 @@ VMResult vm_run(VM *vm) {
         }
 
         case OP_STREAM_READ: {
+            /* Capability check: require CAP_HTTP */
+            Block *block = (Block *)vm->block;
+            if (block && !block_has_cap(block, CAP_HTTP)) {
+                vm_set_error(vm, "HTTP streaming requires CAP_HTTP");
+                return VM_ERROR_CAPABILITY;
+            }
             Value *handle = vm_pop(vm);
             if (!handle || !value_is_map(handle)) {
                 vm_set_error(vm, "stream_read requires stream handle");
@@ -3056,6 +3149,12 @@ VMResult vm_run(VM *vm) {
         }
 
         case OP_STREAM_CLOSE: {
+            /* Capability check: require CAP_HTTP */
+            Block *block = (Block *)vm->block;
+            if (block && !block_has_cap(block, CAP_HTTP)) {
+                vm_set_error(vm, "HTTP streaming requires CAP_HTTP");
+                return VM_ERROR_CAPABILITY;
+            }
             Value *handle = vm_pop(vm);
             if (handle && value_is_map(handle)) {
                 Value *stream_ptr = map_get(handle, "_stream");

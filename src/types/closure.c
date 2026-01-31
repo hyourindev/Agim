@@ -57,6 +57,7 @@ bool value_is_closure(const Value *v) {
 
 Upvalue *upvalue_new(NanValue *slot) {
     Upvalue *upvalue = agim_alloc(sizeof(Upvalue));
+    if (!upvalue) return NULL;
     upvalue->location = slot;
     upvalue->closed = NANBOX_NIL;
     upvalue->next = NULL;

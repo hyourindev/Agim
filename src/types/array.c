@@ -26,6 +26,8 @@ Heap *array_get_gc_heap(void) {
 
 Value *value_array_with_capacity(size_t capacity) {
     Value *v = agim_alloc(sizeof(Value));
+    if (!v) return NULL;
+
     v->type = VAL_ARRAY;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
     v->flags = 0;
@@ -33,9 +35,18 @@ Value *value_array_with_capacity(size_t capacity) {
     v->next = NULL;
 
     Array *arr = agim_alloc(sizeof(Array));
+    if (!arr) {
+        agim_free(v);
+        return NULL;
+    }
     arr->length = 0;
     arr->capacity = capacity > 0 ? capacity : 8;
     arr->items = agim_alloc(sizeof(Value *) * arr->capacity);
+    if (!arr->items) {
+        agim_free(arr);
+        agim_free(v);
+        return NULL;
+    }
 
     v->as.array = arr;
     return v;
@@ -330,16 +341,21 @@ Value *array_reverse(Value *v) {
     return writable;
 }
 
-/* Sorting */
+/* Sorting
+ *
+ * Uses thread-local storage for the comparator to enable safe concurrent sorts.
+ * This pattern is consistent with tls_current_heap in gc.c and tls_current_alloc
+ * in worker_alloc.c.
+ */
 
-static int (*custom_compare)(const Value *, const Value *) = NULL;
+static _Thread_local int (*tls_custom_compare)(const Value *, const Value *) = NULL;
 
 static int qsort_compare(const void *a, const void *b) {
     Value *va = *(Value **)a;
     Value *vb = *(Value **)b;
 
-    if (custom_compare) {
-        return custom_compare(va, vb);
+    if (tls_custom_compare) {
+        return tls_custom_compare(va, vb);
     }
 
     return value_compare(va, vb);
@@ -358,8 +374,8 @@ Value *array_sort_by(Value *v, int (*compare)(const Value *, const Value *)) {
     Array *arr = writable->as.array;
     if (arr->length < 2) return writable;
 
-    custom_compare = compare;
+    tls_custom_compare = compare;  /* Thread-local, no race */
     qsort(arr->items, arr->length, sizeof(Value *), qsort_compare);
-    custom_compare = NULL;
+    tls_custom_compare = NULL;     /* Clean up */
     return writable;
 }

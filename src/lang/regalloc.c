@@ -40,8 +40,8 @@ uint8_t regalloc_local(RegAlloc *ra, int local_slot) {
         return ra->local_to_reg[local_slot];
     }
 
-    /* Allocate new register */
-    if (ra->next_reg >= REG_MAX) {
+    /* Allocate new register - REG_NONE (255) is reserved for errors */
+    if (ra->next_reg >= REG_NONE) {
         return REG_NONE; /* Out of registers */
     }
 
@@ -75,10 +75,11 @@ uint8_t regalloc_temp(RegAlloc *ra) {
     if (!ra) return REG_NONE;
 
     /* Temps start after locals */
-    uint8_t reg = ra->temp_base + ra->temp_count;
-    if (reg >= REG_MAX) {
+    int reg_idx = (int)ra->temp_base + (int)ra->temp_count;
+    if (reg_idx >= REG_MAX) {
         return REG_NONE; /* Out of registers */
     }
+    uint8_t reg = (uint8_t)reg_idx;
 
     ra->temp_count++;
 

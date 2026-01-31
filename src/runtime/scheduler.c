@@ -154,6 +154,7 @@ static Block *registry_lookup(BlockRegistry *reg, Pid pid) {
     return NULL;
 }
 
+__attribute__((unused))
 static void registry_remove(BlockRegistry *reg, Pid pid) {
     size_t shard_idx = registry_shard_index(pid);
     RegistryShard *shard = &reg->shards[shard_idx];
@@ -370,7 +371,9 @@ bool scheduler_register_block(Scheduler *scheduler, Block *block) {
 }
 
 Pid scheduler_spawn(Scheduler *scheduler, Bytecode *code, const char *name) {
-    return scheduler_spawn_ex(scheduler, code, name, CAP_ALL, NULL);
+    /* Use CAP_NONE as secure default - callers should use scheduler_spawn_ex
+     * with explicit capabilities for privileged operations */
+    return scheduler_spawn_ex(scheduler, code, name, CAP_NONE, NULL);
 }
 
 Pid scheduler_spawn_ex(Scheduler *scheduler, Bytecode *code, const char *name,

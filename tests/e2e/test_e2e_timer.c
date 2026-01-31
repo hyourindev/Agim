@@ -9,6 +9,9 @@
  * SPDX-License-Identifier: MIT
  */
 
+#define _POSIX_C_SOURCE 200809L
+#define _DEFAULT_SOURCE
+
 #include "../test_common.h"
 #include "runtime/timer.h"
 #include "runtime/block.h"

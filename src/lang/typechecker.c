@@ -135,30 +135,36 @@ Type *type_clone(Type *type) {
         clone->as.result.ok_type = type_clone(type->as.result.ok_type);
         clone->as.result.err_type = type_clone(type->as.result.err_type);
         break;
-    case TYPE_STRUCT:
-        clone->as.struct_type.name = agim_alloc(strlen(type->as.struct_type.name) + 1);
-        strcpy(clone->as.struct_type.name, type->as.struct_type.name);
+    case TYPE_STRUCT: {
+        size_t name_len = strlen(type->as.struct_type.name);
+        clone->as.struct_type.name = agim_alloc(name_len + 1);
+        memcpy(clone->as.struct_type.name, type->as.struct_type.name, name_len + 1);
         clone->as.struct_type.field_count = type->as.struct_type.field_count;
         clone->as.struct_type.field_names = agim_alloc(sizeof(char *) * clone->as.struct_type.field_count);
         clone->as.struct_type.field_types = agim_alloc(sizeof(Type *) * clone->as.struct_type.field_count);
         for (size_t i = 0; i < clone->as.struct_type.field_count; i++) {
-            clone->as.struct_type.field_names[i] = agim_alloc(strlen(type->as.struct_type.field_names[i]) + 1);
-            strcpy(clone->as.struct_type.field_names[i], type->as.struct_type.field_names[i]);
+            size_t field_len = strlen(type->as.struct_type.field_names[i]);
+            clone->as.struct_type.field_names[i] = agim_alloc(field_len + 1);
+            memcpy(clone->as.struct_type.field_names[i], type->as.struct_type.field_names[i], field_len + 1);
             clone->as.struct_type.field_types[i] = type_clone(type->as.struct_type.field_types[i]);
         }
         break;
-    case TYPE_ENUM:
-        clone->as.enum_type.name = agim_alloc(strlen(type->as.enum_type.name) + 1);
-        strcpy(clone->as.enum_type.name, type->as.enum_type.name);
+    }
+    case TYPE_ENUM: {
+        size_t name_len = strlen(type->as.enum_type.name);
+        clone->as.enum_type.name = agim_alloc(name_len + 1);
+        memcpy(clone->as.enum_type.name, type->as.enum_type.name, name_len + 1);
         clone->as.enum_type.variant_count = type->as.enum_type.variant_count;
         clone->as.enum_type.variant_names = agim_alloc(sizeof(char *) * clone->as.enum_type.variant_count);
         clone->as.enum_type.variant_payloads = agim_alloc(sizeof(Type *) * clone->as.enum_type.variant_count);
         for (size_t i = 0; i < clone->as.enum_type.variant_count; i++) {
-            clone->as.enum_type.variant_names[i] = agim_alloc(strlen(type->as.enum_type.variant_names[i]) + 1);
-            strcpy(clone->as.enum_type.variant_names[i], type->as.enum_type.variant_names[i]);
+            size_t var_len = strlen(type->as.enum_type.variant_names[i]);
+            clone->as.enum_type.variant_names[i] = agim_alloc(var_len + 1);
+            memcpy(clone->as.enum_type.variant_names[i], type->as.enum_type.variant_names[i], var_len + 1);
             clone->as.enum_type.variant_payloads[i] = type_clone(type->as.enum_type.variant_payloads[i]);
         }
         break;
+    }
     case TYPE_FUNCTION:
         clone->as.func.param_count = type->as.func.param_count;
         clone->as.func.param_types = agim_alloc(sizeof(Type *) * clone->as.func.param_count);
@@ -361,8 +367,9 @@ void type_env_pop_scope(TypeEnv *env) {
 
 void type_env_define(TypeEnv *env, const char *name, Type *type, bool is_mutable) {
     VarEntry *entry = agim_alloc(sizeof(VarEntry));
-    entry->name = agim_alloc(strlen(name) + 1);
-    strcpy(entry->name, name);
+    size_t name_len = strlen(name);
+    entry->name = agim_alloc(name_len + 1);
+    memcpy(entry->name, name, name_len + 1);
     entry->type = type;
     entry->is_mutable = is_mutable;
     entry->next = env->current->vars;
@@ -393,8 +400,9 @@ bool type_env_is_mutable(TypeEnv *env, const char *name) {
 
 void type_env_define_struct(TypeEnv *env, const char *name, Type *type) {
     TypeEntry *entry = agim_alloc(sizeof(TypeEntry));
-    entry->name = agim_alloc(strlen(name) + 1);
-    strcpy(entry->name, name);
+    size_t name_len = strlen(name);
+    entry->name = agim_alloc(name_len + 1);
+    memcpy(entry->name, name, name_len + 1);
     entry->type = type;
     entry->next = env->structs;
     env->structs = entry;
@@ -411,8 +419,9 @@ Type *type_env_lookup_struct(TypeEnv *env, const char *name) {
 
 void type_env_define_enum(TypeEnv *env, const char *name, Type *type) {
     TypeEntry *entry = agim_alloc(sizeof(TypeEntry));
-    entry->name = agim_alloc(strlen(name) + 1);
-    strcpy(entry->name, name);
+    size_t name_len = strlen(name);
+    entry->name = agim_alloc(name_len + 1);
+    memcpy(entry->name, name, name_len + 1);
     entry->type = type;
     entry->next = env->enums;
     env->enums = entry;
@@ -429,8 +438,9 @@ Type *type_env_lookup_enum(TypeEnv *env, const char *name) {
 
 void type_env_define_func(TypeEnv *env, const char *name, Type *type) {
     TypeEntry *entry = agim_alloc(sizeof(TypeEntry));
-    entry->name = agim_alloc(strlen(name) + 1);
-    strcpy(entry->name, name);
+    size_t name_len = strlen(name);
+    entry->name = agim_alloc(name_len + 1);
+    memcpy(entry->name, name, name_len + 1);
     entry->type = type;
     entry->next = env->funcs;
     env->funcs = entry;
@@ -551,8 +561,9 @@ static void tc_error(TypeChecker *tc, int line, const char *fmt, ...) {
     vsnprintf(buffer, sizeof(buffer), fmt, args);
     va_end(args);
 
-    tc->error = agim_alloc(strlen(buffer) + 1);
-    strcpy(tc->error, buffer);
+    size_t len = strlen(buffer);
+    tc->error = agim_alloc(len + 1);
+    memcpy(tc->error, buffer, len + 1);
 }
 
 /* Forward declarations */
@@ -924,16 +935,18 @@ static void check_decl(TypeChecker *tc, AstNode *node) {
     switch (node->type) {
     case NODE_STRUCT_DECL: {
         Type *struct_type = type_new(TYPE_STRUCT);
-        struct_type->as.struct_type.name = agim_alloc(strlen(node->as.struct_decl.name) + 1);
-        strcpy(struct_type->as.struct_type.name, node->as.struct_decl.name);
+        size_t name_len = strlen(node->as.struct_decl.name);
+        struct_type->as.struct_type.name = agim_alloc(name_len + 1);
+        memcpy(struct_type->as.struct_type.name, node->as.struct_decl.name, name_len + 1);
         struct_type->as.struct_type.field_count = node->as.struct_decl.field_count;
         struct_type->as.struct_type.field_names = agim_alloc(sizeof(char *) * node->as.struct_decl.field_count);
         struct_type->as.struct_type.field_types = agim_alloc(sizeof(Type *) * node->as.struct_decl.field_count);
 
         for (size_t i = 0; i < node->as.struct_decl.field_count; i++) {
             AstNode *field = node->as.struct_decl.fields[i];
-            struct_type->as.struct_type.field_names[i] = agim_alloc(strlen(field->as.struct_field.name) + 1);
-            strcpy(struct_type->as.struct_type.field_names[i], field->as.struct_field.name);
+            size_t field_len = strlen(field->as.struct_field.name);
+            struct_type->as.struct_type.field_names[i] = agim_alloc(field_len + 1);
+            memcpy(struct_type->as.struct_type.field_names[i], field->as.struct_field.name, field_len + 1);
             struct_type->as.struct_type.field_types[i] = type_from_ast(tc->env, field->as.struct_field.type_ann);
         }
 
@@ -943,16 +956,18 @@ static void check_decl(TypeChecker *tc, AstNode *node) {
 
     case NODE_ENUM_DECL: {
         Type *enum_type = type_new(TYPE_ENUM);
-        enum_type->as.enum_type.name = agim_alloc(strlen(node->as.enum_decl.name) + 1);
-        strcpy(enum_type->as.enum_type.name, node->as.enum_decl.name);
+        size_t name_len = strlen(node->as.enum_decl.name);
+        enum_type->as.enum_type.name = agim_alloc(name_len + 1);
+        memcpy(enum_type->as.enum_type.name, node->as.enum_decl.name, name_len + 1);
         enum_type->as.enum_type.variant_count = node->as.enum_decl.variant_count;
         enum_type->as.enum_type.variant_names = agim_alloc(sizeof(char *) * node->as.enum_decl.variant_count);
         enum_type->as.enum_type.variant_payloads = agim_alloc(sizeof(Type *) * node->as.enum_decl.variant_count);
 
         for (size_t i = 0; i < node->as.enum_decl.variant_count; i++) {
             AstNode *variant = node->as.enum_decl.variants[i];
-            enum_type->as.enum_type.variant_names[i] = agim_alloc(strlen(variant->as.enum_variant.name) + 1);
-            strcpy(enum_type->as.enum_type.variant_names[i], variant->as.enum_variant.name);
+            size_t var_len = strlen(variant->as.enum_variant.name);
+            enum_type->as.enum_type.variant_names[i] = agim_alloc(var_len + 1);
+            memcpy(enum_type->as.enum_type.variant_names[i], variant->as.enum_variant.name, var_len + 1);
             enum_type->as.enum_type.variant_payloads[i] = type_from_ast(tc->env, variant->as.enum_variant.payload_type);
         }
 

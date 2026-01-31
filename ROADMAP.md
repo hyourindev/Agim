@@ -1,8 +1,8 @@
-# Tofulang/Agim Roadmap: The Erlang for AI Agents
+# Agim Roadmap: The Erlang for AI Agents
 
 ## Vision
 
-Make Tofulang the **go-to language for building AI agents**, just as Erlang is for telecom/distributed systems.
+Make Agim the **go-to language for building AI agents**, just as Erlang is for telecom/distributed systems.
 
 **Core Principles:**
 - Lightweight agent processes (like Erlang processes)
@@ -59,7 +59,7 @@ Make Tofulang the **go-to language for building AI agents**, just as Erlang is f
 
 ## Phase 1: Bootstrap Compiler (Self-Hosting)
 
-**Goal:** Write the Tofulang compiler in Tofulang itself.
+**Goal:** Write the Agim compiler in Agim itself.
 
 **Duration:** 1-2 weeks
 
@@ -74,7 +74,7 @@ fs.write_bytes(path, [int])  -> Write byte array as binary
 - `src/vm/vm.c` - Implement the opcode
 - `src/lang/compiler.c` - Add `fs.write_bytes()` compilation
 
-### 1.2 Write Lexer in Tofulang
+### 1.2 Write Lexer in Agim
 
 ```tofu
 enum TokenType {
@@ -103,7 +103,7 @@ struct Lexer {
 fn lex(source: string) -> Result<[Token], string>
 ```
 
-### 1.3 Write Parser in Tofulang
+### 1.3 Write Parser in Agim
 
 ```tofu
 enum AstNode {
@@ -120,7 +120,7 @@ enum AstNode {
 fn parse(tokens: [Token]) -> Result<AstNode, string>
 ```
 
-### 1.4 Write Code Generator in Tofulang
+### 1.4 Write Code Generator in Agim
 
 ```tofu
 struct Compiler {
@@ -134,7 +134,7 @@ fn compile(ast: AstNode) -> Result<[int], string>
 
 ### 1.5 Bootstrap
 
-1. Compile the Tofulang compiler using the C compiler
+1. Compile the Agim compiler using the C compiler
 2. Use the resulting program to compile itself
 3. Verify output matches
 
@@ -142,7 +142,7 @@ fn compile(ast: AstNode) -> Result<[int], string>
 
 ## Phase 2: Actor Model (Erlang-Style Concurrency)
 
-**Goal:** Expose existing C infrastructure to Tofulang with ergonomic syntax.
+**Goal:** Expose existing C infrastructure to Agim with ergonomic syntax.
 
 **Duration:** 2-3 weeks
 
@@ -377,7 +377,7 @@ spawn_on(node, worker_fn)
 
 ## Phase 5: Developer Experience
 
-**Goal:** Make Tofulang delightful to use.
+**Goal:** Make Agim delightful to use.
 
 **Duration:** Ongoing
 
@@ -434,7 +434,7 @@ import "vector-store" as vectors
 ### Immediate (This Week)
 1. [ ] Add `fs.write_bytes()` for binary output
 2. [ ] Fix actor runtime initialization (spawn/send/receive)
-3. [ ] Write lexer in Tofulang (test self-hosting feasibility)
+3. [ ] Write lexer in Agim (test self-hosting feasibility)
 
 ### Short Term (1 Month)
 4. [ ] Complete self-hosting compiler
@@ -460,16 +460,16 @@ import "vector-store" as vectors
 ## File Structure (Target)
 
 ```
-tofulang/
+agim/
 ├── src/
-│   ├── lang/           # Lexer, parser, compiler (eventually in Tofulang)
+│   ├── lang/           # Lexer, parser, compiler (eventually in Agim)
 │   ├── vm/             # Virtual machine
 │   ├── runtime/        # Scheduler, blocks, mailboxes
 │   ├── net/            # HTTP, WebSocket, TCP
 │   ├── builtin/        # Tools, inference, memory
 │   └── types/          # Value types
 ├── lib/
-│   ├── std/            # Standard library (Tofulang)
+│   ├── std/            # Standard library (Agim)
 │   │   ├── agent.tofu  # Agent behavior
 │   │   ├── supervisor.tofu
 │   │   ├── llm.tofu    # LLM client
@@ -489,7 +489,7 @@ tofulang/
 
 ## Success Metrics
 
-1. **Self-hosting**: Compiler written in Tofulang
+1. **Self-hosting**: Compiler written in Agim
 2. **Concurrency**: 1M+ lightweight agents on single machine
 3. **Latency**: <1ms message passing between agents
 4. **Fault tolerance**: Supervisor restarts in <10ms

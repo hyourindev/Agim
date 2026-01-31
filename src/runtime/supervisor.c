@@ -339,6 +339,8 @@ static bool restart_rest_for_one(Supervisor *sup, Scheduler *sched, Block *sup_b
 bool supervisor_handle_exit(Supervisor *sup, Scheduler *sched, Block *sup_block,
                             Pid child_pid, ExitReason reason, int exit_code,
                             const char *exit_message) {
+    (void)exit_code;      /* Reserved for future logging/diagnostics */
+    (void)exit_message;   /* Reserved for future logging/diagnostics */
     if (!sup || !sched || !sup_block) return false;
 
     if (sup->shutting_down) {

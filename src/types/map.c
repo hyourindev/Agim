@@ -28,6 +28,8 @@ Heap *map_get_gc_heap(void) {
 
 Value *value_map_with_capacity(size_t capacity) {
     Value *v = agim_alloc(sizeof(Value));
+    if (!v) return NULL;
+
     v->type = VAL_MAP;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
     v->flags = 0;
@@ -35,9 +37,18 @@ Value *value_map_with_capacity(size_t capacity) {
     v->next = NULL;
 
     Map *map = agim_alloc(sizeof(Map));
+    if (!map) {
+        agim_free(v);
+        return NULL;
+    }
     map->size = 0;
     map->capacity = capacity > 0 ? capacity : 16;
     map->buckets = agim_alloc(sizeof(MapEntry *) * map->capacity);
+    if (!map->buckets) {
+        agim_free(map);
+        agim_free(v);
+        return NULL;
+    }
     memset(map->buckets, 0, sizeof(MapEntry *) * map->capacity);
 
     v->as.map = map;
@@ -94,6 +105,7 @@ static size_t chain_depth_at(Map *map, size_t index) {
 
 static void map_resize(Map *map, size_t new_capacity) {
     MapEntry **new_buckets = agim_alloc(sizeof(MapEntry *) * new_capacity);
+    if (!new_buckets) return;  /* Keep using old buckets on allocation failure */
     memset(new_buckets, 0, sizeof(MapEntry *) * new_capacity);
 
     for (size_t i = 0; i < map->capacity; i++) {

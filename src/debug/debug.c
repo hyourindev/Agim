@@ -73,6 +73,18 @@ void debug_print_value_detailed(const Value *v) {
     case VAL_CLOSURE:
         printf("closure\n");
         break;
+    case VAL_RESULT:
+        printf("result\n");
+        break;
+    case VAL_OPTION:
+        printf("option\n");
+        break;
+    case VAL_STRUCT:
+        printf("struct\n");
+        break;
+    case VAL_ENUM:
+        printf("enum\n");
+        break;
     }
 
     printf("  marked: %s\n", value_is_marked(v) ? "yes" : "no");

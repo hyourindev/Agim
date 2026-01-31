@@ -26,11 +26,12 @@ static int tests_passed = 0;
 
 #define ASSERT_EQ(expected, actual)                                     \
     do {                                                                \
+        long long _expected = (long long)(expected);                    \
+        long long _actual = (long long)(actual);                        \
         tests_run++;                                                    \
-        if ((expected) != (actual)) {                                   \
-            printf("  FAIL: %s:%d: expected %ld, got %ld\n",            \
-                   __FILE__, __LINE__,                                  \
-                   (long)(expected), (long)(actual));                   \
+        if (_expected != _actual) {                                     \
+            printf("  FAIL: %s:%d: expected %lld, got %lld\n",          \
+                   __FILE__, __LINE__, _expected, _actual);             \
         } else {                                                        \
             tests_passed++;                                             \
         }                                                               \

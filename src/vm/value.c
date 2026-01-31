@@ -18,6 +18,7 @@
 
 Value *value_nil(void) {
     Value *v = agim_alloc(sizeof(Value));
+    if (!v) return NULL;
     v->type = VAL_NIL;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
     v->flags = 0;
@@ -28,6 +29,7 @@ Value *value_nil(void) {
 
 Value *value_bool(bool value) {
     Value *v = agim_alloc(sizeof(Value));
+    if (!v) return NULL;
     v->type = VAL_BOOL;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
     v->flags = 0;
@@ -39,6 +41,7 @@ Value *value_bool(bool value) {
 
 Value *value_int(int64_t value) {
     Value *v = agim_alloc(sizeof(Value));
+    if (!v) return NULL;
     v->type = VAL_INT;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
     v->flags = 0;
@@ -50,6 +53,7 @@ Value *value_int(int64_t value) {
 
 Value *value_float(double value) {
     Value *v = agim_alloc(sizeof(Value));
+    if (!v) return NULL;
     v->type = VAL_FLOAT;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
     v->flags = 0;
@@ -61,6 +65,7 @@ Value *value_float(double value) {
 
 Value *value_pid(uint64_t pid) {
     Value *v = agim_alloc(sizeof(Value));
+    if (!v) return NULL;
     v->type = VAL_PID;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
     v->flags = 0;
@@ -72,6 +77,7 @@ Value *value_pid(uint64_t pid) {
 
 Value *value_function(const char *name, size_t arity) {
     Value *v = agim_alloc(sizeof(Value));
+    if (!v) return NULL;
     v->type = VAL_FUNCTION;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
     v->flags = 0;
@@ -79,6 +85,10 @@ Value *value_function(const char *name, size_t arity) {
     v->next = NULL;
 
     Function *fn = agim_alloc(sizeof(Function));
+    if (!fn) {
+        agim_free(v);
+        return NULL;
+    }
     fn->name = name ? strdup(name) : NULL;
     fn->arity = arity;
     fn->code_offset = 0;
@@ -91,6 +101,7 @@ Value *value_function(const char *name, size_t arity) {
 
 Value *value_bytes(size_t capacity) {
     Value *v = agim_alloc(sizeof(Value));
+    if (!v) return NULL;
     v->type = VAL_BYTES;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
     v->flags = 0;
@@ -98,9 +109,18 @@ Value *value_bytes(size_t capacity) {
     v->next = NULL;
 
     Bytes *bytes = agim_alloc(sizeof(Bytes));
+    if (!bytes) {
+        agim_free(v);
+        return NULL;
+    }
     bytes->length = 0;
     bytes->capacity = capacity > 0 ? capacity : 64;
     bytes->data = agim_alloc(bytes->capacity);
+    if (!bytes->data) {
+        agim_free(bytes);
+        agim_free(v);
+        return NULL;
+    }
 
     v->as.bytes = bytes;
     return v;
@@ -110,6 +130,7 @@ Value *value_bytes(size_t capacity) {
 
 Value *value_result_ok(Value *value) {
     Value *v = agim_alloc(sizeof(Value));
+    if (!v) return NULL;
     v->type = VAL_RESULT;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
     v->flags = 0;
@@ -117,6 +138,10 @@ Value *value_result_ok(Value *value) {
     v->next = NULL;
 
     Result *result = agim_alloc(sizeof(Result));
+    if (!result) {
+        agim_free(v);
+        return NULL;
+    }
     result->is_ok = true;
     result->value = value;
 
@@ -126,6 +151,7 @@ Value *value_result_ok(Value *value) {
 
 Value *value_result_err(Value *error) {
     Value *v = agim_alloc(sizeof(Value));
+    if (!v) return NULL;
     v->type = VAL_RESULT;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
     v->flags = 0;
@@ -133,6 +159,10 @@ Value *value_result_err(Value *error) {
     v->next = NULL;
 
     Result *result = agim_alloc(sizeof(Result));
+    if (!result) {
+        agim_free(v);
+        return NULL;
+    }
     result->is_ok = false;
     result->value = error;
 
@@ -174,6 +204,7 @@ Value *value_result_unwrap_err(const Value *v) {
 
 Value *value_some(Value *value) {
     Value *v = agim_alloc(sizeof(Value));
+    if (!v) return NULL;
     v->type = VAL_OPTION;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
     v->flags = 0;
@@ -181,6 +212,10 @@ Value *value_some(Value *value) {
     v->next = NULL;
 
     Option *opt = agim_alloc(sizeof(Option));
+    if (!opt) {
+        agim_free(v);
+        return NULL;
+    }
     opt->is_some = true;
     opt->value = value;
 
@@ -190,6 +225,7 @@ Value *value_some(Value *value) {
 
 Value *value_none(void) {
     Value *v = agim_alloc(sizeof(Value));
+    if (!v) return NULL;
     v->type = VAL_OPTION;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
     v->flags = 0;
@@ -197,6 +233,10 @@ Value *value_none(void) {
     v->next = NULL;
 
     Option *opt = agim_alloc(sizeof(Option));
+    if (!opt) {
+        agim_free(v);
+        return NULL;
+    }
     opt->is_some = false;
     opt->value = NULL;
 
@@ -232,6 +272,7 @@ Value *value_option_unwrap_or(const Value *v, Value *default_val) {
 
 Value *value_struct_new(const char *type_name, size_t field_count) {
     Value *v = agim_alloc(sizeof(Value));
+    if (!v) return NULL;
     v->type = VAL_STRUCT;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
     v->flags = 0;
@@ -239,6 +280,10 @@ Value *value_struct_new(const char *type_name, size_t field_count) {
     v->next = NULL;
 
     StructInstance *inst = agim_alloc(sizeof(StructInstance));
+    if (!inst) {
+        agim_free(v);
+        return NULL;
+    }
     inst->type_name = strdup(type_name);
     inst->field_count = field_count;
     inst->field_names = field_count > 0 ? agim_alloc(sizeof(char *) * field_count) : NULL;
@@ -293,6 +338,7 @@ const char *value_struct_type_name(const Value *v) {
 
 Value *value_enum_unit(const char *type_name, const char *variant_name) {
     Value *v = agim_alloc(sizeof(Value));
+    if (!v) return NULL;
     v->type = VAL_ENUM;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
     v->flags = 0;
@@ -300,6 +346,10 @@ Value *value_enum_unit(const char *type_name, const char *variant_name) {
     v->next = NULL;
 
     EnumInstance *inst = agim_alloc(sizeof(EnumInstance));
+    if (!inst) {
+        agim_free(v);
+        return NULL;
+    }
     inst->type_name = strdup(type_name);
     inst->variant_name = strdup(variant_name);
     inst->payload = NULL;
@@ -310,6 +360,7 @@ Value *value_enum_unit(const char *type_name, const char *variant_name) {
 
 Value *value_enum_with_payload(const char *type_name, const char *variant_name, Value *payload) {
     Value *v = agim_alloc(sizeof(Value));
+    if (!v) return NULL;
     v->type = VAL_ENUM;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
     v->flags = 0;
@@ -317,6 +368,10 @@ Value *value_enum_with_payload(const char *type_name, const char *variant_name, 
     v->next = NULL;
 
     EnumInstance *inst = agim_alloc(sizeof(EnumInstance));
+    if (!inst) {
+        agim_free(v);
+        return NULL;
+    }
     inst->type_name = strdup(type_name);
     inst->variant_name = strdup(variant_name);
     inst->payload = payload;
@@ -700,20 +755,38 @@ static bool append_to_buf(char **buf, size_t *capacity, size_t *len, const char 
 }
 
 static char *json_escape_string(const char *str) {
+    if (!str) return NULL;
     size_t len = strlen(str);
-    size_t cap = len * 2 + 3;
+
+    /* Worst case: every char becomes \uXXXX (6 chars) + quotes + null
+     * Check for overflow before allocation */
+    if (len > (SIZE_MAX - 3) / 6) {
+        return NULL;  /* Would overflow */
+    }
+    size_t cap = len * 6 + 3;
+
     char *out = agim_alloc(cap);
+    if (!out) return NULL;
+
     size_t j = 0;
     out[j++] = '"';
-    for (size_t i = 0; i < len && j < cap - 2; i++) {
-        char c = str[i];
-        switch (c) {
-        case '"':  out[j++] = '\\'; out[j++] = '"'; break;
-        case '\\': out[j++] = '\\'; out[j++] = '\\'; break;
-        case '\n': out[j++] = '\\'; out[j++] = 'n'; break;
-        case '\r': out[j++] = '\\'; out[j++] = 'r'; break;
-        case '\t': out[j++] = '\\'; out[j++] = 't'; break;
-        default:   out[j++] = c; break;
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)str[i];
+        if (c == '"') {
+            out[j++] = '\\'; out[j++] = '"';
+        } else if (c == '\\') {
+            out[j++] = '\\'; out[j++] = '\\';
+        } else if (c == '\n') {
+            out[j++] = '\\'; out[j++] = 'n';
+        } else if (c == '\r') {
+            out[j++] = '\\'; out[j++] = 'r';
+        } else if (c == '\t') {
+            out[j++] = '\\'; out[j++] = 't';
+        } else if (c < 0x20) {
+            /* Control characters -> \uXXXX */
+            j += snprintf(out + j, 7, "\\u%04x", c);
+        } else {
+            out[j++] = c;
         }
     }
     out[j++] = '"';
@@ -843,9 +916,40 @@ char *value_repr(const Value *v) {
 void value_free(Value *v) {
     if (!v) return;
 
-    uint32_t old_count = atomic_fetch_sub_explicit(&v->refcount, 1, memory_order_acq_rel);
-    if (old_count > 1) {
-        return;
+    /* Use CAS loop to safely decrement refcount.
+     * When going from 1 to 0, set REFCOUNT_FREEING instead to prevent
+     * concurrent value_retain from resurrecting the object. */
+    uint32_t current = atomic_load_explicit(&v->refcount, memory_order_acquire);
+
+    while (true) {
+        if (current == REFCOUNT_FREEING || current == 0) {
+            /* Already being freed or already freed */
+            return;
+        }
+        if (current == REFCOUNT_SATURATED) {
+            /* Never free saturated values */
+            return;
+        }
+
+        uint32_t new_count;
+        if (current == 1) {
+            /* Last reference - mark as freeing to prevent concurrent retain */
+            new_count = REFCOUNT_FREEING;
+        } else {
+            new_count = current - 1;
+        }
+
+        if (atomic_compare_exchange_weak_explicit(
+                &v->refcount, &current, new_count,
+                memory_order_acq_rel, memory_order_acquire)) {
+            if (new_count != REFCOUNT_FREEING) {
+                /* Not the last reference, just decremented */
+                return;
+            }
+            /* We set REFCOUNT_FREEING - proceed to actually free */
+            break;
+        }
+        /* CAS failed, current was updated - retry */
     }
 
     switch (v->type) {
@@ -1013,7 +1117,8 @@ Value *value_retain(Value *v) {
     uint32_t current = atomic_load_explicit(&v->refcount, memory_order_acquire);
 
     while (true) {
-        if (current == REFCOUNT_FREEING) {
+        /* Check for values being freed or already freed */
+        if (current == REFCOUNT_FREEING || current == 0) {
             return NULL;
         }
         if (current >= REFCOUNT_SATURATED) {

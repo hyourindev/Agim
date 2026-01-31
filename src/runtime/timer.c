@@ -9,6 +9,8 @@
 
 #include "runtime/timer.h"
 
+#include <stdatomic.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
@@ -102,6 +104,7 @@ TimerWheel *timer_wheel_new(const TimerConfig *config) {
     wheel->current_time_ms = timer_current_time_ms();
     wheel->free_list = NULL;
     wheel->allocated = 0;
+    atomic_init(&wheel->min_deadline, 0);
 
     wheel->buckets = calloc(wheel->wheel_size, sizeof(TimerBucket));
     if (!wheel->buckets) {
@@ -165,17 +168,36 @@ TimerEntry *timer_add(TimerWheel *wheel, Pid block_pid, uint64_t timeout_ms,
 
     uint64_t now = timer_current_time_ms();
     entry->block_pid = block_pid;
-    entry->deadline_ms = now + timeout_ms;
     entry->callback = callback;
     entry->callback_ctx = ctx;
     entry->cancelled = false;
+
+    /* Check for deadline overflow - cap at max uint64 */
+    if (timeout_ms > UINT64_MAX - now) {
+        entry->deadline_ms = UINT64_MAX;
+    } else {
+        entry->deadline_ms = now + timeout_ms;
+    }
 
     uint64_t ticks = timeout_ms / wheel->tick_ms;
     if (ticks == 0) ticks = 1;
 
     size_t slot = (wheel->current_slot + ticks) % wheel->wheel_size;
+    entry->slot = slot;  /* Store slot for O(1) removal */
 
     bucket_add(&wheel->buckets[slot], entry);
+
+    /* Update min_deadline atomically using CAS loop.
+     * This prevents concurrent timer_add calls from losing updates. */
+    uint64_t current_min = atomic_load_explicit(&wheel->min_deadline, memory_order_relaxed);
+    while (current_min == 0 || entry->deadline_ms < current_min) {
+        if (atomic_compare_exchange_weak_explicit(
+                &wheel->min_deadline, &current_min, entry->deadline_ms,
+                memory_order_relaxed, memory_order_relaxed)) {
+            break;
+        }
+        /* CAS failed, current_min was updated - check again */
+    }
 
     pthread_mutex_unlock(&wheel->lock);
     return entry;
@@ -193,28 +215,15 @@ bool timer_cancel(TimerWheel *wheel, TimerEntry *entry) {
 
     entry->cancelled = true;
 
-    uint64_t now = timer_current_time_ms();
-    if (entry->deadline_ms > now) {
-        uint64_t ticks_remaining = (entry->deadline_ms - now) / wheel->tick_ms;
-        size_t slot = (wheel->current_slot + ticks_remaining) % wheel->wheel_size;
-
-        for (size_t i = 0; i < wheel->wheel_size; i++) {
-            size_t check_slot = (slot + i) % wheel->wheel_size;
-            TimerEntry *e = wheel->buckets[check_slot].head;
-            while (e) {
-                if (e == entry) {
-                    bucket_remove(&wheel->buckets[check_slot], entry);
-                    timer_entry_free(wheel, entry);
-                    pthread_mutex_unlock(&wheel->lock);
-                    return true;
-                }
-                e = e->next;
-            }
-        }
+    /* O(1) removal using stored slot index */
+    size_t slot = entry->slot;
+    if (slot < wheel->wheel_size) {
+        bucket_remove(&wheel->buckets[slot], entry);
+        timer_entry_free(wheel, entry);
     }
 
     pthread_mutex_unlock(&wheel->lock);
-    return false;
+    return true;
 }
 
 TimerEntry *timer_tick(TimerWheel *wheel, uint64_t current_time_ms, size_t *fired_count) {
@@ -225,6 +234,8 @@ TimerEntry *timer_tick(TimerWheel *wheel, uint64_t current_time_ms, size_t *fire
     *fired_count = 0;
     TimerEntry *fired_head = NULL;
     TimerEntry *fired_tail = NULL;
+    uint64_t new_min_deadline = 0;
+    bool found_pending = false;
 
     uint64_t elapsed = current_time_ms - wheel->current_time_ms;
     size_t ticks = (size_t)(elapsed / wheel->tick_ms);
@@ -262,7 +273,14 @@ TimerEntry *timer_tick(TimerWheel *wheel, uint64_t current_time_ms, size_t *fire
                 size_t new_slot = (wheel->current_slot + ticks_remaining) % wheel->wheel_size;
                 if (new_slot != wheel->current_slot) {
                     bucket_remove(bucket, entry);
+                    entry->slot = new_slot;  /* Update slot after move */
                     bucket_add(&wheel->buckets[new_slot], entry);
+                }
+
+                /* Track minimum deadline for remaining timers */
+                if (!found_pending || entry->deadline_ms < new_min_deadline) {
+                    new_min_deadline = entry->deadline_ms;
+                    found_pending = true;
                 }
             } else if (entry->cancelled) {
                 bucket_remove(bucket, entry);
@@ -273,6 +291,24 @@ TimerEntry *timer_tick(TimerWheel *wheel, uint64_t current_time_ms, size_t *fire
         }
     }
 
+    /* Recalculate min_deadline if timers fired (only when needed) */
+    if (*fired_count > 0) {
+        /* Scan all buckets to find new minimum (only after firing) */
+        for (size_t i = 0; i < wheel->wheel_size; i++) {
+            TimerEntry *e = wheel->buckets[i].head;
+            while (e) {
+                if (!e->cancelled) {
+                    if (!found_pending || e->deadline_ms < new_min_deadline) {
+                        new_min_deadline = e->deadline_ms;
+                        found_pending = true;
+                    }
+                }
+                e = e->next;
+            }
+        }
+        atomic_store_explicit(&wheel->min_deadline, found_pending ? new_min_deadline : 0, memory_order_relaxed);
+    }
+
     wheel->current_time_ms = current_time_ms;
 
     pthread_mutex_unlock(&wheel->lock);
@@ -281,27 +317,8 @@ TimerEntry *timer_tick(TimerWheel *wheel, uint64_t current_time_ms, size_t *fire
 
 uint64_t timer_next_deadline(const TimerWheel *wheel) {
     if (!wheel) return 0;
-
-    pthread_mutex_lock((pthread_mutex_t *)&wheel->lock);
-
-    uint64_t min_deadline = 0;
-    bool found = false;
-
-    for (size_t i = 0; i < wheel->wheel_size; i++) {
-        TimerEntry *entry = wheel->buckets[i].head;
-        while (entry) {
-            if (!entry->cancelled) {
-                if (!found || entry->deadline_ms < min_deadline) {
-                    min_deadline = entry->deadline_ms;
-                    found = true;
-                }
-            }
-            entry = entry->next;
-        }
-    }
-
-    pthread_mutex_unlock((pthread_mutex_t *)&wheel->lock);
-    return found ? min_deadline : 0;
+    /* O(1) access using cached min_deadline */
+    return atomic_load_explicit(&((TimerWheel *)wheel)->min_deadline, memory_order_relaxed);
 }
 
 bool timer_has_pending(const TimerWheel *wheel) {

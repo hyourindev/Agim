@@ -8,8 +8,31 @@
 #include "util/pool.h"
 #include "util/alloc.h"
 
+#include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* Debug mode: Header-based magic number validation for double-free detection.
+ * In debug mode, each allocation has a header that stores a magic number.
+ * This header is placed before the user's data, so it doesn't conflict
+ * with the data being stored. The user gets a pointer after the header.
+ */
+#ifdef AGIM_DEBUG
+#define POOL_DEBUG_HEADERS 1
+#define POOL_MAGIC_ALLOCATED 0xAB12CD34U
+#define POOL_MAGIC_FREE      0xDEADBEEFU
+
+typedef struct PoolBlockHeader {
+    uint32_t magic;
+    uint32_t size;  /* Original requested size for validation */
+} PoolBlockHeader;
+
+#define POOL_HEADER_SIZE sizeof(PoolBlockHeader)
+#else
+#define POOL_DEBUG_HEADERS 0
+#define POOL_HEADER_SIZE 0
+#endif
 
 /* Pool Implementation */
 
@@ -99,10 +122,44 @@ void *pool_alloc(MemoryPool *pool) {
     return block;
 }
 
+/* Check if a pointer belongs to one of the pool's chunks.
+ * Must be called with pool->lock held.
+ */
+static bool pool_owns_ptr(MemoryPool *pool, void *ptr) {
+    for (PoolChunk *chunk = pool->chunks; chunk; chunk = chunk->next) {
+        char *start = chunk->data;
+        char *end = start + pool->block_size * pool->blocks_per_chunk;
+        if ((char *)ptr >= start && (char *)ptr < end) {
+            /* Also verify alignment within the chunk */
+            size_t offset = (size_t)((char *)ptr - start);
+            if (offset % pool->block_size == 0) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 void pool_dealloc(MemoryPool *pool, void *ptr) {
     if (!pool || !ptr) return;
 
     pthread_mutex_lock(&pool->lock);
+
+    /* Validate that the pointer belongs to this pool.
+     * This prevents silent corruption from invalid pointers.
+     */
+    if (!pool_owns_ptr(pool, ptr)) {
+        pthread_mutex_unlock(&pool->lock);
+#ifdef AGIM_DEBUG
+        fprintf(stderr, "agim: pool_dealloc called with pointer not owned by pool "
+                "(ptr=%p, block_size=%zu)\n", ptr, pool->block_size);
+        abort();
+#else
+        /* In release mode, log warning but don't corrupt the free list */
+        fprintf(stderr, "agim: warning: invalid pool_dealloc ignored (ptr=%p)\n", ptr);
+        return;
+#endif
+    }
 
     PoolFreeBlock *block = (PoolFreeBlock *)ptr;
     block->next = pool->free_list;
@@ -176,17 +233,90 @@ void *pools_alloc(size_t size) {
         pools_init();
     }
 
-    int idx = find_pool_index(size);
+#if POOL_DEBUG_HEADERS
+    /* In debug mode, add header size to the request */
+    size_t total_size = size + POOL_HEADER_SIZE;
+    int idx = find_pool_index(total_size);
     if (idx >= 0) {
-        return pool_alloc(&global_pools[idx]);
+        void *block = pool_alloc(&global_pools[idx]);
+        if (block) {
+            PoolBlockHeader *header = (PoolBlockHeader *)block;
+            header->magic = POOL_MAGIC_ALLOCATED;
+            header->size = (uint32_t)size;
+            return (char *)block + POOL_HEADER_SIZE;
+        }
+        agim_set_error(AGIM_E_POOL_EXHAUSTED);
+        return NULL;
     }
 
-    return malloc(size);
+    /* Fall back to malloc for large allocations */
+    void *block = malloc(total_size);
+    if (block) {
+        PoolBlockHeader *header = (PoolBlockHeader *)block;
+        header->magic = POOL_MAGIC_ALLOCATED;
+        header->size = (uint32_t)size;
+        return (char *)block + POOL_HEADER_SIZE;
+    }
+    agim_set_error(AGIM_E_NOMEM);
+    return NULL;
+#else
+    int idx = find_pool_index(size);
+    if (idx >= 0) {
+        void *result = pool_alloc(&global_pools[idx]);
+        if (!result) {
+            agim_set_error(AGIM_E_POOL_EXHAUSTED);
+        }
+        return result;
+    }
+
+    void *result = malloc(size);
+    if (!result && size > 0) {
+        agim_set_error(AGIM_E_NOMEM);
+    }
+    return result;
+#endif
 }
 
 void pools_dealloc(void *ptr, size_t size) {
     if (!ptr) return;
 
+#if POOL_DEBUG_HEADERS
+    /* In debug mode, go back to find the header */
+    PoolBlockHeader *header = (PoolBlockHeader *)((char *)ptr - POOL_HEADER_SIZE);
+
+    /* Check for double-free */
+    if (header->magic == POOL_MAGIC_FREE) {
+        fprintf(stderr, "agim: double-free detected in pool (ptr=%p, size=%zu)\n", ptr, size);
+        abort();
+    }
+
+    /* Check for invalid pointer (not allocated by pool) */
+    if (header->magic != POOL_MAGIC_ALLOCATED) {
+        fprintf(stderr, "agim: invalid pointer passed to pools_dealloc "
+                "(ptr=%p, size=%zu, magic=0x%08x)\n", ptr, size, header->magic);
+        abort();
+    }
+
+    /* Check size matches */
+    if (header->size != (uint32_t)size) {
+        fprintf(stderr, "agim: size mismatch in pools_dealloc "
+                "(ptr=%p, expected=%u, got=%zu)\n", ptr, header->size, size);
+        abort();
+    }
+
+    /* Mark as freed */
+    header->magic = POOL_MAGIC_FREE;
+
+    /* Deallocate the actual block (including header) */
+    size_t total_size = size + POOL_HEADER_SIZE;
+    int idx = find_pool_index(total_size);
+    if (idx >= 0) {
+        pool_dealloc(&global_pools[idx], header);
+        return;
+    }
+
+    free(header);
+#else
     int idx = find_pool_index(size);
     if (idx >= 0) {
         pool_dealloc(&global_pools[idx], ptr);
@@ -194,4 +324,5 @@ void pools_dealloc(void *ptr, size_t size) {
     }
 
     free(ptr);
+#endif
 }
