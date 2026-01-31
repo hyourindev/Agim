@@ -89,8 +89,38 @@ typedef enum Opcode {
     OP_SPAWN,        /* Spawn new block */
     OP_SEND,         /* Send message to block */
     OP_RECEIVE,      /* Receive message (blocking) */
+    OP_RECEIVE_TIMEOUT, /* Receive with timeout: [timeout_ms on stack] -> Result<msg, timeout> */
     OP_SELF,         /* Get current block's PID */
     OP_YIELD,        /* Yield execution */
+
+    /* Linking & Monitoring */
+    OP_LINK,         /* Link to another block (bidirectional crash notification) */
+    OP_UNLINK,       /* Unlink from another block */
+    OP_MONITOR,      /* Monitor another block (unidirectional down notification) */
+    OP_DEMONITOR,    /* Stop monitoring another block */
+
+    /* Supervisor operations */
+    OP_SUP_START,    /* Start a supervisor: [strategy on stack] -> supervisor_ok */
+    OP_SUP_ADD_CHILD,/* Add child to supervisor: [name, code, restart_strategy] -> pid */
+    OP_SUP_REMOVE_CHILD, /* Remove child: [name] -> ok */
+    OP_SUP_WHICH_CHILDREN, /* List supervised children -> array */
+    OP_SUP_SHUTDOWN, /* Shutdown supervisor -> ok */
+
+    /* Process groups */
+    OP_GROUP_JOIN,   /* Join a process group: [name] -> ok */
+    OP_GROUP_LEAVE,  /* Leave a process group: [name] -> ok */
+    OP_GROUP_SEND,   /* Send to all group members: [name, message] -> count */
+    OP_GROUP_SEND_OTHERS, /* Send to group except self: [name, message] -> count */
+    OP_GROUP_MEMBERS,/* Get group members: [name] -> array of pids */
+    OP_GROUP_LIST,   /* List all groups: [] -> array of names */
+
+    /* Telemetry & Introspection */
+    OP_GET_STATS,    /* Get block statistics: [pid] -> stats map */
+    OP_TRACE,        /* Enable tracing: [pid, flags] -> ok */
+    OP_TRACE_OFF,    /* Disable tracing: [pid] -> ok */
+
+    /* Selective receive (pattern matching) */
+    OP_RECEIVE_MATCH,/* Receive with pattern: [pattern] -> matched message or nil */
 
     /* Agim primitives */
     OP_INFER,        /* LLM inference call */
@@ -114,6 +144,7 @@ typedef enum Opcode {
     OP_FILE_WRITE,   /* Write to file */
     OP_FILE_EXISTS,  /* Check if file exists */
     OP_FILE_LINES,   /* Read file as array of lines */
+    OP_FILE_WRITE_BYTES, /* Write byte array to file */
 
     /* HTTP */
     OP_HTTP_GET,     /* HTTP GET request */

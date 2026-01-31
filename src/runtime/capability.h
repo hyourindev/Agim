@@ -34,7 +34,10 @@ typedef enum Capability {
     CAP_LINK        = 1 << 9,   /* Can link to other blocks */
     CAP_SHELL       = 1 << 10,  /* Can execute shell commands */
     CAP_EXEC        = 1 << 11,  /* Can execute processes */
-    CAP_ALL         = 0xFFF,    /* All defined capabilities */
+    CAP_TRAP_EXIT   = 1 << 12,  /* Receive exit signals as messages instead of crashing */
+    CAP_MONITOR     = 1 << 13,  /* Can monitor other blocks */
+    CAP_SUPERVISE   = 1 << 14,  /* Can act as a supervisor */
+    CAP_ALL         = 0x7FFF,   /* All defined capabilities */
 } Capability;
 
 /**

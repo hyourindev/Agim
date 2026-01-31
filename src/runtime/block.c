@@ -184,6 +184,15 @@ Block *block_new(Pid pid, const char *name, const BlockLimits *limits) {
 
     /* Supervision */
     block->parent = PID_INVALID;
+    block->supervisor = NULL;
+
+    /* Monitoring */
+    block->monitors = NULL;
+    block->monitor_count = 0;
+    block->monitor_capacity = 0;
+    block->monitored_by = NULL;
+    block->monitored_by_count = 0;
+    block->monitored_by_capacity = 0;
 
     /* Scheduler */
     block->next = NULL;
@@ -213,6 +222,17 @@ void block_free(Block *block) {
 
     /* Free links array */
     free(block->links);
+
+    /* Free monitors arrays */
+    free(block->monitors);
+    free(block->monitored_by);
+
+    /* Free supervisor if present */
+    if (block->supervisor) {
+        /* Note: supervisor_free is declared in supervisor.h */
+        /* We just free the struct here; full cleanup should be done via supervisor_shutdown */
+        free(block->supervisor);
+    }
 
     /* Free name */
     free((void *)block->name);
@@ -394,6 +414,88 @@ const Pid *block_get_links(const Block *block, size_t *count) {
     }
     if (count) *count = block->link_count;
     return block->links;
+}
+
+/*============================================================================
+ * Monitoring
+ *============================================================================*/
+
+bool block_monitor(Block *block, Pid target) {
+    if (!block || target == PID_INVALID) return false;
+
+    /* Check if already monitoring */
+    for (size_t i = 0; i < block->monitor_count; i++) {
+        if (block->monitors[i] == target) {
+            return true; /* Already monitoring */
+        }
+    }
+
+    /* Grow array if needed */
+    if (block->monitor_count >= block->monitor_capacity) {
+        uint32_t new_cap = block->monitor_capacity == 0 ? 4 : block->monitor_capacity * 2;
+        Pid *new_monitors = realloc(block->monitors, sizeof(Pid) * new_cap);
+        if (!new_monitors) return false;
+        block->monitors = new_monitors;
+        block->monitor_capacity = new_cap;
+    }
+
+    block->monitors[block->monitor_count++] = target;
+    return true;
+}
+
+void block_demonitor(Block *block, Pid target) {
+    if (!block) return;
+
+    for (size_t i = 0; i < block->monitor_count; i++) {
+        if (block->monitors[i] == target) {
+            /* Swap with last and shrink */
+            block->monitors[i] = block->monitors[--block->monitor_count];
+            return;
+        }
+    }
+}
+
+bool block_add_monitored_by(Block *block, Pid monitor_pid) {
+    if (!block || monitor_pid == PID_INVALID) return false;
+
+    /* Check if already monitored by this PID */
+    for (size_t i = 0; i < block->monitored_by_count; i++) {
+        if (block->monitored_by[i] == monitor_pid) {
+            return true;
+        }
+    }
+
+    /* Grow array if needed */
+    if (block->monitored_by_count >= block->monitored_by_capacity) {
+        uint32_t new_cap = block->monitored_by_capacity == 0 ? 4 : block->monitored_by_capacity * 2;
+        Pid *new_monitored = realloc(block->monitored_by, sizeof(Pid) * new_cap);
+        if (!new_monitored) return false;
+        block->monitored_by = new_monitored;
+        block->monitored_by_capacity = new_cap;
+    }
+
+    block->monitored_by[block->monitored_by_count++] = monitor_pid;
+    return true;
+}
+
+void block_remove_monitored_by(Block *block, Pid monitor_pid) {
+    if (!block) return;
+
+    for (size_t i = 0; i < block->monitored_by_count; i++) {
+        if (block->monitored_by[i] == monitor_pid) {
+            block->monitored_by[i] = block->monitored_by[--block->monitored_by_count];
+            return;
+        }
+    }
+}
+
+const Pid *block_get_monitors(const Block *block, size_t *count) {
+    if (!block) {
+        if (count) *count = 0;
+        return NULL;
+    }
+    if (count) *count = block->monitor_count;
+    return block->monitors;
 }
 
 /*============================================================================

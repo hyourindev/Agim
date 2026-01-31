@@ -23,6 +23,9 @@
 #include "vm/value.h"
 #include "vm/vm.h"
 
+/* Forward declaration for supervisor */
+typedef struct Supervisor Supervisor;
+
 /*============================================================================
  * Block State
  *============================================================================*/
@@ -109,6 +112,17 @@ typedef struct Block {
 
     /* Supervision */
     Pid parent;                 /* Parent block (0 if none) */
+    Supervisor *supervisor;     /* Supervisor struct if this is a supervisor (NULL otherwise) */
+
+    /* Monitor references (for monitoring without linking) */
+    Pid *monitors;              /* PIDs we are monitoring */
+    uint32_t monitor_count;
+    uint32_t monitor_capacity;
+
+    /* Monitored by (who is monitoring us) */
+    Pid *monitored_by;          /* PIDs monitoring us */
+    uint32_t monitored_by_count;
+    uint32_t monitored_by_capacity;
 
     /* Scheduler bookkeeping */
     struct Block *next;         /* Next in run queue */
@@ -220,6 +234,35 @@ void block_unlink(Block *block, Pid other);
  * Get array of linked PIDs.
  */
 const Pid *block_get_links(const Block *block, size_t *count);
+
+/*============================================================================
+ * Monitoring (like linking but unidirectional, no crash propagation)
+ *============================================================================*/
+
+/**
+ * Start monitoring another block (receive down message on exit).
+ */
+bool block_monitor(Block *block, Pid target);
+
+/**
+ * Stop monitoring another block.
+ */
+void block_demonitor(Block *block, Pid target);
+
+/**
+ * Add a monitor to this block (internal - called from monitored block).
+ */
+bool block_add_monitored_by(Block *block, Pid monitor_pid);
+
+/**
+ * Remove a monitor from this block (internal).
+ */
+void block_remove_monitored_by(Block *block, Pid monitor_pid);
+
+/**
+ * Get array of monitored PIDs.
+ */
+const Pid *block_get_monitors(const Block *block, size_t *count);
 
 /*============================================================================
  * Message Passing

@@ -1,0 +1,145 @@
+// Full Integration Example
+// Demonstrates: Option, Result, match expressions, functions, arrays
+// Note: Use `let x = match ... { }` pattern instead of `return` inside arms
+
+// === Validation Functions ===
+
+fn validate_age(age: int) -> Result<int, string> {
+    if age < 0 {
+        return err("age cannot be negative")
+    }
+    if age > 150 {
+        return err("age exceeds maximum")
+    }
+    return ok(age)
+}
+
+fn validate_name(name: string) -> Result<string, string> {
+    if len(name) < 2 {
+        return err("name too short")
+    }
+    if len(name) > 50 {
+        return err("name too long")
+    }
+    return ok(name)
+}
+
+// === Option Functions ===
+
+fn find_in_array(arr: [int], target: int) -> Option<int> {
+    let i = 0
+    while i < len(arr) {
+        if arr[i] == target {
+            return some(i)
+        }
+        i = i + 1
+    }
+    return none
+}
+
+fn safe_divide(a: int, b: int) -> Option<int> {
+    if b == 0 {
+        return none
+    }
+    return some(a / b)
+}
+
+// === Main Program ===
+
+print("=== Result Type Tests ===")
+
+// Test validation
+let age_result = validate_age(30)
+let age_msg = match age_result {
+    ok(a) => "Valid age: " + str(a)
+    err(e) => "Invalid: " + e
+}
+print(age_msg)
+
+let bad_age = validate_age(-5)
+let bad_msg = match bad_age {
+    ok(a) => "Valid age: " + str(a)
+    err(e) => "Invalid: " + e
+}
+print(bad_msg)
+
+let name_result = validate_name("Alice")
+let name_msg = match name_result {
+    ok(n) => "Valid name: " + n
+    err(e) => "Invalid: " + e
+}
+print(name_msg)
+
+let bad_name = validate_name("X")
+let bad_name_msg = match bad_name {
+    ok(n) => "Valid name: " + n
+    err(e) => "Invalid: " + e
+}
+print(bad_name_msg)
+
+print("")
+print("=== Option Type Tests ===")
+
+let numbers = [10, 20, 30, 40, 50]
+
+// Find existing
+let found = find_in_array(numbers, 30)
+let found_msg = match found {
+    some(idx) => "Found 30 at index " + str(idx)
+    none => "30 not found"
+}
+print(found_msg)
+
+// Find non-existing
+let not_found = find_in_array(numbers, 99)
+let not_found_msg = match not_found {
+    some(idx) => "Found 99 at index " + str(idx)
+    none => "99 not found"
+}
+print(not_found_msg)
+
+print("")
+print("=== Safe Division ===")
+
+let div1 = safe_divide(100, 5)
+let div1_msg = match div1 {
+    some(r) => "100 / 5 = " + str(r)
+    none => "Division failed"
+}
+print(div1_msg)
+
+let div2 = safe_divide(100, 0)
+let div2_msg = match div2 {
+    some(r) => "100 / 0 = " + str(r)
+    none => "Cannot divide by zero"
+}
+print(div2_msg)
+
+print("")
+print("=== Using unwrap_or ===")
+let val1 = unwrap_or(ok(42), 0)
+let val2 = unwrap_or(err("oops"), 99)
+print("unwrap_or(ok(42), 0) = " + str(val1))
+print("unwrap_or(err, 99) = " + str(val2))
+
+let opt1 = unwrap_option_or(some(100), 0)
+let opt2 = unwrap_option_or(none, -1)
+print("unwrap_option_or(some(100), 0) = " + str(opt1))
+print("unwrap_option_or(none, -1) = " + str(opt2))
+
+print("")
+print("=== Chained Validation ===")
+// Combine multiple validations
+let check_name = validate_name("Bob")
+let name_ok = is_ok(check_name)
+let check_age = validate_age(25)
+let age_ok = is_ok(check_age)
+
+if name_ok and age_ok {
+    print("All validations passed!")
+} else {
+    print("Validation failed")
+}
+
+print("")
+print("=== All tests complete! ===")

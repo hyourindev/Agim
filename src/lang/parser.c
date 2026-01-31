@@ -147,6 +147,7 @@ static void synchronize(Parser *parser) {
 typedef enum {
     PREC_NONE,
     PREC_ASSIGNMENT,    /* = += -= */
+    PREC_RANGE,         /* .. ..= */
     PREC_TERNARY,       /* ?: */
     PREC_OR,            /* or */
     PREC_AND,           /* and */
@@ -188,9 +189,13 @@ static Precedence get_precedence(TokenType type) {
     case TOK_SLASH:
     case TOK_PERCENT:
         return PREC_FACTOR;
+    case TOK_RANGE:
+    case TOK_RANGE_INCL:
+        return PREC_RANGE;
     case TOK_LPAREN:
     case TOK_DOT:
     case TOK_LBRACKET:
+    case TOK_LBRACE:
         return PREC_CALL;
     default:
         return PREC_NONE;
@@ -251,6 +256,30 @@ static AstNode *parse_string(Parser *parser) {
 
 static AstNode *parse_identifier(Parser *parser) {
     Token token = parser->previous;
+
+    /* Check for enum variant syntax: EnumType::Variant */
+    if (match(parser, TOK_COLON_COLON)) {
+        char enum_type[256];
+        size_t type_len = token.length < 255 ? token.length : 255;
+        memcpy(enum_type, token.start, type_len);
+        enum_type[type_len] = '\0';
+
+        consume(parser, TOK_IDENT, "expected variant name after '::'");
+        char variant_name[256];
+        size_t var_len = parser->previous.length < 255 ? parser->previous.length : 255;
+        memcpy(variant_name, parser->previous.start, var_len);
+        variant_name[var_len] = '\0';
+
+        /* Check for payload: EnumType::Variant(payload) */
+        AstNode *payload = NULL;
+        if (match(parser, TOK_LPAREN)) {
+            payload = parse_expression(parser);
+            consume(parser, TOK_RPAREN, "expected ')' after enum payload");
+        }
+
+        return ast_enum_variant(enum_type, variant_name, payload, token.line);
+    }
+
     return ast_ident(token.start, token.length, token.line);
 }
 
@@ -484,6 +513,65 @@ static AstNode *parse_index(Parser *parser, AstNode *object) {
     return node;
 }
 
+static AstNode *parse_struct_init(Parser *parser, AstNode *type_node) {
+    /* type_node is the identifier for the struct type name */
+    int line = parser->previous.line;
+
+    /* Extract type name from identifier node */
+    char type_name[256];
+    size_t len = strlen(type_node->as.ident.name);
+    if (len > 255) len = 255;
+    memcpy(type_name, type_node->as.ident.name, len);
+    type_name[len] = '\0';
+
+    /* Free the identifier node since we're replacing it */
+    ast_free(type_node);
+
+    AstNode *node = ast_struct_init(type_name, line);
+
+    skip_newlines(parser);
+
+    /* Parse field initializers: name: value, ... */
+    while (!check(parser, TOK_RBRACE) && !check(parser, TOK_EOF)) {
+        skip_newlines(parser);
+        if (check(parser, TOK_RBRACE)) break;
+
+        /* Check for spread: ...expr */
+        if (match(parser, TOK_SPREAD)) {
+            AstNode *spread_expr = parse_expression(parser);
+            ast_struct_init_set_spread(node, spread_expr);
+            skip_newlines(parser);
+            if (!check(parser, TOK_RBRACE)) {
+                match(parser, TOK_COMMA);
+            }
+            continue;
+        }
+
+        /* Parse field: name: value */
+        consume(parser, TOK_IDENT, "expected field name");
+        char field_name[256];
+        size_t field_len = parser->previous.length < 255 ? parser->previous.length : 255;
+        memcpy(field_name, parser->previous.start, field_len);
+        field_name[field_len] = '\0';
+
+        consume(parser, TOK_COLON, "expected ':' after field name");
+        skip_newlines(parser);
+
+        AstNode *value = parse_expression(parser);
+        ast_struct_init_add_field(node, field_name, value);
+
+        skip_newlines(parser);
+        if (!check(parser, TOK_RBRACE)) {
+            if (!match(parser, TOK_COMMA)) {
+                skip_newlines(parser);
+            }
+        }
+    }
+
+    consume(parser, TOK_RBRACE, "expected '}' after struct fields");
+    return node;
+}
+
 static AstNode *parse_infix(Parser *parser, AstNode *left, TokenType op) {
     int line = parser->previous.line;
     Precedence prec = get_precedence(op);
@@ -511,6 +599,13 @@ static AstNode *parse_infix(Parser *parser, AstNode *left, TokenType op) {
         return node;
     }
 
+    /* Handle range */
+    if (op == TOK_RANGE || op == TOK_RANGE_INCL) {
+        AstNode *end = parse_precedence(parser, prec + 1);
+        bool inclusive = (op == TOK_RANGE_INCL);
+        return ast_range(left, end, inclusive, line);
+    }
+
     /* Binary operators */
     AstNode *right = parse_precedence(parser, prec + 1);
     return ast_binary(op, left, right, line);
@@ -536,6 +631,18 @@ static AstNode *parse_precedence(Parser *parser, Precedence min_prec) {
 
         if (prec < min_prec) break;
 
+        /* Special case: { only applies as struct init when following a type name (uppercase identifier) */
+        if (op == TOK_LBRACE) {
+            if (left->type != NODE_IDENT) {
+                break;  /* Not struct init, { is start of something else (e.g., match body) */
+            }
+            /* Check if identifier looks like a type name (starts with uppercase) */
+            const char *name = left->as.ident.name;
+            if (name[0] < 'A' || name[0] > 'Z') {
+                break;  /* Lowercase identifier, not a type name */
+            }
+        }
+
         advance(parser);
 
         /* Postfix operators */
@@ -545,6 +652,10 @@ static AstNode *parse_precedence(Parser *parser, Precedence min_prec) {
             left = parse_member(parser, left);
         } else if (op == TOK_LBRACKET) {
             left = parse_index(parser, left);
+        } else if (op == TOK_LBRACE) {
+            /* Struct initialization: TypeName { field: value, ... } */
+            /* We already checked left->type == NODE_IDENT above */
+            left = parse_struct_init(parser, left);
         } else {
             left = parse_infix(parser, left, op);
         }
@@ -879,31 +990,64 @@ static AstNode *parse_match_expr(Parser *parser) {
         skip_newlines(parser);
         if (check(parser, TOK_RBRACE)) break;
 
-        /* Parse arm: ok(name) => expr or err(name) => expr */
+        /* Parse arm: ok(name) => expr, err(name) => expr, some(name) => expr, none => expr, or VariantName(name) => expr */
         AstNode *arm = ast_new(NODE_MATCH_ARM, parser->current.line);
+        arm->as.match_arm.binding_name = NULL;
+        arm->as.match_arm.variant_name = NULL;
 
         if (match(parser, TOK_OK)) {
-            arm->as.match_arm.is_ok = true;
+            arm->as.match_arm.pattern_kind = MATCH_PATTERN_OK;
         } else if (match(parser, TOK_ERR)) {
-            arm->as.match_arm.is_ok = false;
+            arm->as.match_arm.pattern_kind = MATCH_PATTERN_ERR;
+        } else if (match(parser, TOK_SOME)) {
+            arm->as.match_arm.pattern_kind = MATCH_PATTERN_SOME;
+        } else if (match(parser, TOK_NONE)) {
+            arm->as.match_arm.pattern_kind = MATCH_PATTERN_NONE;
+        } else if (match(parser, TOK_IDENT)) {
+            /* Enum variant pattern: VariantName or VariantName(binding) */
+            arm->as.match_arm.pattern_kind = MATCH_PATTERN_ENUM;
+            arm->as.match_arm.variant_name = agim_alloc(parser->previous.length + 1);
+            memcpy(arm->as.match_arm.variant_name, parser->previous.start, parser->previous.length);
+            arm->as.match_arm.variant_name[parser->previous.length] = '\0';
+
+            /* Optional payload binding */
+            if (match(parser, TOK_LPAREN)) {
+                consume(parser, TOK_IDENT, "expected binding name");
+                arm->as.match_arm.binding_name = agim_alloc(parser->previous.length + 1);
+                memcpy(arm->as.match_arm.binding_name, parser->previous.start, parser->previous.length);
+                arm->as.match_arm.binding_name[parser->previous.length] = '\0';
+                consume(parser, TOK_RPAREN, "expected ')' after binding name");
+            }
         } else {
-            error_at_current(parser, "expected 'ok' or 'err' in match arm");
+            error_at_current(parser, "expected pattern in match arm");
             ast_free(arm);
             ast_free(node);
             return NULL;
         }
 
-        consume(parser, TOK_LPAREN, "expected '(' after ok/err");
-        consume(parser, TOK_IDENT, "expected binding name");
+        /* none has no binding, others may */
+        if (arm->as.match_arm.pattern_kind != MATCH_PATTERN_NONE &&
+            arm->as.match_arm.pattern_kind != MATCH_PATTERN_ENUM) {
+            consume(parser, TOK_LPAREN, "expected '(' after pattern keyword");
+            consume(parser, TOK_IDENT, "expected binding name");
 
-        arm->as.match_arm.binding_name = agim_alloc(parser->previous.length + 1);
-        memcpy(arm->as.match_arm.binding_name, parser->previous.start, parser->previous.length);
-        arm->as.match_arm.binding_name[parser->previous.length] = '\0';
+            arm->as.match_arm.binding_name = agim_alloc(parser->previous.length + 1);
+            memcpy(arm->as.match_arm.binding_name, parser->previous.start, parser->previous.length);
+            arm->as.match_arm.binding_name[parser->previous.length] = '\0';
 
-        consume(parser, TOK_RPAREN, "expected ')' after binding name");
+            consume(parser, TOK_RPAREN, "expected ')' after binding name");
+        }
+
         consume(parser, TOK_FAT_ARROW, "expected '=>' after pattern");
 
-        arm->as.match_arm.body = parse_expression(parser);
+        /* Parse arm body - can be expression, return statement, or block */
+        if (match(parser, TOK_RETURN)) {
+            arm->as.match_arm.body = parse_return_stmt(parser);
+        } else if (check(parser, TOK_LBRACE)) {
+            arm->as.match_arm.body = parse_block(parser);
+        } else {
+            arm->as.match_arm.body = parse_expression(parser);
+        }
 
         if (node->as.match_expr.arm_count >= capacity) {
             capacity *= 2;
@@ -1038,9 +1182,10 @@ static AstNode *parse_enum_decl(Parser *parser) {
     consume(parser, TOK_LBRACE, "expected '{' after enum name");
     skip_newlines(parser);
 
-    while (!check(parser, TOK_RBRACE) && !check(parser, TOK_EOF)) {
+    while (!check(parser, TOK_RBRACE) && !check(parser, TOK_EOF) && !parser->had_error) {
         /* Parse variant: Name or Name(Type) */
         consume(parser, TOK_IDENT, "expected variant name");
+        if (parser->had_error) break;
         char var_name[256];
         size_t var_len = parser->previous.length < 255 ? parser->previous.length : 255;
         memcpy(var_name, parser->previous.start, var_len);

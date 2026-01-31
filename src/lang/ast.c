@@ -68,6 +68,7 @@ const char *ast_node_type_name(NodeType type) {
         [NODE_NONE] = "NONE",
         [NODE_STRUCT_INIT] = "STRUCT_INIT",
         [NODE_SPREAD] = "SPREAD",
+        [NODE_ENUM_EXPR] = "ENUM_EXPR",
     };
     return names[type];
 }
@@ -253,6 +254,7 @@ void ast_free(AstNode *node) {
 
     case NODE_MATCH_ARM:
         agim_free(node->as.match_arm.binding_name);
+        agim_free(node->as.match_arm.variant_name);
         ast_free(node->as.match_arm.body);
         break;
 
@@ -346,6 +348,12 @@ void ast_free(AstNode *node) {
 
     case NODE_SPREAD:
         ast_free(node->as.spread_expr.expr);
+        break;
+
+    case NODE_ENUM_EXPR:
+        agim_free(node->as.enum_expr.enum_type);
+        agim_free(node->as.enum_expr.variant_name);
+        ast_free(node->as.enum_expr.payload);
         break;
     }
 
@@ -621,6 +629,26 @@ AstNode *ast_none(int line) {
 AstNode *ast_spread(AstNode *expr, int line) {
     AstNode *node = ast_new(NODE_SPREAD, line);
     node->as.spread_expr.expr = expr;
+    return node;
+}
+
+AstNode *ast_enum_variant(const char *enum_type, const char *variant_name, AstNode *payload, int line) {
+    AstNode *node = ast_new(NODE_ENUM_EXPR, line);
+    size_t type_len = strlen(enum_type);
+    size_t var_len = strlen(variant_name);
+    node->as.enum_expr.enum_type = agim_alloc(type_len + 1);
+    memcpy(node->as.enum_expr.enum_type, enum_type, type_len + 1);
+    node->as.enum_expr.variant_name = agim_alloc(var_len + 1);
+    memcpy(node->as.enum_expr.variant_name, variant_name, var_len + 1);
+    node->as.enum_expr.payload = payload;
+    return node;
+}
+
+AstNode *ast_range(AstNode *start, AstNode *end, bool inclusive, int line) {
+    AstNode *node = ast_new(NODE_RANGE, line);
+    node->as.range.start = start;
+    node->as.range.end = end;
+    node->as.range.inclusive = inclusive;
     return node;
 }
 

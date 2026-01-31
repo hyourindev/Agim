@@ -276,6 +276,8 @@ static void emit_continue(Compiler *c, int line) {
 static void compile_expr(Compiler *c, AstNode *node);
 static void compile_stmt(Compiler *c, AstNode *node);
 static void compile_decl(Compiler *c, AstNode *node);
+static void compile_return(Compiler *c, AstNode *node);
+static void compile_block_expr(Compiler *c, AstNode *node);
 
 /*============================================================================
  * Expression Compilation
@@ -549,6 +551,16 @@ static void compile_call(Compiler *c, AstNode *node) {
                 }
                 compile_expr(c, node->as.call.args[0]);
                 emit_op(c, OP_FILE_LINES, node->line);
+                return;
+            }
+            if (strcmp(method, "write_bytes") == 0) {
+                if (node->as.call.arg_count != 2) {
+                    compile_error(c, node->line, "fs.write_bytes() takes exactly 2 arguments");
+                    return;
+                }
+                compile_expr(c, node->as.call.args[0]);  /* path */
+                compile_expr(c, node->as.call.args[1]);  /* byte array */
+                emit_op(c, OP_FILE_WRITE_BYTES, node->line);
                 return;
             }
             compile_error(c, node->line, "unknown fs method");
@@ -851,6 +863,221 @@ static void compile_call(Compiler *c, AstNode *node) {
             }
             emit_op(c, OP_YIELD, node->line);
             emit_op(c, OP_NIL, node->line); /* yield returns nil */
+            return;
+        }
+
+        /* link(pid) -> OP_LINK (bidirectional crash notification) */
+        if (strcmp(name, "link") == 0) {
+            if (node->as.call.arg_count != 1) {
+                compile_error(c, node->line, "link() takes exactly 1 argument");
+                return;
+            }
+            compile_expr(c, node->as.call.args[0]);
+            emit_op(c, OP_LINK, node->line);
+            return;
+        }
+
+        /* unlink(pid) -> OP_UNLINK */
+        if (strcmp(name, "unlink") == 0) {
+            if (node->as.call.arg_count != 1) {
+                compile_error(c, node->line, "unlink() takes exactly 1 argument");
+                return;
+            }
+            compile_expr(c, node->as.call.args[0]);
+            emit_op(c, OP_UNLINK, node->line);
+            return;
+        }
+
+        /* monitor(pid) -> OP_MONITOR (unidirectional down notification) */
+        if (strcmp(name, "monitor") == 0) {
+            if (node->as.call.arg_count != 1) {
+                compile_error(c, node->line, "monitor() takes exactly 1 argument");
+                return;
+            }
+            compile_expr(c, node->as.call.args[0]);
+            emit_op(c, OP_MONITOR, node->line);
+            return;
+        }
+
+        /* demonitor(pid) -> OP_DEMONITOR */
+        if (strcmp(name, "demonitor") == 0) {
+            if (node->as.call.arg_count != 1) {
+                compile_error(c, node->line, "demonitor() takes exactly 1 argument");
+                return;
+            }
+            compile_expr(c, node->as.call.args[0]);
+            emit_op(c, OP_DEMONITOR, node->line);
+            return;
+        }
+
+        /* supervisor_start(strategy) -> OP_SUP_START */
+        if (strcmp(name, "supervisor_start") == 0) {
+            if (node->as.call.arg_count != 1) {
+                compile_error(c, node->line, "supervisor_start() takes exactly 1 argument");
+                return;
+            }
+            compile_expr(c, node->as.call.args[0]);
+            emit_op(c, OP_SUP_START, node->line);
+            return;
+        }
+
+        /* supervisor_add_child(name, fn, restart_strategy) -> OP_SUP_ADD_CHILD */
+        if (strcmp(name, "supervisor_add_child") == 0) {
+            if (node->as.call.arg_count != 3) {
+                compile_error(c, node->line, "supervisor_add_child() takes exactly 3 arguments");
+                return;
+            }
+            compile_expr(c, node->as.call.args[0]); /* name */
+            compile_expr(c, node->as.call.args[1]); /* function */
+            compile_expr(c, node->as.call.args[2]); /* restart strategy */
+            emit_op(c, OP_SUP_ADD_CHILD, node->line);
+            return;
+        }
+
+        /* supervisor_remove_child(name) -> OP_SUP_REMOVE_CHILD */
+        if (strcmp(name, "supervisor_remove_child") == 0) {
+            if (node->as.call.arg_count != 1) {
+                compile_error(c, node->line, "supervisor_remove_child() takes exactly 1 argument");
+                return;
+            }
+            compile_expr(c, node->as.call.args[0]);
+            emit_op(c, OP_SUP_REMOVE_CHILD, node->line);
+            return;
+        }
+
+        /* supervisor_which_children() -> OP_SUP_WHICH_CHILDREN */
+        if (strcmp(name, "supervisor_which_children") == 0) {
+            if (node->as.call.arg_count != 0) {
+                compile_error(c, node->line, "supervisor_which_children() takes no arguments");
+                return;
+            }
+            emit_op(c, OP_SUP_WHICH_CHILDREN, node->line);
+            return;
+        }
+
+        /* supervisor_shutdown() -> OP_SUP_SHUTDOWN */
+        if (strcmp(name, "supervisor_shutdown") == 0) {
+            if (node->as.call.arg_count != 0) {
+                compile_error(c, node->line, "supervisor_shutdown() takes no arguments");
+                return;
+            }
+            emit_op(c, OP_SUP_SHUTDOWN, node->line);
+            return;
+        }
+
+        /* group_join(name) -> OP_GROUP_JOIN */
+        if (strcmp(name, "group_join") == 0) {
+            if (node->as.call.arg_count != 1) {
+                compile_error(c, node->line, "group_join() takes exactly 1 argument");
+                return;
+            }
+            compile_expr(c, node->as.call.args[0]);
+            emit_op(c, OP_GROUP_JOIN, node->line);
+            return;
+        }
+
+        /* group_leave(name) -> OP_GROUP_LEAVE */
+        if (strcmp(name, "group_leave") == 0) {
+            if (node->as.call.arg_count != 1) {
+                compile_error(c, node->line, "group_leave() takes exactly 1 argument");
+                return;
+            }
+            compile_expr(c, node->as.call.args[0]);
+            emit_op(c, OP_GROUP_LEAVE, node->line);
+            return;
+        }
+
+        /* group_send(name, message) -> OP_GROUP_SEND */
+        if (strcmp(name, "group_send") == 0) {
+            if (node->as.call.arg_count != 2) {
+                compile_error(c, node->line, "group_send() takes exactly 2 arguments");
+                return;
+            }
+            compile_expr(c, node->as.call.args[0]);
+            compile_expr(c, node->as.call.args[1]);
+            emit_op(c, OP_GROUP_SEND, node->line);
+            return;
+        }
+
+        /* group_send_others(name, message) -> OP_GROUP_SEND_OTHERS */
+        if (strcmp(name, "group_send_others") == 0) {
+            if (node->as.call.arg_count != 2) {
+                compile_error(c, node->line, "group_send_others() takes exactly 2 arguments");
+                return;
+            }
+            compile_expr(c, node->as.call.args[0]);
+            compile_expr(c, node->as.call.args[1]);
+            emit_op(c, OP_GROUP_SEND_OTHERS, node->line);
+            return;
+        }
+
+        /* group_members(name) -> OP_GROUP_MEMBERS */
+        if (strcmp(name, "group_members") == 0) {
+            if (node->as.call.arg_count != 1) {
+                compile_error(c, node->line, "group_members() takes exactly 1 argument");
+                return;
+            }
+            compile_expr(c, node->as.call.args[0]);
+            emit_op(c, OP_GROUP_MEMBERS, node->line);
+            return;
+        }
+
+        /* group_list() -> OP_GROUP_LIST */
+        if (strcmp(name, "group_list") == 0) {
+            if (node->as.call.arg_count != 0) {
+                compile_error(c, node->line, "group_list() takes no arguments");
+                return;
+            }
+            emit_op(c, OP_GROUP_LIST, node->line);
+            return;
+        }
+
+        /* get_stats(pid) -> OP_GET_STATS */
+        if (strcmp(name, "get_stats") == 0) {
+            if (node->as.call.arg_count == 0) {
+                /* Default to self */
+                emit_op(c, OP_NIL, node->line);
+            } else if (node->as.call.arg_count == 1) {
+                compile_expr(c, node->as.call.args[0]);
+            } else {
+                compile_error(c, node->line, "get_stats() takes 0 or 1 argument");
+                return;
+            }
+            emit_op(c, OP_GET_STATS, node->line);
+            return;
+        }
+
+        /* trace(pid, flags) -> OP_TRACE */
+        if (strcmp(name, "trace") == 0) {
+            if (node->as.call.arg_count != 2) {
+                compile_error(c, node->line, "trace() takes exactly 2 arguments");
+                return;
+            }
+            compile_expr(c, node->as.call.args[0]);
+            compile_expr(c, node->as.call.args[1]);
+            emit_op(c, OP_TRACE, node->line);
+            return;
+        }
+
+        /* trace_off(pid) -> OP_TRACE_OFF */
+        if (strcmp(name, "trace_off") == 0) {
+            if (node->as.call.arg_count != 1) {
+                compile_error(c, node->line, "trace_off() takes exactly 1 argument");
+                return;
+            }
+            compile_expr(c, node->as.call.args[0]);
+            emit_op(c, OP_TRACE_OFF, node->line);
+            return;
+        }
+
+        /* receive_match(pattern) -> OP_RECEIVE_MATCH */
+        if (strcmp(name, "receive_match") == 0) {
+            if (node->as.call.arg_count != 1) {
+                compile_error(c, node->line, "receive_match() takes exactly 1 argument");
+                return;
+            }
+            compile_expr(c, node->as.call.args[0]);
+            emit_op(c, OP_RECEIVE_MATCH, node->line);
             return;
         }
 
@@ -1315,6 +1542,53 @@ static void compile_call(Compiler *c, AstNode *node) {
             return;
         }
 
+        /* Option handling functions */
+
+        /* is_some(option) -> OP_IS_SOME */
+        if (strcmp(name, "is_some") == 0) {
+            if (node->as.call.arg_count != 1) {
+                compile_error(c, node->line, "is_some() takes exactly 1 argument");
+                return;
+            }
+            compile_expr(c, node->as.call.args[0]);
+            emit_op(c, OP_IS_SOME, node->line);
+            return;
+        }
+
+        /* is_none(option) -> OP_IS_NONE */
+        if (strcmp(name, "is_none") == 0) {
+            if (node->as.call.arg_count != 1) {
+                compile_error(c, node->line, "is_none() takes exactly 1 argument");
+                return;
+            }
+            compile_expr(c, node->as.call.args[0]);
+            emit_op(c, OP_IS_NONE, node->line);
+            return;
+        }
+
+        /* unwrap_option(option) -> OP_UNWRAP_OPTION */
+        if (strcmp(name, "unwrap_option") == 0) {
+            if (node->as.call.arg_count != 1) {
+                compile_error(c, node->line, "unwrap_option() takes exactly 1 argument");
+                return;
+            }
+            compile_expr(c, node->as.call.args[0]);
+            emit_op(c, OP_UNWRAP_OPTION, node->line);
+            return;
+        }
+
+        /* unwrap_option_or(option, default) -> OP_UNWRAP_OPTION_OR */
+        if (strcmp(name, "unwrap_option_or") == 0) {
+            if (node->as.call.arg_count != 2) {
+                compile_error(c, node->line, "unwrap_option_or() takes exactly 2 arguments");
+                return;
+            }
+            compile_expr(c, node->as.call.args[0]);
+            compile_expr(c, node->as.call.args[1]);
+            emit_op(c, OP_UNWRAP_OPTION_OR, node->line);
+            return;
+        }
+
         /* Tool introspection functions */
 
         /* list_tools() -> OP_LIST_TOOLS */
@@ -1485,6 +1759,90 @@ static void compile_result_err(Compiler *c, AstNode *node) {
     emit_op(c, OP_RESULT_ERR, node->line);
 }
 
+static void compile_some(Compiler *c, AstNode *node) {
+    compile_expr(c, node->as.some_expr.value);
+    emit_op(c, OP_SOME, node->line);
+}
+
+static void compile_none(Compiler *c, AstNode *node) {
+    emit_op(c, OP_NONE, node->line);
+}
+
+static void compile_struct_decl(Compiler *c, AstNode *node) {
+    /*
+     * Struct declarations are type-only, no runtime code needed.
+     * The type information is used for type checking and struct initialization.
+     */
+    (void)c;
+    (void)node;
+}
+
+static void compile_struct_init(Compiler *c, AstNode *node) {
+    /*
+     * Struct initialization: Point { x: 1, y: 2 }
+     *
+     * Compiles to:
+     *   <push field values in order>
+     *   OP_STRUCT_NEW [type_name_idx:16][field_count:8][field_name_idx:16]...
+     */
+    size_t field_count = node->as.struct_init.field_count;
+
+    /* Compile each field value in order */
+    for (size_t i = 0; i < field_count; i++) {
+        compile_expr(c, node->as.struct_init.field_values[i]);
+    }
+
+    /* Emit OP_STRUCT_NEW with type name and field count */
+    size_t type_idx = bytecode_add_string(c->code, node->as.struct_init.type_name);
+    emit_op(c, OP_STRUCT_NEW, node->line);
+    emit_byte(c, (type_idx >> 8) & 0xFF, node->line);
+    emit_byte(c, type_idx & 0xFF, node->line);
+    emit_byte(c, (uint8_t)field_count, node->line);
+
+    /* Emit field names in reverse order (VM reads them as i goes from field_count-1 to 0) */
+    for (int i = (int)field_count - 1; i >= 0; i--) {
+        size_t field_idx = bytecode_add_string(c->code, node->as.struct_init.field_names[i]);
+        emit_byte(c, (field_idx >> 8) & 0xFF, node->line);
+        emit_byte(c, field_idx & 0xFF, node->line);
+    }
+}
+
+static void compile_enum_decl(Compiler *c, AstNode *node) {
+    /*
+     * Enum declarations are type-only, no runtime code needed.
+     * The type information is used for type checking and enum creation.
+     */
+    (void)c;
+    (void)node;
+}
+
+static void compile_enum_expr(Compiler *c, AstNode *node) {
+    /*
+     * Enum variant expression: EnumType::Variant or EnumType::Variant(payload)
+     *
+     * Compiles to:
+     *   [payload if present]
+     *   OP_ENUM_NEW [type_idx:16][variant_idx:16][has_payload:8]
+     */
+    bool has_payload = (node->as.enum_expr.payload != NULL);
+
+    /* Compile payload if present */
+    if (has_payload) {
+        compile_expr(c, node->as.enum_expr.payload);
+    }
+
+    /* Emit OP_ENUM_NEW */
+    size_t type_idx = bytecode_add_string(c->code, node->as.enum_expr.enum_type);
+    size_t variant_idx = bytecode_add_string(c->code, node->as.enum_expr.variant_name);
+
+    emit_op(c, OP_ENUM_NEW, node->line);
+    emit_byte(c, (type_idx >> 8) & 0xFF, node->line);
+    emit_byte(c, type_idx & 0xFF, node->line);
+    emit_byte(c, (variant_idx >> 8) & 0xFF, node->line);
+    emit_byte(c, variant_idx & 0xFF, node->line);
+    emit_byte(c, has_payload ? 1 : 0, node->line);
+}
+
 static void compile_try(Compiler *c, AstNode *node) {
     /*
      * try expr
@@ -1509,92 +1867,262 @@ static void compile_try(Compiler *c, AstNode *node) {
     emit_op(c, OP_RESULT_UNWRAP, node->line);
 }
 
+/**
+ * Check if a node is or contains a return statement.
+ * Used to optimize match arm compilation.
+ */
+static bool is_return_statement(AstNode *node) {
+    if (!node) return false;
+    if (node->type == NODE_RETURN) return true;
+    /* Check if block that ends with return */
+    if (node->type == NODE_BLOCK && node->as.block.count > 0) {
+        AstNode *last = node->as.block.stmts[node->as.block.count - 1];
+        return is_return_statement(last);
+    }
+    return false;
+}
+
+/**
+ * Compile a match arm body, handling return statements specially.
+ * When body is a return, we skip the normal cleanup since the function exits.
+ */
+static void compile_match_arm_body(Compiler *c, AstNode *arm, bool has_binding) {
+    AstNode *body = arm->as.match_arm.body;
+
+    if (is_return_statement(body)) {
+        /* Body is a return statement - compile it directly */
+        /* Return handles everything, no cleanup needed */
+        if (body->type == NODE_RETURN) {
+            compile_return(c, body);
+        } else {
+            /* Block ending with return */
+            compile_block_expr(c, body);
+        }
+    } else if (body->type == NODE_BLOCK) {
+        /* Block body - compile as expression keeping last value */
+        compile_block_expr(c, body);
+        /* Remove the binding but keep the body result */
+        if (has_binding) {
+            emit_op(c, OP_SWAP, arm->line);
+            emit_op(c, OP_POP, arm->line);
+        }
+    } else {
+        /* Normal expression body */
+        compile_expr(c, body);
+        /* Remove the binding but keep the body result */
+        if (has_binding) {
+            emit_op(c, OP_SWAP, arm->line);
+            emit_op(c, OP_POP, arm->line);
+        }
+    }
+}
+
 static void compile_match(Compiler *c, AstNode *node) {
     /*
-     * match result {
-     *   ok(x) => body1
-     *   err(e) => body2
-     * }
+     * Match on Result:
+     *   match result {
+     *     ok(x) => body1
+     *     err(e) => body2
+     *   }
      *
-     * Compiles to:
-     *   expr                    ; evaluate the result
-     *   OP_DUP                  ; duplicate for checking
-     *   OP_RESULT_IS_OK         ; check if ok
-     *   OP_JUMP_UNLESS err_arm  ; if not ok, jump to err arm
-     *   OP_POP                  ; pop bool
-     *   OP_RESULT_UNWRAP        ; get the ok value
-     *   ; set up binding for ok arm
-     *   body1
-     *   OP_JUMP end
-     * err_arm:
-     *   OP_POP                  ; pop bool
-     *   OP_RESULT_UNWRAP        ; get the err value (unwrap_err)
-     *   ; set up binding for err arm
-     *   body2
-     * end:
+     * Match on Option:
+     *   match option {
+     *     some(x) => body1
+     *     none => body2
+     *   }
      */
     compile_expr(c, node->as.match_expr.expr);
 
-    /* Find ok and err arms */
+    /* Find arms by pattern kind */
     AstNode *ok_arm = NULL;
     AstNode *err_arm = NULL;
+    AstNode *some_arm = NULL;
+    AstNode *none_arm = NULL;
+    bool has_enum_arms = false;
 
     for (size_t i = 0; i < node->as.match_expr.arm_count; i++) {
         AstNode *arm = node->as.match_expr.arms[i];
-        if (arm->as.match_arm.is_ok) {
+        switch (arm->as.match_arm.pattern_kind) {
+        case MATCH_PATTERN_OK:
             ok_arm = arm;
-        } else {
+            break;
+        case MATCH_PATTERN_ERR:
             err_arm = arm;
+            break;
+        case MATCH_PATTERN_SOME:
+            some_arm = arm;
+            break;
+        case MATCH_PATTERN_NONE:
+            none_arm = arm;
+            break;
+        case MATCH_PATTERN_ENUM:
+            has_enum_arms = true;
+            break;
         }
     }
 
-    if (!ok_arm || !err_arm) {
-        compile_error(c, node->line, "match expression must have both ok and err arms");
+    /* Determine if this is a Result, Option, or Enum match */
+    bool is_result_match = (ok_arm != NULL || err_arm != NULL);
+    bool is_option_match = (some_arm != NULL || none_arm != NULL);
+
+    if ((is_result_match && is_option_match) ||
+        (is_result_match && has_enum_arms) ||
+        (is_option_match && has_enum_arms)) {
+        compile_error(c, node->line, "cannot mix different pattern types in match");
         return;
     }
 
-    /* Check if ok */
-    emit_op(c, OP_DUP, node->line);
-    emit_op(c, OP_RESULT_IS_OK, node->line);
-    size_t err_jump = emit_jump(c, OP_JUMP_UNLESS, node->line);
+    if (is_result_match) {
+        /* Result match: ok/err */
+        if (!ok_arm || !err_arm) {
+            compile_error(c, node->line, "match expression must have both ok and err arms");
+            return;
+        }
 
-    /* Ok arm */
-    emit_op(c, OP_POP, node->line);  /* Pop bool */
-    emit_op(c, OP_RESULT_UNWRAP, node->line);  /* Get ok value */
+        /* Check if ok */
+        emit_op(c, OP_DUP, node->line);
+        emit_op(c, OP_RESULT_IS_OK, node->line);
+        size_t err_jump = emit_jump(c, OP_JUMP_UNLESS, node->line);
 
-    begin_scope(c);
-    const char *ok_name = ok_arm->as.match_arm.binding_name;
-    add_local(c, ok_name, strlen(ok_name), true, ok_arm->line);
-    compile_expr(c, ok_arm->as.match_arm.body);
-    /* Remove the binding but keep the body result */
-    emit_op(c, OP_SWAP, node->line);
-    emit_op(c, OP_POP, node->line);
-    c->current->local_count--;  /* Manual local removal without emit_op POP */
-    agim_free(c->current->locals[c->current->local_count].name);
-    c->current->scope_depth--;
+        /* Ok arm */
+        emit_op(c, OP_POP, node->line);  /* Pop bool */
+        emit_op(c, OP_RESULT_UNWRAP, node->line);  /* Get ok value */
 
-    size_t end_jump = emit_jump(c, OP_JUMP, node->line);
+        begin_scope(c);
+        const char *ok_name = ok_arm->as.match_arm.binding_name;
+        add_local(c, ok_name, strlen(ok_name), true, ok_arm->line);
+        compile_match_arm_body(c, ok_arm, true);
+        c->current->local_count--;
+        agim_free(c->current->locals[c->current->local_count].name);
+        c->current->scope_depth--;
 
-    /* Err arm */
-    patch_jump(c, err_jump);
-    emit_op(c, OP_POP, node->line);  /* Pop bool */
-    /* For err, we need to unwrap the error value, not the ok value */
-    /* Since we don't have OP_RESULT_UNWRAP_ERR, we'll check type at runtime */
-    /* Actually the Result stores the same value for both ok and err */
-    emit_op(c, OP_RESULT_UNWRAP, node->line);  /* Get err value */
+        size_t end_jump = emit_jump(c, OP_JUMP, node->line);
 
-    begin_scope(c);
-    const char *err_name = err_arm->as.match_arm.binding_name;
-    add_local(c, err_name, strlen(err_name), true, err_arm->line);
-    compile_expr(c, err_arm->as.match_arm.body);
-    /* Remove the binding but keep the body result */
-    emit_op(c, OP_SWAP, node->line);
-    emit_op(c, OP_POP, node->line);
-    c->current->local_count--;
-    agim_free(c->current->locals[c->current->local_count].name);
-    c->current->scope_depth--;
+        /* Err arm */
+        patch_jump(c, err_jump);
+        emit_op(c, OP_POP, node->line);  /* Pop bool */
+        emit_op(c, OP_RESULT_UNWRAP, node->line);  /* Get err value */
 
-    patch_jump(c, end_jump);
+        begin_scope(c);
+        const char *err_name = err_arm->as.match_arm.binding_name;
+        add_local(c, err_name, strlen(err_name), true, err_arm->line);
+        compile_match_arm_body(c, err_arm, true);
+        c->current->local_count--;
+        agim_free(c->current->locals[c->current->local_count].name);
+        c->current->scope_depth--;
+
+        patch_jump(c, end_jump);
+    } else if (is_option_match) {
+        /* Option match: some/none */
+        if (!some_arm || !none_arm) {
+            compile_error(c, node->line, "match expression must have both some and none arms");
+            return;
+        }
+
+        /* Check if some */
+        emit_op(c, OP_DUP, node->line);
+        emit_op(c, OP_IS_SOME, node->line);
+        size_t none_jump = emit_jump(c, OP_JUMP_UNLESS, node->line);
+
+        /* Some arm */
+        emit_op(c, OP_POP, node->line);  /* Pop bool */
+        emit_op(c, OP_UNWRAP_OPTION, node->line);  /* Get some value */
+
+        begin_scope(c);
+        const char *some_name = some_arm->as.match_arm.binding_name;
+        add_local(c, some_name, strlen(some_name), true, some_arm->line);
+        compile_match_arm_body(c, some_arm, true);
+        c->current->local_count--;
+        agim_free(c->current->locals[c->current->local_count].name);
+        c->current->scope_depth--;
+
+        size_t end_jump = emit_jump(c, OP_JUMP, node->line);
+
+        /* None arm */
+        patch_jump(c, none_jump);
+        emit_op(c, OP_POP, node->line);  /* Pop bool */
+        emit_op(c, OP_POP, node->line);  /* Pop the option value (none has no binding) */
+
+        compile_match_arm_body(c, none_arm, false);
+
+        patch_jump(c, end_jump);
+    } else if (has_enum_arms) {
+        /*
+         * Enum match: check each variant in sequence
+         *
+         * For each arm:
+         *   DUP                    ; keep enum value for next check
+         *   OP_ENUM_IS [variant]   ; check if matches this variant
+         *   JUMP_UNLESS next_arm   ; skip if not matching
+         *   POP                    ; pop the bool
+         *   [extract payload if binding]
+         *   body
+         *   JUMP end
+         * next_arm:
+         *   POP                    ; pop the bool
+         *   ... repeat ...
+         * end:
+         */
+        size_t arm_count = node->as.match_expr.arm_count;
+        size_t *end_jumps = agim_alloc(sizeof(size_t) * arm_count);
+        size_t end_jump_count = 0;
+
+        for (size_t i = 0; i < arm_count; i++) {
+            AstNode *arm = node->as.match_expr.arms[i];
+            if (arm->as.match_arm.pattern_kind != MATCH_PATTERN_ENUM) continue;
+
+            const char *variant = arm->as.match_arm.variant_name;
+            size_t variant_idx = bytecode_add_string(c->code, variant);
+
+            /* Check if enum matches this variant */
+            emit_op(c, OP_DUP, node->line);  /* Keep enum for potential next check */
+            emit_op(c, OP_ENUM_IS, node->line);
+            emit_byte(c, (variant_idx >> 8) & 0xFF, node->line);
+            emit_byte(c, variant_idx & 0xFF, node->line);
+
+            size_t next_arm_jump = emit_jump(c, OP_JUMP_UNLESS, node->line);
+
+            /* Match found: pop bool, process body */
+            emit_op(c, OP_POP, node->line);  /* Pop bool */
+
+            if (arm->as.match_arm.binding_name) {
+                /* Has payload binding: extract payload */
+                emit_op(c, OP_ENUM_PAYLOAD, node->line);
+
+                begin_scope(c);
+                const char *binding = arm->as.match_arm.binding_name;
+                add_local(c, binding, strlen(binding), true, arm->line);
+                compile_match_arm_body(c, arm, true);
+                c->current->local_count--;
+                agim_free(c->current->locals[c->current->local_count].name);
+                c->current->scope_depth--;
+            } else {
+                /* No binding: just pop the enum and compile body */
+                emit_op(c, OP_POP, node->line);  /* Pop enum value */
+                compile_match_arm_body(c, arm, false);
+            }
+
+            /* Jump to end */
+            end_jumps[end_jump_count++] = emit_jump(c, OP_JUMP, node->line);
+
+            /* Not matched: jump here */
+            patch_jump(c, next_arm_jump);
+            emit_op(c, OP_POP, node->line);  /* Pop bool */
+        }
+
+        /* If no arm matched, pop the enum value and push nil */
+        emit_op(c, OP_POP, node->line);  /* Pop enum value */
+        emit_op(c, OP_NIL, node->line);  /* Default result */
+
+        /* Patch all end jumps */
+        for (size_t i = 0; i < end_jump_count; i++) {
+            patch_jump(c, end_jumps[i]);
+        }
+
+        agim_free(end_jumps);
+    } else {
+        compile_error(c, node->line, "match expression must have ok/err, some/none, or enum variant arms");
+    }
 }
 
 static void compile_expr(Compiler *c, AstNode *node) {
@@ -1644,11 +2172,23 @@ static void compile_expr(Compiler *c, AstNode *node) {
     case NODE_RESULT_ERR:
         compile_result_err(c, node);
         break;
+    case NODE_SOME:
+        compile_some(c, node);
+        break;
+    case NODE_NONE:
+        compile_none(c, node);
+        break;
     case NODE_TRY:
         compile_try(c, node);
         break;
     case NODE_MATCH:
         compile_match(c, node);
+        break;
+    case NODE_STRUCT_INIT:
+        compile_struct_init(c, node);
+        break;
+    case NODE_ENUM_EXPR:
+        compile_enum_expr(c, node);
         break;
     default:
         compile_error(c, node->line, "unexpected expression type");
@@ -1760,7 +2300,82 @@ static void compile_while(Compiler *c, AstNode *node) {
     end_loop(c);
 }
 
+static void compile_for_range(Compiler *c, AstNode *node, AstNode *range) {
+    /*
+     * for i in start..end { body }    (exclusive)
+     * for i in start..=end { body }   (inclusive)
+     *
+     * Compiles to:
+     *   let __end = end
+     *   let i = start
+     *   while i < __end (or <= for inclusive) {
+     *       body
+     *       i = i + 1
+     *   }
+     */
+    begin_scope(c);
+
+    /* Evaluate end and store as __end */
+    compile_expr(c, range->as.range.end);
+    add_local(c, "__end", 5, true, node->line);
+    int end_slot = resolve_local(c, "__end", 5);
+
+    /* Initialize loop variable with start value */
+    compile_expr(c, range->as.range.start);
+    const char *var_name = node->as.for_stmt.var;
+    add_local(c, var_name, strlen(var_name), false, node->line);
+    int var_slot = resolve_local(c, var_name, strlen(var_name));
+
+    /* Loop start */
+    size_t loop_start = current_chunk(c)->code_size;
+    begin_loop(c, loop_start);
+
+    /* Condition: i < __end (or i <= __end for inclusive) */
+    emit_op(c, OP_GET_LOCAL, node->line);
+    emit_bytes(c, (var_slot >> 8) & 0xFF, var_slot & 0xFF, node->line);
+
+    emit_op(c, OP_GET_LOCAL, node->line);
+    emit_bytes(c, (end_slot >> 8) & 0xFF, end_slot & 0xFF, node->line);
+
+    if (range->as.range.inclusive) {
+        emit_op(c, OP_LE, node->line);
+    } else {
+        emit_op(c, OP_LT, node->line);
+    }
+
+    size_t exit_jump = emit_jump(c, OP_JUMP_UNLESS, node->line);
+    emit_op(c, OP_POP, node->line);
+
+    /* Compile body (loop var is already in scope) */
+    compile_stmt(c, node->as.for_stmt.body);
+
+    /* i = i + 1 */
+    emit_op(c, OP_GET_LOCAL, node->line);
+    emit_bytes(c, (var_slot >> 8) & 0xFF, var_slot & 0xFF, node->line);
+    emit_constant(c, value_int(1), node->line);
+    emit_op(c, OP_ADD, node->line);
+    emit_op(c, OP_SET_LOCAL, node->line);
+    emit_bytes(c, (var_slot >> 8) & 0xFF, var_slot & 0xFF, node->line);
+    emit_op(c, OP_POP, node->line);
+
+    /* Loop back */
+    emit_loop(c, loop_start, node->line);
+
+    /* Exit point */
+    patch_jump(c, exit_jump);
+    emit_op(c, OP_POP, node->line);
+
+    end_loop(c);
+    end_scope(c, node->line);
+}
+
 static void compile_for(Compiler *c, AstNode *node) {
+    /* Check if iterable is a range expression */
+    if (node->as.for_stmt.iterable->type == NODE_RANGE) {
+        compile_for_range(c, node, node->as.for_stmt.iterable);
+        return;
+    }
+
     /*
      * for item in iterable { body }
      *
@@ -2117,6 +2732,12 @@ static void compile_decl(Compiler *c, AstNode *node) {
         break;
     case NODE_EXPORT:
         compile_export(c, node);
+        break;
+    case NODE_STRUCT_DECL:
+        compile_struct_decl(c, node);
+        break;
+    case NODE_ENUM_DECL:
+        compile_enum_decl(c, node);
         break;
     default:
         compile_stmt(c, node);

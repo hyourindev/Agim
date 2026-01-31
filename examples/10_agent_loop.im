@@ -1,65 +1,128 @@
 // Agent Loop - Simple think-act-observe pattern
+// Demonstrates Enum for decisions and Struct for agent state
 
-let agent_state = {
-    "memory": [],
-    "step": 0
+// Enum for agent decisions
+enum Decision {
+    Continue(string),
+    Retry(string),
+    Finish(string),
+    Error(string)
 }
 
-fn think(observation) {
-    // Simulate agent thinking based on observation
-    push(agent_state["memory"], {
-        "type": "observation",
-        "content": observation,
-        "step": agent_state["step"]
-    })
+// Struct for memory items
+struct MemoryItem {
+    step: int,
+    item_type: string,
+    content: string
+}
+
+// Struct for agent state
+struct AgentState {
+    memory: [MemoryItem],
+    step: int,
+    status: string
+}
+
+// Global agent state
+let mut agent_state: AgentState = AgentState {
+    memory: [],
+    step: 0,
+    status: "idle"
+}
+
+fn add_to_memory(item_type: string, content: string) -> void {
+    let item: MemoryItem = MemoryItem {
+        step: agent_state.step,
+        item_type: item_type,
+        content: content
+    }
+    push(agent_state.memory, item)
+}
+
+fn think(observation: string) -> Decision {
+    // Record the observation
+    add_to_memory("observation", observation)
 
     // Simple decision logic (would be LLM in real agent)
     if contains(observation, "error") {
-        return {"action": "retry", "reason": "Error detected"}
+        return Decision::Retry("Error detected, retrying")
     }
     if contains(observation, "done") {
-        return {"action": "finish", "reason": "Task completed"}
+        return Decision::Finish("Task completed successfully")
     }
-    return {"action": "continue", "reason": "Processing"}
+    if contains(observation, "fatal") {
+        return Decision::Error("Fatal error encountered")
+    }
+    return Decision::Continue("Processing normally")
 }
 
-fn act(decision) {
-    agent_state["step"] = agent_state["step"] + 1
+fn act(decision: Decision) -> Result<string, string> {
+    agent_state.step = agent_state.step + 1
 
-    push(agent_state["memory"], {
-        "type": "action",
-        "content": decision["action"],
-        "step": agent_state["step"]
-    })
-
-    // Execute action
-    if decision["action"] == "retry" {
-        return "Retrying last operation..."
+    match decision {
+        Continue(reason) => {
+            add_to_memory("action", "continue")
+            agent_state.status = "running"
+            return ok("Continuing execution: " + reason)
+        }
+        Retry(reason) => {
+            add_to_memory("action", "retry")
+            agent_state.status = "retrying"
+            return ok("Retrying: " + reason)
+        }
+        Finish(reason) => {
+            add_to_memory("action", "finish")
+            agent_state.status = "completed"
+            return ok("Finished: " + reason)
+        }
+        Error(reason) => {
+            add_to_memory("action", "error")
+            agent_state.status = "failed"
+            return err("Error: " + reason)
+        }
     }
-    if decision["action"] == "finish" {
-        return "Task finished successfully"
-    }
-    return "Continuing execution..."
 }
 
-fn observe(result) {
-    return "Observed: " + result
+fn observe(result: Result<string, string>) -> string {
+    match result {
+        ok(msg) => return "Observed: " + msg
+        err(e) => return "Observed error: " + e
+    }
 }
 
-fn run_loop(initial_input, max_steps) {
-    let current = initial_input
-    let step = 0
+fn is_terminal(decision: Decision) -> bool {
+    match decision {
+        Continue(r) => return false
+        Retry(r) => return false
+        Finish(r) => return true
+        Error(r) => return true
+    }
+}
+
+fn run_loop(initial_input: string, max_steps: int) -> AgentState {
+    let mut current: string = initial_input
+    let mut step: int = 0
+
+    agent_state.status = "running"
 
     while step < max_steps {
         print("Step " + str(step + 1) + ":")
 
-        let decision = think(current)
-        print("  Think: " + decision["reason"])
+        let decision: Decision = think(current)
+        match decision {
+            Continue(r) => print("  Think: Continue - " + r)
+            Retry(r) => print("  Think: Retry - " + r)
+            Finish(r) => print("  Think: Finish - " + r)
+            Error(r) => print("  Think: Error - " + r)
+        }
 
-        let result = act(decision)
-        print("  Act: " + result)
+        let result: Result<string, string> = act(decision)
+        match result {
+            ok(msg) => print("  Act: " + msg)
+            err(e) => print("  Act failed: " + e)
+        }
 
-        if decision["action"] == "finish" {
+        if is_terminal(decision) {
             break
         }
 
@@ -73,14 +136,56 @@ fn run_loop(initial_input, max_steps) {
     return agent_state
 }
 
+fn get_memory_summary(state: AgentState) -> map<string, int> {
+    let counts: map<string, int> = {
+        "observation": 0,
+        "action": 0
+    }
+    for item in state.memory {
+        if item.item_type == "observation" {
+            counts["observation"] = counts["observation"] + 1
+        }
+        if item.item_type == "action" {
+            counts["action"] = counts["action"] + 1
+        }
+    }
+    return counts
+}
+
 // Demo
 print("=== Agent Loop Demo ===")
 print("")
 
-let final_state = run_loop("Starting task: process data", 3)
+let final_state: AgentState = run_loop("Starting task: process data", 5)
 
 print("")
-print("Final memory:")
-for item in final_state["memory"] {
-    print("  [" + str(item["step"]) + "] " + item["type"] + ": " + str(item["content"]))
+print("Final Status: " + final_state.status)
+print("Total Steps: " + str(final_state.step))
+
+print("")
+print("Memory log:")
+for item in final_state.memory {
+    print("  [" + str(item.step) + "] " + item.item_type + ": " + item.content)
 }
+
+print("")
+print("Memory summary:")
+let summary: map<string, int> = get_memory_summary(final_state)
+print("  Observations: " + str(summary["observation"]))
+print("  Actions: " + str(summary["action"]))
+
+// Test with termination
+print("")
+print("=== Running until completion ===")
+print("")
+
+// Reset state
+agent_state = AgentState {
+    memory: [],
+    step: 0,
+    status: "idle"
+}
+
+let state2: AgentState = run_loop("Processing... done", 10)
+print("")
+print("Status: " + state2.status)

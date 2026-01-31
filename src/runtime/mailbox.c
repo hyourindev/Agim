@@ -67,6 +67,14 @@ void mailbox_init(Mailbox *mailbox) {
     atomic_store_explicit(&mailbox->head, &mailbox->stub, memory_order_relaxed);
     atomic_store_explicit(&mailbox->tail, &mailbox->stub, memory_order_relaxed);
     atomic_store_explicit(&mailbox->count, 0, memory_order_relaxed);
+
+    /* Backpressure defaults */
+    mailbox->max_messages = 0;  /* Unlimited by default */
+    mailbox->max_bytes = 0;     /* Unlimited by default */
+    mailbox->overflow_policy = OVERFLOW_DROP_NEW;
+    atomic_store_explicit(&mailbox->current_bytes, 0, memory_order_relaxed);
+    atomic_store_explicit(&mailbox->dropped_count, 0, memory_order_relaxed);
+    atomic_store_explicit(&mailbox->total_received, 0, memory_order_relaxed);
 }
 
 void mailbox_free(Mailbox *mailbox) {
@@ -95,6 +103,7 @@ void mailbox_free(Mailbox *mailbox) {
     atomic_store_explicit(&mailbox->head, &mailbox->stub, memory_order_relaxed);
     atomic_store_explicit(&mailbox->tail, &mailbox->stub, memory_order_relaxed);
     atomic_store_explicit(&mailbox->count, 0, memory_order_relaxed);
+    atomic_store_explicit(&mailbox->current_bytes, 0, memory_order_relaxed);
 }
 
 bool mailbox_push(Mailbox *mailbox, Message *msg, size_t max_size) {
@@ -282,4 +291,142 @@ bool mailbox_empty(const Mailbox *mailbox) {
 size_t mailbox_count(const Mailbox *mailbox) {
     if (!mailbox) return 0;
     return atomic_load_explicit(&mailbox->count, memory_order_relaxed);
+}
+
+/*============================================================================
+ * Extended Push with Overflow Policy
+ *============================================================================*/
+
+/**
+ * Estimate message size for byte tracking.
+ */
+static size_t estimate_message_size(Message *msg) {
+    size_t size = sizeof(Message);
+    if (msg && msg->value) {
+        /* Basic size estimate - could be made more accurate */
+        size += sizeof(Value);
+        /* Add estimated payload size for strings/arrays */
+        if (msg->value->type == VAL_STRING && msg->value->as.string) {
+            size += msg->value->as.string->length;
+        }
+    }
+    return size;
+}
+
+/**
+ * Drop oldest message from mailbox.
+ * Returns true if a message was dropped.
+ */
+static bool mailbox_drop_oldest(Mailbox *mailbox) {
+    Message *msg = mailbox_pop(mailbox);
+    if (msg) {
+        size_t msg_size = estimate_message_size(msg);
+        atomic_fetch_sub_explicit(&mailbox->current_bytes, msg_size, memory_order_relaxed);
+        message_free(msg);
+        return true;
+    }
+    return false;
+}
+
+SendResult mailbox_push_ex(Mailbox *mailbox, Message *msg) {
+    if (!mailbox || !msg) return SEND_ERROR;
+
+    size_t msg_size = estimate_message_size(msg);
+
+    /* Check message count limit */
+    if (mailbox->max_messages > 0) {
+        size_t current = atomic_load_explicit(&mailbox->count, memory_order_relaxed);
+        if (current >= mailbox->max_messages) {
+            switch (mailbox->overflow_policy) {
+            case OVERFLOW_DROP_NEW:
+                atomic_fetch_add_explicit(&mailbox->dropped_count, 1, memory_order_relaxed);
+                return SEND_FULL;
+
+            case OVERFLOW_DROP_OLD:
+                /* Drop oldest to make room */
+                if (mailbox_drop_oldest(mailbox)) {
+                    atomic_fetch_add_explicit(&mailbox->dropped_count, 1, memory_order_relaxed);
+                } else {
+                    return SEND_FULL;
+                }
+                break;
+
+            case OVERFLOW_BLOCK_SENDER:
+                return SEND_WOULD_BLOCK;
+
+            case OVERFLOW_CRASH:
+                /* Caller should handle by crashing the receiver */
+                return SEND_FULL;
+            }
+        }
+    }
+
+    /* Check byte limit */
+    if (mailbox->max_bytes > 0) {
+        size_t current_bytes = atomic_load_explicit(&mailbox->current_bytes, memory_order_relaxed);
+        if (current_bytes + msg_size > mailbox->max_bytes) {
+            switch (mailbox->overflow_policy) {
+            case OVERFLOW_DROP_NEW:
+                atomic_fetch_add_explicit(&mailbox->dropped_count, 1, memory_order_relaxed);
+                return SEND_FULL;
+
+            case OVERFLOW_DROP_OLD:
+                /* Drop messages until we have room */
+                while (current_bytes + msg_size > mailbox->max_bytes) {
+                    if (!mailbox_drop_oldest(mailbox)) {
+                        break;
+                    }
+                    atomic_fetch_add_explicit(&mailbox->dropped_count, 1, memory_order_relaxed);
+                    current_bytes = atomic_load_explicit(&mailbox->current_bytes, memory_order_relaxed);
+                }
+                break;
+
+            case OVERFLOW_BLOCK_SENDER:
+                return SEND_WOULD_BLOCK;
+
+            case OVERFLOW_CRASH:
+                return SEND_FULL;
+            }
+        }
+    }
+
+    /* Do the actual push */
+    atomic_store_explicit(&msg->next, NULL, memory_order_release);
+    Message *prev = atomic_exchange_explicit(&mailbox->tail, msg, memory_order_acq_rel);
+    atomic_store_explicit(&prev->next, msg, memory_order_release);
+    atomic_fetch_add_explicit(&mailbox->count, 1, memory_order_relaxed);
+    atomic_fetch_add_explicit(&mailbox->current_bytes, msg_size, memory_order_relaxed);
+    atomic_fetch_add_explicit(&mailbox->total_received, 1, memory_order_relaxed);
+
+    return SEND_OK;
+}
+
+/*============================================================================
+ * Configuration Functions
+ *============================================================================*/
+
+void mailbox_set_limits(Mailbox *mailbox, size_t max_messages, size_t max_bytes) {
+    if (!mailbox) return;
+    mailbox->max_messages = max_messages;
+    mailbox->max_bytes = max_bytes;
+}
+
+void mailbox_set_overflow_policy(Mailbox *mailbox, OverflowPolicy policy) {
+    if (!mailbox) return;
+    mailbox->overflow_policy = policy;
+}
+
+OverflowPolicy mailbox_get_overflow_policy(const Mailbox *mailbox) {
+    if (!mailbox) return OVERFLOW_DROP_NEW;
+    return mailbox->overflow_policy;
+}
+
+size_t mailbox_dropped_count(const Mailbox *mailbox) {
+    if (!mailbox) return 0;
+    return atomic_load_explicit(&mailbox->dropped_count, memory_order_relaxed);
+}
+
+size_t mailbox_bytes_used(const Mailbox *mailbox) {
+    if (!mailbox) return 0;
+    return atomic_load_explicit(&mailbox->current_bytes, memory_order_relaxed);
 }

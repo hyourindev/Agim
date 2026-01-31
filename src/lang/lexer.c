@@ -159,6 +159,7 @@ const char *token_type_name(TokenType type) {
         [TOK_COMMA] = "COMMA",
         [TOK_DOT] = "DOT",
         [TOK_COLON] = "COLON",
+        [TOK_COLON_COLON] = "COLON_COLON",
         [TOK_ARROW] = "ARROW",
         [TOK_QUESTION] = "QUESTION",
         [TOK_RANGE] = "RANGE",
@@ -440,7 +441,9 @@ static Token scan_token(Lexer *lexer) {
     case '[': return make_token(lexer, TOK_LBRACKET);
     case ']': return make_token(lexer, TOK_RBRACKET);
     case ',': return make_token(lexer, TOK_COMMA);
-    case ':': return make_token(lexer, TOK_COLON);
+    case ':':
+        if (match(lexer, ':')) return make_token(lexer, TOK_COLON_COLON);
+        return make_token(lexer, TOK_COLON);
     case '?': return make_token(lexer, TOK_QUESTION);
     case '%': return make_token(lexer, TOK_PERCENT);
 

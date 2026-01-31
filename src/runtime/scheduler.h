@@ -20,8 +20,10 @@
 #include "runtime/block.h"
 #include "vm/bytecode.h"
 
-/* Forward declaration */
+/* Forward declarations */
 typedef struct PrimitivesRuntime PrimitivesRuntime;
+typedef struct ProcessGroupRegistry ProcessGroupRegistry;
+typedef struct Tracer Tracer;
 
 /*============================================================================
  * Scheduler Configuration
@@ -103,6 +105,12 @@ typedef struct Scheduler {
 
     /* Primitives runtime */
     PrimitivesRuntime *primitives;
+
+    /* Process groups */
+    ProcessGroupRegistry *groups;
+
+    /* Global tracer (for system-wide tracing) */
+    Tracer *tracer;
 
     /* Statistics (atomic for multi-threading) */
     _Atomic(size_t) total_spawned;
@@ -270,5 +278,33 @@ Worker *scheduler_get_worker(Scheduler *scheduler, size_t index);
  * Wake up a waiting block (thread-safe).
  */
 void scheduler_wake_block(Scheduler *scheduler, Block *block);
+
+/**
+ * Get total block count.
+ */
+size_t scheduler_block_count(const Scheduler *scheduler);
+
+/*============================================================================
+ * Process Groups
+ *============================================================================*/
+
+/**
+ * Get the process group registry.
+ */
+ProcessGroupRegistry *scheduler_get_groups(Scheduler *scheduler);
+
+/*============================================================================
+ * Tracing
+ *============================================================================*/
+
+/**
+ * Get the global tracer.
+ */
+Tracer *scheduler_get_tracer(Scheduler *scheduler);
+
+/**
+ * Set the global tracer.
+ */
+void scheduler_set_tracer(Scheduler *scheduler, Tracer *tracer);
 
 #endif /* AGIM_RUNTIME_SCHEDULER_H */

@@ -1,0 +1,370 @@
+// Full Feature Demo
+// Demonstrates: imports, structs, enums, Result, Option, match, HTTP, JSON, tools, ranges
+// Run with: ./build/agim examples/13_full_demo.im
+
+import "examples/lib/utils.im"
+
+// === Local Data Structures ===
+
+struct TodoItem {
+    id: int,
+    title: string,
+    completed: bool,
+    tags: [string]
+}
+
+struct TodoList {
+    name: string,
+    items: [TodoItem],
+    owner: string
+}
+
+enum Priority { Low, Medium, High, Critical(string) }
+
+// === Helper Functions ===
+
+fn priority_label(p: Priority) -> string {
+    match p {
+        Low => return "LOW"
+        Medium => return "MED"
+        High => return "HIGH"
+        Critical(reason) => return "CRITICAL: " + reason
+    }
+}
+
+fn create_todo(id: int, title: string, tags: [string]) -> TodoItem {
+    return TodoItem {
+        id: id,
+        title: title,
+        completed: false,
+        tags: tags
+    }
+}
+
+fn find_todo_by_id(items: [TodoItem], target_id: int) -> Option<TodoItem> {
+    for item in items {
+        if item.id == target_id {
+            return some(item)
+        }
+    }
+    return none
+}
+
+fn count_completed(items: [TodoItem]) -> int {
+    let count = 0
+    for item in items {
+        if item.completed {
+            count = count + 1
+        }
+    }
+    return count
+}
+
+fn filter_by_tag(items: [TodoItem], tag: string) -> [TodoItem] {
+    let result: [TodoItem] = []
+    for item in items {
+        for t in item.tags {
+            if t == tag {
+                push(result, item)
+            }
+        }
+    }
+    return result
+}
+
+// === Validation ===
+
+fn validate_todo(title: string, id: int) -> Result<TodoItem, string> {
+    if len(title) < 3 {
+        return err("title must be at least 3 characters")
+    }
+    if id <= 0 {
+        return err("id must be positive")
+    }
+    return ok(TodoItem {
+        id: id,
+        title: title,
+        completed: false,
+        tags: []
+    })
+}
+
+// === Tool Definitions ===
+
+@tool(description: "Create a new todo item with validation")
+fn tool_create_todo(title: string, id: int) -> map<string, any> {
+    let result = validate_todo(title, id)
+    match result {
+        ok(todo) => {
+            return {
+                "success": true,
+                "todo": {
+                    "id": todo.id,
+                    "title": todo.title,
+                    "completed": todo.completed
+                }
+            }
+        }
+        err(e) => {
+            return {
+                "success": false,
+                "error": e
+            }
+        }
+    }
+}
+
+// === Main Program ===
+
+print("=" + repeat_string("=", 50))
+print("  TOFULANG FULL FEATURE DEMO")
+print("=" + repeat_string("=", 50))
+print("")
+
+// --- Section 1: Range Loops ---
+print("--- 1. Range Loops (0..n and 0..=n) ---")
+print("")
+
+print("Exclusive range 0..5:")
+let sum = 0
+for i in 0..5 {
+    sum = sum + i
+    print("  i=" + str(i))
+}
+print("  Sum: " + str(sum))
+print("")
+
+print("Inclusive range 0..=3:")
+for i in 0..=3 {
+    print("  i=" + str(i))
+}
+print("")
+
+// --- Section 2: Struct and Enum Demo ---
+print("--- 2. Structs and Enums ---")
+print("")
+
+let priorities: [Priority] = [
+    Priority::Low,
+    Priority::Medium,
+    Priority::High,
+    Priority::Critical("deadline tomorrow")
+]
+
+for p in priorities {
+    print("  Priority: " + priority_label(p))
+}
+print("")
+
+// --- Section 3: TodoList Demo (using create_todo helper) ---
+print("--- 3. Todo List Management ---")
+print("")
+
+// Use create_todo helper function
+let todo1 = create_todo(1, "Learn Tofulang", ["learning", "programming"])
+let todo2 = create_todo(2, "Build an agent", ["project", "ai"])
+let todo3 = create_todo(3, "Write documentation", ["docs", "project"])
+let todo4 = create_todo(4, "Test features", ["testing", "programming"])
+
+// Create array with some marked complete via direct init
+let todos: [TodoItem] = [
+    TodoItem { id: todo1.id, title: todo1.title, completed: true, tags: todo1.tags },
+    todo2,
+    TodoItem { id: todo3.id, title: todo3.title, completed: true, tags: todo3.tags },
+    todo4
+]
+
+let my_list = TodoList {
+    name: "Development Tasks",
+    items: todos,
+    owner: "developer"
+}
+
+print("List: " + my_list.name)
+print("Owner: " + my_list.owner)
+print("Total items: " + str(len(my_list.items)))
+print("Completed: " + str(count_completed(my_list.items)))
+print("")
+
+print("All items:")
+for item in my_list.items {
+    let status = "[ ]"
+    if item.completed {
+        status = "[x]"
+    }
+    print("  " + status + " #" + str(item.id) + " " + item.title)
+    print("      Tags: " + json.encode(item.tags))
+}
+print("")
+
+// --- Section 4: Option Demo ---
+print("--- 4. Option Type (Find by ID) ---")
+print("")
+
+let search_ids: [int] = [2, 5, 1]
+for id in search_ids {
+    let found = find_todo_by_id(todos, id)
+    match found {
+        some(todo) => print("  Found #" + str(id) + ": " + todo.title)
+        none => print("  #" + str(id) + " not found")
+    }
+}
+print("")
+
+// --- Section 5: Result Demo ---
+print("--- 5. Result Type (Validation) ---")
+print("")
+
+let test_cases: [[any]] = [
+    ["Valid task", 10],
+    ["Hi", 5],
+    ["Another task", -1],
+    ["OK", 0]
+]
+
+for tc in test_cases {
+    let title: string = tc[0]
+    let id: int = tc[1]
+    let result = validate_todo(title, id)
+    match result {
+        ok(todo) => print("  OK: Created '" + todo.title + "' with id " + str(todo.id))
+        err(e) => print("  ERR: " + e + " (title='" + title + "', id=" + str(id) + ")")
+    }
+}
+print("")
+
+// --- Section 6: Filter Demo ---
+print("--- 6. Filtering by Tag ---")
+print("")
+
+let programming_tasks = filter_by_tag(todos, "programming")
+print("Tasks tagged 'programming': " + str(len(programming_tasks)))
+for task in programming_tasks {
+    print("  - " + task.title)
+}
+print("")
+
+// --- Section 7: JSON Demo ---
+print("--- 7. JSON Encoding/Parsing ---")
+print("")
+
+let data: map<string, any> = {
+    "list_name": my_list.name,
+    "total": len(my_list.items),
+    "completed": count_completed(my_list.items),
+    "completion_rate": str(count_completed(my_list.items) * 100 / len(my_list.items)) + "%"
+}
+print("Summary as JSON:")
+print(json.encode(data))
+
+// Parse JSON string
+let json_str = "{\"name\": \"Test\", \"value\": 42}"
+let parsed = json.parse(json_str)
+match parsed {
+    ok(obj) => print("Parsed JSON: name=" + str(obj["name"]) + ", value=" + str(obj["value"]))
+    err(e) => print("Parse error: " + e)
+}
+print("")
+
+// --- Section 8: Imported Utils Demo ---
+print("--- 8. Using Imported Utils ---")
+print("")
+
+log_info("Starting utility demo")
+log_error("network", "Connection timeout example")
+print("")
+
+// Email validation (from utils)
+let emails: [string] = ["user@example.com", "bad", "no-at-sign.com"]
+print("Email validation:")
+for email in emails {
+    let result = validate_email(email)
+    match result {
+        ok(valid) => print("  '" + email + "' -> OK")
+        err(e) => print("  '" + email + "' -> " + e)
+    }
+}
+print("")
+
+// Array utilities
+let numbers: [int] = [-5, 10, -3, 20, 15, -8, 30]
+print("Array utilities:")
+print("  Original: " + json.encode(numbers))
+print("  Sum: " + str(sum_array(numbers)))
+print("  Positive only: " + json.encode(filter_positive(numbers)))
+
+// find_index from utils
+let find_result = find_index(numbers, 20)
+match find_result {
+    some(idx) => print("  Index of 20: " + str(idx))
+    none => print("  20 not found")
+}
+print("")
+
+// Request status (from utils)
+print("Request statuses:")
+let statuses: [RequestStatus] = [
+    RequestStatus::Pending,
+    RequestStatus::InProgress("fetching data"),
+    RequestStatus::Completed(0),
+    RequestStatus::Failed("network timeout")
+]
+
+for s in statuses {
+    let terminal = ""
+    if is_terminal_status(s) {
+        terminal = " [TERMINAL]"
+    }
+    print("  " + status_to_string(s) + terminal)
+}
+print("")
+
+// --- Section 9: HTTP Demo ---
+print("--- 9. HTTP Request Demo ---")
+print("")
+
+print("Fetching UUID from httpbin.org...")
+let http_result = http.get("https://httpbin.org/uuid")
+match http_result {
+    ok(body) => {
+        let parsed = json.parse(body)
+        match parsed {
+            ok(data) => print("  UUID: " + str(data["uuid"]))
+            err(e) => print("  Parse error: " + e)
+        }
+    }
+    err(e) => print("  Network error (expected if offline): " + e)
+}
+print("")
+
+// --- Section 10: Tool Output Demo ---
+print("--- 10. Tool Function Demo ---")
+print("")
+
+let tool_result = tool_create_todo("Build amazing things", 42)
+print("Tool result: " + json.encode(tool_result))
+print("")
+
+// --- Final Summary ---
+print("=" + repeat_string("=", 50))
+print("  DEMO COMPLETE - ALL FEATURES USED")
+print("=" + repeat_string("=", 50))
+print("")
+print("Features demonstrated:")
+print("  [x] Structs (TodoItem, TodoList)")
+print("  [x] Enums with payloads (Priority, RequestStatus, LogLevel)")
+print("  [x] Match expressions (with blocks, returns)")
+print("  [x] Result<T, E> types (ok/err)")
+print("  [x] Option<T> types (some/none)")
+print("  [x] For loops with exclusive range (0..n)")
+print("  [x] For loops with inclusive range (0..=n)")
+print("  [x] For loops with arrays")
+print("  [x] Module imports (utils.im)")
+print("  [x] Exported functions (log_info, log_error, validate_email, etc.)")
+print("  [x] HTTP requests (http.get)")
+print("  [x] JSON encoding (json.encode)")
+print("  [x] JSON parsing (json.parse)")
+print("  [x] Tool definitions (@tool decorator)")
+print("  [x] Nested data structures")
+print("  [x] Array manipulation (push, filter)")
+print("")

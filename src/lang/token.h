@@ -94,6 +94,7 @@ typedef enum TokenType {
     TOK_COMMA,          /* , */
     TOK_DOT,            /* . */
     TOK_COLON,          /* : */
+    TOK_COLON_COLON,    /* :: */
     TOK_ARROW,          /* -> */
     TOK_QUESTION,       /* ? */
     TOK_RANGE,          /* .. */

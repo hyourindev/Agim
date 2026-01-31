@@ -1,7 +1,14 @@
 // File Tools - Safe file operations
+// Demonstrates typed functions with Result error handling
+
+struct FileInfo {
+    path: string,
+    exists: bool,
+    size: int
+}
 
 @tool(description: "Read a file safely")
-fn safe_read(path) {
+fn safe_read(path: string) -> Result<string, string> {
     if not fs.exists(path) {
         return err("File not found: " + path)
     }
@@ -9,8 +16,30 @@ fn safe_read(path) {
 }
 
 @tool(description: "Write content to a file")
-fn safe_write(path, content) {
+fn safe_write(path: string, content: string) -> Result<bool, string> {
     return fs.write(path, content)
+}
+
+@tool(description: "Get file info")
+fn get_file_info(path: string) -> FileInfo {
+    let exists: bool = fs.exists(path)
+    let size: int = 0
+    if exists {
+        let content = fs.read(path)
+        if is_ok(content) {
+            size = len(unwrap(content))
+        }
+    }
+    return FileInfo { path: path, exists: exists, size: size }
+}
+
+@tool(description: "Copy file contents")
+fn copy_file(src: string, dst: string) -> Result<bool, string> {
+    let content = safe_read(src)
+    match content {
+        ok(data) => return safe_write(dst, data)
+        err(e) => return err("Copy failed: " + e)
+    }
 }
 
 // Demo
@@ -18,32 +47,40 @@ print("=== File Tools Demo ===")
 print("")
 
 // Write a file
-let config = json.encode({"name": "agent", "version": "1.0"})
-let write_result = safe_write("/tmp/agent.json", config)
+let config: string = json.encode({"name": "agent", "version": "1.0"})
+let write_result: Result<bool, string> = safe_write("/tmp/agent.json", config)
 
-if is_ok(write_result) {
-    print("File written successfully")
-} else {
-    print("Write failed")
+match write_result {
+    ok(success) => print("File written successfully")
+    err(e) => print("Write failed: " + e)
 }
 
 // Read it back
-let read_result = safe_read("/tmp/agent.json")
+let read_result: Result<string, string> = safe_read("/tmp/agent.json")
 
-if is_ok(read_result) {
-    let content = unwrap(read_result)
-    print("File content: " + content)
-    let parse_result = json.parse(content)
-    if is_ok(parse_result) {
-        let data = unwrap(parse_result)
-        print("Agent name: " + data["name"])
+match read_result {
+    ok(content) => {
+        print("File content: " + content)
+        let parse_result = json.parse(content)
+        match parse_result {
+            ok(data) => print("Agent name: " + data["name"])
+            err(e) => print("Parse error: " + e)
+        }
     }
-} else {
-    print("Read failed")
+    err(e) => print("Read failed: " + e)
 }
 
+// Get file info
+let info: FileInfo = get_file_info("/tmp/agent.json")
+print("")
+print("File info:")
+print("  Path: " + info.path)
+print("  Exists: " + str(info.exists))
+print("  Size: " + str(info.size) + " bytes")
+
 // Test non-existent file
-let bad_result = safe_read("/tmp/nonexistent.xyz")
-if is_err(bad_result) {
-    print("Expected error for missing file: OK")
+let bad_result: Result<string, string> = safe_read("/tmp/nonexistent.xyz")
+match bad_result {
+    ok(content) => print("Unexpected success")
+    err(e) => print("Expected error for missing file: OK")
 }

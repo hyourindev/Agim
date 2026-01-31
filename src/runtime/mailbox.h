@@ -29,6 +29,31 @@ typedef uint64_t Pid;
 #define PID_INVALID 0
 
 /*============================================================================
+ * Overflow Policies (Backpressure)
+ *============================================================================*/
+
+/**
+ * Policy for handling mailbox overflow.
+ */
+typedef enum OverflowPolicy {
+    OVERFLOW_DROP_NEW,      /* Drop incoming message (default) */
+    OVERFLOW_DROP_OLD,      /* Drop oldest message to make room */
+    OVERFLOW_BLOCK_SENDER,  /* Block sender until space available */
+    OVERFLOW_CRASH,         /* Crash the receiver */
+} OverflowPolicy;
+
+/**
+ * Result of sending a message.
+ */
+typedef enum SendResult {
+    SEND_OK,                /* Message sent successfully */
+    SEND_FULL,              /* Mailbox full, message dropped */
+    SEND_WOULD_BLOCK,       /* Would block (for OVERFLOW_BLOCK_SENDER) */
+    SEND_DEAD,              /* Target block is dead */
+    SEND_ERROR,             /* Other error */
+} SendResult;
+
+/*============================================================================
  * Message Structure
  *============================================================================*/
 
@@ -64,6 +89,16 @@ typedef struct Mailbox {
     _Atomic(Message *) tail;        /* Producers push at tail */
     _Atomic(size_t) count;          /* Approximate message count */
     Message stub;                   /* Stub node (always present) */
+
+    /* Backpressure configuration */
+    size_t max_messages;            /* Maximum messages (0 = unlimited) */
+    size_t max_bytes;               /* Maximum bytes (0 = unlimited) */
+    OverflowPolicy overflow_policy; /* What to do when full */
+    _Atomic(size_t) current_bytes;  /* Approximate byte usage */
+
+    /* Statistics */
+    _Atomic(size_t) dropped_count;  /* Messages dropped due to overflow */
+    _Atomic(size_t) total_received; /* Total messages ever received */
 } Mailbox;
 
 /*============================================================================
@@ -108,6 +143,12 @@ void mailbox_free(Mailbox *mailbox);
 bool mailbox_push(Mailbox *mailbox, Message *msg, size_t max_size);
 
 /**
+ * Push a message with overflow policy handling.
+ * Returns SEND_OK on success, or appropriate error code.
+ */
+SendResult mailbox_push_ex(Mailbox *mailbox, Message *msg);
+
+/**
  * Pop a message from the mailbox (single consumer only).
  * Returns NULL if empty.
  * Only ONE thread should call this (the owning block).
@@ -128,5 +169,36 @@ bool mailbox_empty(const Mailbox *mailbox);
  * Count may be slightly stale due to concurrent operations.
  */
 size_t mailbox_count(const Mailbox *mailbox);
+
+/*============================================================================
+ * Mailbox Configuration
+ *============================================================================*/
+
+/**
+ * Set mailbox limits.
+ * max_messages: Maximum number of messages (0 = unlimited)
+ * max_bytes: Maximum bytes used by messages (0 = unlimited)
+ */
+void mailbox_set_limits(Mailbox *mailbox, size_t max_messages, size_t max_bytes);
+
+/**
+ * Set overflow policy.
+ */
+void mailbox_set_overflow_policy(Mailbox *mailbox, OverflowPolicy policy);
+
+/**
+ * Get overflow policy.
+ */
+OverflowPolicy mailbox_get_overflow_policy(const Mailbox *mailbox);
+
+/**
+ * Get number of dropped messages.
+ */
+size_t mailbox_dropped_count(const Mailbox *mailbox);
+
+/**
+ * Get approximate byte usage.
+ */
+size_t mailbox_bytes_used(const Mailbox *mailbox);
 
 #endif /* AGIM_RUNTIME_MAILBOX_H */

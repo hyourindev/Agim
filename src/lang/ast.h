@@ -77,6 +77,8 @@ typedef enum NodeType {
     NODE_NONE,          /* none */
     NODE_STRUCT_INIT,   /* Foo { field: value } */
     NODE_SPREAD,        /* ...expr */
+    NODE_ENUM_EXPR,     /* EnumType::Variant or EnumType::Variant(payload) */
+    NODE_RANGE,         /* start..end (exclusive) or start..=end (inclusive) */
 } NodeType;
 
 /*============================================================================
@@ -248,10 +250,17 @@ struct AstNode {
             size_t arm_count;
         } match_expr;
 
-        /* Match arm: ok(name) => expr or err(name) => expr */
+        /* Match arm: ok(name) => expr, err(name) => expr, some(name) => expr, none => expr, or EnumVariant(name) => expr */
         struct {
-            bool is_ok;          /* true for ok, false for err */
-            char *binding_name;  /* variable name to bind the value */
+            enum {
+                MATCH_PATTERN_OK,
+                MATCH_PATTERN_ERR,
+                MATCH_PATTERN_SOME,
+                MATCH_PATTERN_NONE,
+                MATCH_PATTERN_ENUM   /* Enum variant pattern: VariantName or VariantName(binding) */
+            } pattern_kind;
+            char *binding_name;  /* variable name to bind the value (NULL for none/unit enum) */
+            char *variant_name;  /* For enum patterns: the variant name */
             AstNode *body;
         } match_arm;
 
@@ -345,6 +354,20 @@ struct AstNode {
         struct {
             AstNode *expr;
         } spread_expr;
+
+        /* Enum variant expression: EnumType::Variant or EnumType::Variant(payload) */
+        struct {
+            char *enum_type;     /* The enum type name */
+            char *variant_name;  /* The variant name */
+            AstNode *payload;    /* NULL for unit variants, value for payload variants */
+        } enum_expr;
+
+        /* Range expression: start..end or start..=end */
+        struct {
+            AstNode *start;      /* Start value (inclusive) */
+            AstNode *end;        /* End value */
+            bool inclusive;      /* true for ..= (inclusive), false for .. (exclusive) */
+        } range;
 
         /* Tool decorator metadata */
         struct {
@@ -521,6 +544,16 @@ AstNode *ast_none(int line);
  * Create spread expression (...expr).
  */
 AstNode *ast_spread(AstNode *expr, int line);
+
+/**
+ * Create enum variant expression (EnumType::Variant or EnumType::Variant(payload)).
+ */
+AstNode *ast_enum_variant(const char *enum_type, const char *variant_name, AstNode *payload, int line);
+
+/**
+ * Create range expression (start..end or start..=end).
+ */
+AstNode *ast_range(AstNode *start, AstNode *end, bool inclusive, int line);
 
 /*============================================================================
  * Debug

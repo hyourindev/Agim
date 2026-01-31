@@ -9,6 +9,8 @@
 
 #include "runtime/scheduler.h"
 #include "runtime/worker.h"
+#include "runtime/procgroup.h"
+#include "runtime/telemetry.h"
 #include "vm/primitives.h"
 
 #include <stdio.h>
@@ -321,6 +323,12 @@ Scheduler *scheduler_new(const SchedulerConfig *config) {
     /* Primitives runtime */
     scheduler->primitives = NULL;
 
+    /* Process groups */
+    scheduler->groups = NULL;
+
+    /* Global tracer */
+    scheduler->tracer = NULL;
+
     /* Statistics */
     atomic_store(&scheduler->total_spawned, 0);
     atomic_store(&scheduler->total_terminated, 0);
@@ -350,6 +358,16 @@ void scheduler_free(Scheduler *scheduler) {
 
     /* Free all blocks via registry */
     registry_free(&scheduler->registry);
+
+    /* Free process groups */
+    if (scheduler->groups) {
+        procgroup_registry_free(scheduler->groups);
+    }
+
+    /* Free tracer */
+    if (scheduler->tracer) {
+        tracer_free(scheduler->tracer);
+    }
 
     pthread_mutex_destroy(&scheduler->block_mutex);
 
@@ -402,6 +420,11 @@ Pid scheduler_spawn_ex(Scheduler *scheduler, Bytecode *code, const char *name,
 
     /* Set scheduler reference in VM */
     block->vm->scheduler = scheduler;
+
+    /* Register any tools defined in the bytecode */
+    if (scheduler->primitives) {
+        tools_register_from_bytecode(&scheduler->primitives->tools, code, block->vm);
+    }
 
     /* Add to run queue or worker */
     if (scheduler->worker_count > 0) {
@@ -536,6 +559,12 @@ bool scheduler_step(Scheduler *scheduler) {
         /* Block terminated */
         scheduler->total_terminated++;
 
+        /* Determine exit reason */
+        const char *exit_reason_str = (result == BLOCK_RUN_ERROR)
+            ? (block->u.exit.exit_reason ? block->u.exit.exit_reason : "error")
+            : "normal";
+        bool is_abnormal = (result == BLOCK_RUN_ERROR);
+
         /* Notify linked blocks */
         {
             size_t link_count;
@@ -543,23 +572,54 @@ bool scheduler_step(Scheduler *scheduler) {
             for (size_t i = 0; i < link_count; i++) {
                 Block *linked = scheduler_get_block(scheduler, links[i]);
                 if (linked && block_is_alive(linked)) {
-                    /* Send exit signal as message */
-                    Value *exit_msg = value_map();
-                    exit_msg = map_set(exit_msg, "type", value_string("exit"));
-                    exit_msg = map_set(exit_msg, "pid", value_pid(block->pid));
-                    exit_msg = map_set(exit_msg, "reason",
-                            result == BLOCK_RUN_ERROR
-                                ? value_string(block->u.exit.exit_reason
-                                               ? block->u.exit.exit_reason : "error")
-                                : value_string("normal"));
-                    exit_msg = map_set(exit_msg, "code", value_int(block->u.exit.exit_code));
+                    /* Check if linked block traps exits (supervisor) */
+                    if (block_has_cap(linked, CAP_TRAP_EXIT)) {
+                        /* Send exit signal as message */
+                        Value *exit_msg = value_map();
+                        exit_msg = map_set(exit_msg, "type", value_string("exit"));
+                        exit_msg = map_set(exit_msg, "pid", value_pid(block->pid));
+                        exit_msg = map_set(exit_msg, "reason", value_string(exit_reason_str));
+                        exit_msg = map_set(exit_msg, "code", value_int(block->u.exit.exit_code));
 
-                    if (block_send(linked, block->pid, exit_msg)) {
-                        /* Wake linked block if waiting (use atomic CAS) */
-                        if (block_try_transition(linked, BLOCK_WAITING, BLOCK_RUNNABLE)) {
-                            scheduler_enqueue(scheduler, linked);
+                        if (block_send(linked, block->pid, exit_msg)) {
+                            /* Wake linked block if waiting */
+                            if (block_try_transition(linked, BLOCK_WAITING, BLOCK_RUNNABLE)) {
+                                scheduler_enqueue(scheduler, linked);
+                            }
+                        }
+                    } else if (is_abnormal) {
+                        /* Propagate crash to linked block (kill it too) */
+                        block_crash(linked, "linked process crashed");
+                        /* Remove from run queue if present */
+                        if (atomic_load(&linked->state) == BLOCK_RUNNABLE) {
+                            runqueue_remove(&scheduler->run_queue, linked);
                         }
                     }
+                    /* Unlink (the link is broken now) */
+                    block_unlink(linked, block->pid);
+                }
+            }
+        }
+
+        /* Notify monitors (down message) */
+        {
+            for (size_t i = 0; i < block->monitored_by_count; i++) {
+                Block *monitor = scheduler_get_block(scheduler, block->monitored_by[i]);
+                if (monitor && block_is_alive(monitor)) {
+                    /* Send DOWN message (monitors never crash, just get notified) */
+                    Value *down_msg = value_map();
+                    down_msg = map_set(down_msg, "type", value_string("down"));
+                    down_msg = map_set(down_msg, "pid", value_pid(block->pid));
+                    down_msg = map_set(down_msg, "reason", value_string(exit_reason_str));
+                    down_msg = map_set(down_msg, "code", value_int(block->u.exit.exit_code));
+
+                    if (block_send(monitor, block->pid, down_msg)) {
+                        if (block_try_transition(monitor, BLOCK_WAITING, BLOCK_RUNNABLE)) {
+                            scheduler_enqueue(scheduler, monitor);
+                        }
+                    }
+                    /* Remove this block from monitor's list */
+                    block_demonitor(monitor, block->pid);
                 }
             }
         }
@@ -749,5 +809,42 @@ void scheduler_wake_block(Scheduler *scheduler, Block *block) {
             /* Single-threaded: add to run queue */
             scheduler_enqueue(scheduler, block);
         }
+    }
+}
+
+/*============================================================================
+ * Block Count
+ *============================================================================*/
+
+size_t scheduler_block_count(const Scheduler *scheduler) {
+    if (!scheduler) return 0;
+    return atomic_load(&scheduler->registry.total_count);
+}
+
+/*============================================================================
+ * Process Groups
+ *============================================================================*/
+
+ProcessGroupRegistry *scheduler_get_groups(Scheduler *scheduler) {
+    if (!scheduler) return NULL;
+
+    /* Lazy initialization of process groups */
+    if (!scheduler->groups) {
+        scheduler->groups = procgroup_registry_new();
+    }
+    return scheduler->groups;
+}
+
+/*============================================================================
+ * Tracing
+ *============================================================================*/
+
+Tracer *scheduler_get_tracer(Scheduler *scheduler) {
+    return scheduler ? scheduler->tracer : NULL;
+}
+
+void scheduler_set_tracer(Scheduler *scheduler, Tracer *tracer) {
+    if (scheduler) {
+        scheduler->tracer = tracer;
     }
 }

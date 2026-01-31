@@ -8,6 +8,8 @@
 #include "lang/agim.h"
 #include "vm/vm.h"
 #include "vm/value.h"
+#include "runtime/scheduler.h"
+#include "runtime/block.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -150,27 +152,42 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    /* Run */
-    VM *vm = vm_new();
-    vm->reduction_limit = 10000000;
-    vm_load(vm, code);
-    VMResult result = vm_run(vm);
+    /* Create scheduler (single-threaded by default) */
+    SchedulerConfig config = scheduler_config_default();
+    Scheduler *scheduler = scheduler_new(&config);
+    if (!scheduler) {
+        fprintf(stderr, "agim: failed to create scheduler\n");
+        bytecode_free(code);
+        return 1;
+    }
 
+    /* Spawn main program as a block */
+    Pid main_pid = scheduler_spawn(scheduler, code, "main");
+    if (main_pid == PID_INVALID) {
+        fprintf(stderr, "agim: failed to spawn main block\n");
+        scheduler_free(scheduler);
+        return 1;
+    }
+
+    /* Run until all blocks complete */
+    scheduler_run(scheduler);
+
+    /* Check result */
     int exit_code = 0;
-
-    if (result != VM_OK && result != VM_HALT) {
-        fprintf(stderr, "agim: runtime error: %s\n", vm_error(vm));
-        exit_code = 1;
-    } else {
-        /* Print result if there's a value on the stack */
-        Value *top = vm_peek(vm, 0);
-        if (top) {
-            value_print(top);
-            printf("\n");
+    Block *main_block = scheduler_get_block(scheduler, main_pid);
+    if (main_block && main_block->vm) {
+        if (main_block->vm->error) {
+            fprintf(stderr, "agim: runtime error: %s\n", main_block->vm->error);
+            exit_code = 1;
+        } else {
+            Value *result = vm_peek(main_block->vm, 0);
+            if (result) {
+                value_print(result);
+                printf("\n");
+            }
         }
     }
 
-    vm_free(vm);
-    bytecode_free(code);
+    scheduler_free(scheduler);
     return exit_code;
 }

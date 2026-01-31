@@ -1,14 +1,29 @@
 // Web Tools - HTTP requests with error handling
+// Demonstrates typed functions with Result types
+
+struct HttpResponse {
+    status: int,
+    body: string
+}
 
 @tool(description: "Fetch a URL and return the content")
-fn fetch_url(url) {
+fn fetch_url(url: string) -> Result<string, string> {
     return http.get(url)
 }
 
 @tool(description: "Check if a URL is reachable")
-fn check_url(url) {
+fn check_url(url: string) -> bool {
     let result = http.get(url)
     return is_ok(result)
+}
+
+@tool(description: "Parse JSON response from URL")
+fn fetch_json(url: string) -> Result<map<string, any>, string> {
+    let response = http.get(url)
+    match response {
+        ok(body) => return json.parse(body)
+        err(e) => return err("HTTP error: " + e)
+    }
 }
 
 // Demo
@@ -16,16 +31,21 @@ print("=== Web Tools Demo ===")
 print("")
 
 print("Fetching httpbin.org/uuid...")
-let result = http.get("https://httpbin.org/uuid")
+let result: Result<string, string> = http.get("https://httpbin.org/uuid")
 
-if is_ok(result) {
-    print("Success!")
-    let body = unwrap(result)
-    let parse_result = json.parse(body)
-    if is_ok(parse_result) {
-        let data = unwrap(parse_result)
-        print("UUID: " + data["uuid"])
+match result {
+    ok(body) => {
+        print("Success!")
+        let parse_result = json.parse(body)
+        match parse_result {
+            ok(data) => print("UUID: " + data["uuid"])
+            err(e) => print("Parse error: " + e)
+        }
     }
-} else {
-    print("Failed to fetch")
+    err(e) => print("Failed to fetch: " + e)
 }
+
+print("")
+print("Checking URL reachability...")
+let reachable: bool = check_url("https://httpbin.org/get")
+print("httpbin.org reachable: " + str(reachable))

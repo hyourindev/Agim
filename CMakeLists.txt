@@ -107,6 +107,17 @@ add_library(agim_vm STATIC
     src/runtime/block.c
     src/runtime/scheduler.c
     src/runtime/worker.c
+    src/runtime/supervisor.c
+    src/runtime/timer.c
+    src/runtime/serialize.c
+    src/runtime/checkpoint.c
+    # Distribution
+    src/dist/node.c
+    # Hot Code Reloading
+    src/runtime/hotreload.c
+    # Process Groups & Telemetry
+    src/runtime/procgroup.c
+    src/runtime/telemetry.c
     # Builtin
     src/builtin/inference.c
     src/builtin/tools.c
@@ -209,6 +220,16 @@ if(AGIM_BUILD_TESTS)
     add_executable(test_features tests/lang/test_features.c)
     target_link_libraries(test_features agim_lang)
     add_test(NAME test_features COMMAND test_features)
+
+    # Type system unit tests (Option, Result, Struct, Enum)
+    add_executable(test_types tests/vm/test_types.c)
+    target_link_libraries(test_types agim_vm)
+    add_test(NAME test_types COMMAND test_types)
+
+    # Typed programs integration tests
+    add_executable(test_typed_programs tests/lang/test_typed_programs.c)
+    target_link_libraries(test_typed_programs agim_lang)
+    add_test(NAME test_typed_programs COMMAND test_typed_programs)
 
     # Security tests
     add_executable(test_security tests/security/test_security.c)

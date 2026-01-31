@@ -1,40 +1,66 @@
 // LLM Client - Tools for calling LLM APIs
+// Demonstrates Struct types for chat messages
+
+// Define a struct for chat messages
+struct ChatMessage {
+    role: string,
+    content: string
+}
+
+// Define a struct for chat requests
+struct ChatRequest {
+    model: string,
+    messages: [ChatMessage],
+    max_tokens: int,
+    temperature: float
+}
 
 @tool(description: "Count tokens in text (approximate)")
-fn count_tokens(text) {
+fn count_tokens(text: string) -> int {
     // Rough approximation: ~4 chars per token
     return len(text) / 4
 }
 
 @tool(description: "Build a chat message")
-fn chat_message(role, content) {
-    return {"role": role, "content": content}
+fn chat_message(role: string, content: string) -> ChatMessage {
+    return ChatMessage { role: role, content: content }
 }
 
 @tool(description: "Build a chat completion request")
-fn chat_request(messages, model) {
-    return {
-        "model": model,
-        "messages": messages,
-        "max_tokens": 500,
-        "temperature": 0.7
+fn chat_request(messages: [ChatMessage], model: string, max_tokens: int) -> ChatRequest {
+    return ChatRequest {
+        model: model,
+        messages: messages,
+        max_tokens: max_tokens,
+        temperature: 0.7
     }
+}
+
+@tool(description: "Estimate cost in tokens for a request")
+fn estimate_request_cost(request: ChatRequest) -> int {
+    let total: int = 0
+    for msg in request.messages {
+        total = total + count_tokens(msg.content)
+    }
+    return total + request.max_tokens
 }
 
 // Demo
 print("=== LLM Client Tools ===")
 print("")
 
-let prompt = "Explain quantum computing in one sentence."
+let prompt: string = "Explain quantum computing in one sentence."
 print("Prompt: " + prompt)
 print("Estimated tokens: " + str(count_tokens(prompt)))
 
 print("")
-let messages = [
+let messages: [ChatMessage] = [
     chat_message("system", "You are a helpful assistant."),
     chat_message("user", "Hello!")
 ]
 
-let request = chat_request(messages, "gpt-4")
-print("Request body:")
-print(json.encode(request))
+let request = chat_request(messages, "gpt-4", 500)
+print("Request model: " + request.model)
+print("Max tokens: " + str(request.max_tokens))
+print("Temperature: " + str(request.temperature))
+print("Estimated total cost: " + str(estimate_request_cost(request)) + " tokens")

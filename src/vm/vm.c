@@ -13,6 +13,9 @@
 #include "util/hash.h"
 #include "runtime/block.h"
 #include "runtime/scheduler.h"
+#include "runtime/supervisor.h"
+#include "runtime/procgroup.h"
+#include "runtime/telemetry.h"
 #include "vm/primitives.h"
 #include "types/closure.h"
 #include "debug/trace.h"
@@ -583,6 +586,7 @@ VMResult vm_run(VM *vm) {
         [OP_TO_INT] = &&op_slow, [OP_TO_FLOAT] = &&op_slow,
         [OP_FILE_READ] = &&op_slow, [OP_FILE_WRITE] = &&op_slow,
         [OP_FILE_EXISTS] = &&op_slow, [OP_FILE_LINES] = &&op_slow,
+        [OP_FILE_WRITE_BYTES] = &&op_slow,
         [OP_HTTP_GET] = &&op_slow, [OP_HTTP_POST] = &&op_slow,
         [OP_HTTP_PUT] = &&op_slow, [OP_HTTP_DELETE] = &&op_slow,
         [OP_HTTP_PATCH] = &&op_slow, [OP_HTTP_REQUEST] = &&op_slow,
@@ -613,7 +617,16 @@ VMResult vm_run(VM *vm) {
         [OP_RESULT_IS_OK] = &&op_slow, [OP_RESULT_IS_ERR] = &&op_slow,
         [OP_RESULT_UNWRAP] = &&op_slow, [OP_RESULT_UNWRAP_OR] = &&op_slow,
         [OP_RESULT_MATCH] = &&op_slow,
+        [OP_SOME] = &&op_slow, [OP_NONE] = &&op_slow,
+        [OP_IS_SOME] = &&op_slow, [OP_IS_NONE] = &&op_slow,
+        [OP_UNWRAP_OPTION] = &&op_slow, [OP_UNWRAP_OPTION_OR] = &&op_slow,
         [OP_LIST_TOOLS] = &&op_slow, [OP_TOOL_SCHEMA] = &&op_slow,
+        /* Struct operations */
+        [OP_STRUCT_NEW] = &&op_slow, [OP_STRUCT_GET] = &&op_slow,
+        [OP_STRUCT_SET] = &&op_slow, [OP_STRUCT_GET_INDEX] = &&op_slow,
+        /* Enum operations */
+        [OP_ENUM_NEW] = &&op_slow, [OP_ENUM_IS] = &&op_slow,
+        [OP_ENUM_PAYLOAD] = &&op_slow,
     };
 
     /* Dispatch macro: check reduction limit and jump to next opcode */
@@ -935,7 +948,7 @@ VMResult vm_run(VM *vm) {
     TARGET(halt):
         return VM_HALT;
 
-    /* Inline cache optimized map access */
+    /* Inline cache optimized map/struct access */
     TARGET(map_get_ic): {
         uint16_t key_idx = read_short(frame);
         uint16_t ic_slot = read_short(frame);
@@ -943,8 +956,25 @@ VMResult vm_run(VM *vm) {
         NanValue map_val = vm_pop_nan(vm);
         Value *map = nanbox_to_value(map_val);
 
-        if (!map || !value_is_map(map)) {
-            vm_set_error(vm, "expected map");
+        if (!map) {
+            vm_set_error(vm, "expected map or struct");
+            return VM_ERROR_TYPE;
+        }
+
+        /* Handle struct field access */
+        if (value_is_struct(map)) {
+            const char *key = bytecode_get_string(vm->code, key_idx);
+            if (!key) {
+                vm_set_error(vm, "invalid string index");
+                return VM_ERROR_TYPE;
+            }
+            Value *result = value_struct_get_field(map, key);
+            vm_push(vm, result ? result : value_nil());
+            DISPATCH();
+        }
+
+        if (!value_is_map(map)) {
+            vm_set_error(vm, "expected map or struct");
             return VM_ERROR_TYPE;
         }
 
@@ -1836,6 +1866,72 @@ VMResult vm_run(VM *vm) {
                 }
                 fclose(f);
                 vm_push(vm, value_result_ok(arr));
+            }
+            break;
+        }
+
+        case OP_FILE_WRITE_BYTES: {
+            Value *bytes_val = vm_pop(vm);
+            Value *path = vm_pop(vm);
+
+            if (!value_is_string(path)) {
+                vm_set_error(vm, "file path must be string");
+                return VM_ERROR_TYPE;
+            }
+            if (!value_is_array(bytes_val)) {
+                vm_set_error(vm, "fs.write_bytes requires array of integers");
+                return VM_ERROR_TYPE;
+            }
+
+            Sandbox *sandbox = sandbox_global();
+            char *resolved = sandbox_resolve_write(sandbox, path->as.string->data);
+            if (!resolved) {
+                vm_push(vm, value_result_err(value_string("file write denied by sandbox")));
+                break;
+            }
+
+            size_t len = array_length(bytes_val);
+            uint8_t *buffer = malloc(len);
+            if (!buffer) {
+                free(resolved);
+                vm_push(vm, value_result_err(value_string("out of memory")));
+                break;
+            }
+
+            bool valid = true;
+            for (size_t i = 0; i < len && valid; i++) {
+                Value *elem = array_get(bytes_val, i);
+                if (!value_is_int(elem)) {
+                    free(buffer); free(resolved);
+                    vm_push(vm, value_result_err(value_string("array must contain only integers")));
+                    valid = false;
+                } else {
+                    int64_t val = elem->as.integer;
+                    if (val < 0 || val > 255) {
+                        free(buffer); free(resolved);
+                        vm_push(vm, value_result_err(value_string("byte value out of range (0-255)")));
+                        valid = false;
+                    } else {
+                        buffer[i] = (uint8_t)val;
+                    }
+                }
+            }
+
+            if (valid) {
+                FILE *f = fopen(resolved, "wb");
+                if (!f) {
+                    free(buffer); free(resolved);
+                    vm_push(vm, value_result_err(value_string("cannot open file for writing")));
+                } else {
+                    size_t written = fwrite(buffer, 1, len, f);
+                    fclose(f);
+                    free(buffer); free(resolved);
+                    if (written == len) {
+                        vm_push(vm, value_result_ok(value_bool(true)));
+                    } else {
+                        vm_push(vm, value_result_err(value_string("incomplete write")));
+                    }
+                }
             }
             break;
         }
@@ -3399,21 +3495,30 @@ VMResult vm_run(VM *vm) {
         case OP_RESULT_UNWRAP: {
             Value *v = vm_pop(vm);
             if (!v) return VM_ERROR_STACK_UNDERFLOW;
-            if (!value_is_result(v)) {
-                vm_set_error(vm, "unwrap on non-Result value");
-                return VM_ERROR_TYPE;
-            }
-            Value *inner = value_result_unwrap(v);
-            if (!inner) {
-                /* It was an Err, get the error value instead */
-                inner = value_result_unwrap_err(v);
-                if (inner) {
-                    vm_push(vm, inner);
+            /* Handle both Result and Option types */
+            if (value_is_option(v)) {
+                Value *inner = value_option_unwrap(v);
+                if (!inner) {
+                    vm_set_error(vm, "unwrap on None value");
+                    return VM_ERROR_RUNTIME;
+                }
+                vm_push(vm, inner);
+            } else if (value_is_result(v)) {
+                Value *inner = value_result_unwrap(v);
+                if (!inner) {
+                    /* It was an Err, get the error value instead */
+                    inner = value_result_unwrap_err(v);
+                    if (inner) {
+                        vm_push(vm, inner);
+                    } else {
+                        vm_push(vm, value_nil());
+                    }
                 } else {
-                    vm_push(vm, value_nil());
+                    vm_push(vm, inner);
                 }
             } else {
-                vm_push(vm, inner);
+                vm_set_error(vm, "unwrap on non-Result/Option value");
+                return VM_ERROR_TYPE;
             }
             break;
         }
@@ -3422,7 +3527,13 @@ VMResult vm_run(VM *vm) {
             Value *default_val = vm_pop(vm);
             Value *result = vm_pop(vm);
             if (!result || !default_val) return VM_ERROR_STACK_UNDERFLOW;
-            Value *unwrapped = value_result_unwrap_or(result, default_val);
+            /* Handle both Result and Option types */
+            Value *unwrapped;
+            if (value_is_option(result)) {
+                unwrapped = value_option_unwrap_or(result, default_val);
+            } else {
+                unwrapped = value_result_unwrap_or(result, default_val);
+            }
             vm_push(vm, unwrapped);
             break;
         }
@@ -4034,6 +4145,654 @@ VMResult vm_run(VM *vm) {
             /* Set value */
             primitives_memory_set(rt, key->as.string->data, val);
             vm_push(vm, value_nil());
+            break;
+        }
+
+        /* Linking operations */
+        case OP_LINK: {
+            Block *block = (Block *)vm->block;
+            Scheduler *sched = (Scheduler *)vm->scheduler;
+            if (!block || !sched) {
+                vm_set_error(vm, "no runtime context");
+                return VM_ERROR_RUNTIME;
+            }
+
+            /* Check capability */
+            if (!block_has_cap(block, CAP_LINK)) {
+                vm_set_error(vm, "link capability denied");
+                return VM_ERROR_CAPABILITY;
+            }
+
+            /* Pop target PID */
+            Value *pid_val = vm_pop(vm);
+            if (!pid_val) return VM_ERROR_STACK_UNDERFLOW;
+
+            if (pid_val->type != VAL_PID) {
+                vm_set_error(vm, "link target must be pid");
+                return VM_ERROR_TYPE;
+            }
+
+            Pid target_pid = pid_val->as.pid;
+            Block *target = scheduler_get_block(sched, target_pid);
+
+            if (!target || !block_is_alive(target)) {
+                vm_set_error(vm, "cannot link to dead or invalid block");
+                return VM_ERROR_RUNTIME;
+            }
+
+            /* Create bidirectional link */
+            block_link(block, target_pid);
+            block_link(target, block->pid);
+
+            vm_push(vm, value_bool(true));
+            break;
+        }
+
+        case OP_UNLINK: {
+            Block *block = (Block *)vm->block;
+            Scheduler *sched = (Scheduler *)vm->scheduler;
+            if (!block || !sched) {
+                vm_set_error(vm, "no runtime context");
+                return VM_ERROR_RUNTIME;
+            }
+
+            /* Pop target PID */
+            Value *pid_val = vm_pop(vm);
+            if (!pid_val) return VM_ERROR_STACK_UNDERFLOW;
+
+            if (pid_val->type != VAL_PID) {
+                vm_set_error(vm, "unlink target must be pid");
+                return VM_ERROR_TYPE;
+            }
+
+            Pid target_pid = pid_val->as.pid;
+            Block *target = scheduler_get_block(sched, target_pid);
+
+            /* Remove bidirectional link */
+            block_unlink(block, target_pid);
+            if (target) {
+                block_unlink(target, block->pid);
+            }
+
+            vm_push(vm, value_bool(true));
+            break;
+        }
+
+        case OP_MONITOR: {
+            Block *block = (Block *)vm->block;
+            Scheduler *sched = (Scheduler *)vm->scheduler;
+            if (!block || !sched) {
+                vm_set_error(vm, "no runtime context");
+                return VM_ERROR_RUNTIME;
+            }
+
+            /* Check capability */
+            if (!block_has_cap(block, CAP_MONITOR)) {
+                vm_set_error(vm, "monitor capability denied");
+                return VM_ERROR_CAPABILITY;
+            }
+
+            /* Pop target PID */
+            Value *pid_val = vm_pop(vm);
+            if (!pid_val) return VM_ERROR_STACK_UNDERFLOW;
+
+            if (pid_val->type != VAL_PID) {
+                vm_set_error(vm, "monitor target must be pid");
+                return VM_ERROR_TYPE;
+            }
+
+            Pid target_pid = pid_val->as.pid;
+            Block *target = scheduler_get_block(sched, target_pid);
+
+            if (!target || !block_is_alive(target)) {
+                /* Target already dead - send immediate DOWN message */
+                Value *down_msg = value_map();
+                down_msg = map_set(down_msg, "type", value_string("down"));
+                down_msg = map_set(down_msg, "pid", value_pid(target_pid));
+                down_msg = map_set(down_msg, "reason", value_string("noproc"));
+                down_msg = map_set(down_msg, "code", value_int(-1));
+                block_send(block, target_pid, down_msg);
+            } else {
+                /* Set up monitoring */
+                block_monitor(block, target_pid);
+                block_add_monitored_by(target, block->pid);
+            }
+
+            vm_push(vm, value_bool(true));
+            break;
+        }
+
+        case OP_DEMONITOR: {
+            Block *block = (Block *)vm->block;
+            Scheduler *sched = (Scheduler *)vm->scheduler;
+            if (!block || !sched) {
+                vm_set_error(vm, "no runtime context");
+                return VM_ERROR_RUNTIME;
+            }
+
+            /* Pop target PID */
+            Value *pid_val = vm_pop(vm);
+            if (!pid_val) return VM_ERROR_STACK_UNDERFLOW;
+
+            if (pid_val->type != VAL_PID) {
+                vm_set_error(vm, "demonitor target must be pid");
+                return VM_ERROR_TYPE;
+            }
+
+            Pid target_pid = pid_val->as.pid;
+            Block *target = scheduler_get_block(sched, target_pid);
+
+            /* Remove monitoring */
+            block_demonitor(block, target_pid);
+            if (target) {
+                block_remove_monitored_by(target, block->pid);
+            }
+
+            vm_push(vm, value_bool(true));
+            break;
+        }
+
+        /* Supervisor operations */
+        case OP_SUP_START: {
+            Block *block = (Block *)vm->block;
+            if (!block) {
+                vm_set_error(vm, "no runtime context");
+                return VM_ERROR_RUNTIME;
+            }
+
+            /* Check capability */
+            if (!block_has_cap(block, CAP_SUPERVISE)) {
+                vm_set_error(vm, "supervise capability denied");
+                return VM_ERROR_CAPABILITY;
+            }
+
+            /* Pop strategy from stack */
+            Value *strategy_val = vm_pop(vm);
+            if (!strategy_val) return VM_ERROR_STACK_UNDERFLOW;
+
+            SupervisorStrategy strategy = SUP_ONE_FOR_ONE;
+            if (value_is_string(strategy_val)) {
+                const char *s = strategy_val->as.string->data;
+                if (strcmp(s, "one_for_all") == 0) {
+                    strategy = SUP_ONE_FOR_ALL;
+                } else if (strcmp(s, "rest_for_one") == 0) {
+                    strategy = SUP_REST_FOR_ONE;
+                }
+            } else if (value_is_int(strategy_val)) {
+                strategy = (SupervisorStrategy)strategy_val->as.integer;
+            }
+
+            /* Initialize block as supervisor */
+            if (!supervisor_init_block(block, strategy)) {
+                vm_set_error(vm, "failed to initialize supervisor");
+                return VM_ERROR_RUNTIME;
+            }
+
+            vm_push(vm, value_bool(true));
+            break;
+        }
+
+        case OP_SUP_ADD_CHILD: {
+            Block *block = (Block *)vm->block;
+            Scheduler *sched = (Scheduler *)vm->scheduler;
+            if (!block || !sched) {
+                vm_set_error(vm, "no runtime context");
+                return VM_ERROR_RUNTIME;
+            }
+
+            if (!block->supervisor) {
+                vm_set_error(vm, "block is not a supervisor");
+                return VM_ERROR_RUNTIME;
+            }
+
+            /* Pop restart strategy, code function, and name */
+            Value *restart_val = vm_pop(vm);
+            Value *func_val = vm_pop(vm);
+            Value *name_val = vm_pop(vm);
+            if (!restart_val || !func_val || !name_val) return VM_ERROR_STACK_UNDERFLOW;
+
+            /* Parse restart strategy */
+            RestartStrategy restart = RESTART_PERMANENT;
+            if (value_is_string(restart_val)) {
+                const char *s = restart_val->as.string->data;
+                if (strcmp(s, "transient") == 0) {
+                    restart = RESTART_TRANSIENT;
+                } else if (strcmp(s, "temporary") == 0) {
+                    restart = RESTART_TEMPORARY;
+                }
+            } else if (value_is_int(restart_val)) {
+                restart = (RestartStrategy)restart_val->as.integer;
+            }
+
+            /* Get child name */
+            const char *child_name = NULL;
+            if (value_is_string(name_val)) {
+                child_name = name_val->as.string->data;
+            }
+
+            /* Get function to spawn */
+            Function *fn = NULL;
+            if (func_val->type == VAL_FUNCTION) {
+                fn = func_val->as.function;
+            } else if (func_val->type == VAL_CLOSURE) {
+                fn = closure_function(func_val);
+            } else {
+                vm_set_error(vm, "child must be a function");
+                return VM_ERROR_TYPE;
+            }
+
+            /* Create bytecode for child (similar to OP_SPAWN) */
+            Bytecode *spawn_code = bytecode_new();
+            Chunk *fn_chunk = vm->code->functions[fn->code_offset];
+
+            for (size_t i = 0; i < fn_chunk->code_size; i++) {
+                chunk_write_byte(spawn_code->main, fn_chunk->code[i], fn_chunk->lines[i]);
+            }
+            for (size_t i = 0; i < fn_chunk->constants_size; i++) {
+                chunk_add_constant(spawn_code->main, value_copy(fn_chunk->constants[i]));
+            }
+            for (size_t i = 0; i < vm->code->functions_count; i++) {
+                Chunk *src = vm->code->functions[i];
+                Chunk *dst = chunk_new();
+                for (size_t j = 0; j < src->code_size; j++) {
+                    chunk_write_byte(dst, src->code[j], src->lines[j]);
+                }
+                for (size_t j = 0; j < src->constants_size; j++) {
+                    chunk_add_constant(dst, value_copy(src->constants[j]));
+                }
+                bytecode_add_function(spawn_code, dst);
+            }
+            for (size_t i = 0; i < vm->code->strings_count; i++) {
+                bytecode_add_string(spawn_code, vm->code->strings[i]);
+            }
+
+            /* Add child to supervisor */
+            if (!supervisor_add_child(block->supervisor, sched, block,
+                                      child_name, spawn_code, restart)) {
+                bytecode_free(spawn_code);
+                vm_set_error(vm, "failed to add supervised child");
+                return VM_ERROR_RUNTIME;
+            }
+
+            /* Get the child PID */
+            ChildSpec *spec = supervisor_get_child(block->supervisor, child_name);
+            Pid child_pid = spec ? spec->child_pid : PID_INVALID;
+
+            vm_push(vm, value_pid(child_pid));
+            break;
+        }
+
+        case OP_SUP_REMOVE_CHILD: {
+            Block *block = (Block *)vm->block;
+            Scheduler *sched = (Scheduler *)vm->scheduler;
+            if (!block || !sched) {
+                vm_set_error(vm, "no runtime context");
+                return VM_ERROR_RUNTIME;
+            }
+
+            if (!block->supervisor) {
+                vm_set_error(vm, "block is not a supervisor");
+                return VM_ERROR_RUNTIME;
+            }
+
+            /* Pop child name */
+            Value *name_val = vm_pop(vm);
+            if (!name_val) return VM_ERROR_STACK_UNDERFLOW;
+
+            if (!value_is_string(name_val)) {
+                vm_set_error(vm, "child name must be string");
+                return VM_ERROR_TYPE;
+            }
+
+            bool ok = supervisor_remove_child(block->supervisor, sched, name_val->as.string->data);
+            vm_push(vm, value_bool(ok));
+            break;
+        }
+
+        case OP_SUP_WHICH_CHILDREN: {
+            Block *block = (Block *)vm->block;
+            if (!block) {
+                vm_set_error(vm, "no runtime context");
+                return VM_ERROR_RUNTIME;
+            }
+
+            if (!block->supervisor) {
+                vm_push(vm, value_array());
+                break;
+            }
+
+            /* Build array of child info */
+            Value *result = value_array();
+            size_t count;
+            const ChildSpec *children = supervisor_which_children(block->supervisor, &count);
+
+            for (size_t i = 0; i < count; i++) {
+                Value *child_info = value_map();
+                child_info = map_set(child_info, "name",
+                    children[i].name ? value_string(children[i].name) : value_nil());
+                child_info = map_set(child_info, "pid", value_pid(children[i].child_pid));
+                child_info = map_set(child_info, "restart_count", value_int(children[i].restart_count));
+                array_push(result, child_info);
+            }
+
+            vm_push(vm, result);
+            break;
+        }
+
+        case OP_SUP_SHUTDOWN: {
+            Block *block = (Block *)vm->block;
+            Scheduler *sched = (Scheduler *)vm->scheduler;
+            if (!block || !sched) {
+                vm_set_error(vm, "no runtime context");
+                return VM_ERROR_RUNTIME;
+            }
+
+            if (!block->supervisor) {
+                vm_set_error(vm, "block is not a supervisor");
+                return VM_ERROR_RUNTIME;
+            }
+
+            supervisor_shutdown(block->supervisor, sched);
+            vm_push(vm, value_bool(true));
+            break;
+        }
+
+        case OP_RECEIVE_TIMEOUT: {
+            /* TODO: Implement receive with timeout - requires timer infrastructure */
+            vm_set_error(vm, "receive_timeout not yet implemented");
+            return VM_ERROR_RUNTIME;
+        }
+
+        /*================================================================
+         * Process Groups
+         *================================================================*/
+
+        case OP_GROUP_JOIN: {
+            Block *block = (Block *)vm->block;
+            Scheduler *sched = (Scheduler *)vm->scheduler;
+            if (!block || !sched) {
+                vm_set_error(vm, "no runtime context");
+                return VM_ERROR_RUNTIME;
+            }
+
+            Value *name_val = vm_pop(vm);
+            if (!name_val || name_val->type != VAL_STRING) {
+                vm_set_error(vm, "group_join requires string name");
+                return VM_ERROR_TYPE;
+            }
+
+            ProcessGroupRegistry *groups = scheduler_get_groups(sched);
+            if (!groups) {
+                vm_set_error(vm, "process groups not available");
+                return VM_ERROR_RUNTIME;
+            }
+
+            bool ok = procgroup_join(groups, name_val->as.string->data, block->pid);
+            vm_push(vm, value_bool(ok));
+            break;
+        }
+
+        case OP_GROUP_LEAVE: {
+            Block *block = (Block *)vm->block;
+            Scheduler *sched = (Scheduler *)vm->scheduler;
+            if (!block || !sched) {
+                vm_set_error(vm, "no runtime context");
+                return VM_ERROR_RUNTIME;
+            }
+
+            Value *name_val = vm_pop(vm);
+            if (!name_val || name_val->type != VAL_STRING) {
+                vm_set_error(vm, "group_leave requires string name");
+                return VM_ERROR_TYPE;
+            }
+
+            ProcessGroupRegistry *groups = scheduler_get_groups(sched);
+            if (groups) {
+                procgroup_leave(groups, name_val->as.string->data, block->pid);
+            }
+            vm_push(vm, value_bool(true));
+            break;
+        }
+
+        case OP_GROUP_SEND: {
+            Block *block = (Block *)vm->block;
+            Scheduler *sched = (Scheduler *)vm->scheduler;
+            if (!block || !sched) {
+                vm_set_error(vm, "no runtime context");
+                return VM_ERROR_RUNTIME;
+            }
+
+            Value *message = vm_pop(vm);
+            Value *name_val = vm_pop(vm);
+            if (!name_val || name_val->type != VAL_STRING) {
+                vm_set_error(vm, "group_send requires string name");
+                return VM_ERROR_TYPE;
+            }
+
+            ProcessGroupRegistry *groups = scheduler_get_groups(sched);
+            size_t sent = 0;
+            if (groups) {
+                sent = procgroup_broadcast(groups, sched, name_val->as.string->data,
+                                           block->pid, message);
+            }
+            vm_push(vm, value_int((int64_t)sent));
+            break;
+        }
+
+        case OP_GROUP_SEND_OTHERS: {
+            Block *block = (Block *)vm->block;
+            Scheduler *sched = (Scheduler *)vm->scheduler;
+            if (!block || !sched) {
+                vm_set_error(vm, "no runtime context");
+                return VM_ERROR_RUNTIME;
+            }
+
+            Value *message = vm_pop(vm);
+            Value *name_val = vm_pop(vm);
+            if (!name_val || name_val->type != VAL_STRING) {
+                vm_set_error(vm, "group_send_others requires string name");
+                return VM_ERROR_TYPE;
+            }
+
+            ProcessGroupRegistry *groups = scheduler_get_groups(sched);
+            size_t sent = 0;
+            if (groups) {
+                sent = procgroup_broadcast_others(groups, sched, name_val->as.string->data,
+                                                  block->pid, message);
+            }
+            vm_push(vm, value_int((int64_t)sent));
+            break;
+        }
+
+        case OP_GROUP_MEMBERS: {
+            Block *block = (Block *)vm->block;
+            Scheduler *sched = (Scheduler *)vm->scheduler;
+            if (!block || !sched) {
+                vm_set_error(vm, "no runtime context");
+                return VM_ERROR_RUNTIME;
+            }
+
+            Value *name_val = vm_pop(vm);
+            if (!name_val || name_val->type != VAL_STRING) {
+                vm_set_error(vm, "group_members requires string name");
+                return VM_ERROR_TYPE;
+            }
+
+            ProcessGroupRegistry *groups = scheduler_get_groups(sched);
+            Value *result = value_array();
+
+            if (groups) {
+                size_t count;
+                Pid *members = procgroup_members(groups, name_val->as.string->data, &count);
+                if (members) {
+                    for (size_t i = 0; i < count; i++) {
+                        array_push(result, value_pid(members[i]));
+                    }
+                    free(members);
+                }
+            }
+            vm_push(vm, result);
+            break;
+        }
+
+        case OP_GROUP_LIST: {
+            Scheduler *sched = (Scheduler *)vm->scheduler;
+            if (!sched) {
+                vm_set_error(vm, "no runtime context");
+                return VM_ERROR_RUNTIME;
+            }
+
+            ProcessGroupRegistry *groups = scheduler_get_groups(sched);
+            Value *result = value_array();
+
+            if (groups) {
+                size_t count;
+                const char **names = procgroup_list(groups, &count);
+                if (names) {
+                    for (size_t i = 0; i < count; i++) {
+                        array_push(result, value_string(names[i]));
+                    }
+                    free((void *)names);
+                }
+            }
+            vm_push(vm, result);
+            break;
+        }
+
+        /*================================================================
+         * Telemetry & Introspection
+         *================================================================*/
+
+        case OP_GET_STATS: {
+            Block *block = (Block *)vm->block;
+            Scheduler *sched = (Scheduler *)vm->scheduler;
+            if (!block || !sched) {
+                vm_set_error(vm, "no runtime context");
+                return VM_ERROR_RUNTIME;
+            }
+
+            Value *pid_val = vm_pop(vm);
+            Pid target_pid = block->pid;  /* Default to self */
+            if (pid_val && pid_val->type == VAL_PID) {
+                target_pid = pid_val->as.pid;
+            }
+
+            Block *target = scheduler_get_block(sched, target_pid);
+            if (!target) {
+                vm_push(vm, value_nil());
+                break;
+            }
+
+            /* Build stats map from block counters */
+            Value *stats = value_map();
+            map_set(stats, "pid", value_pid(target->pid));
+            map_set(stats, "messages_sent", value_int((int64_t)target->counters.messages_sent));
+            map_set(stats, "messages_received", value_int((int64_t)target->counters.messages_received));
+            map_set(stats, "reductions", value_int((int64_t)target->counters.reductions));
+            map_set(stats, "gc_collections", value_int((int64_t)target->counters.gc_collections));
+            map_set(stats, "gc_bytes_collected", value_int((int64_t)target->counters.gc_bytes_collected));
+            map_set(stats, "state", value_string(block_state_name(block_state(target))));
+            map_set(stats, "mailbox_count", value_int((int64_t)mailbox_count(&target->mailbox)));
+
+            vm_push(vm, stats);
+            break;
+        }
+
+        case OP_TRACE: {
+            /* Enable tracing on a block - for now just a stub */
+            Value *flags_val = vm_pop(vm);
+            Value *pid_val = vm_pop(vm);
+            (void)flags_val;
+            (void)pid_val;
+            /* TODO: Implement per-block tracing */
+            vm_push(vm, value_bool(true));
+            break;
+        }
+
+        case OP_TRACE_OFF: {
+            /* Disable tracing on a block - for now just a stub */
+            Value *pid_val = vm_pop(vm);
+            (void)pid_val;
+            /* TODO: Implement per-block tracing */
+            vm_push(vm, value_bool(true));
+            break;
+        }
+
+        /*================================================================
+         * Selective Receive (Pattern Matching)
+         *================================================================*/
+
+        case OP_RECEIVE_MATCH: {
+            Block *block = (Block *)vm->block;
+            if (!block) {
+                vm_set_error(vm, "no block context");
+                return VM_ERROR_RUNTIME;
+            }
+
+            /* Check capability */
+            if (!block_has_cap(block, CAP_RECEIVE)) {
+                vm_set_error(vm, "receive capability denied");
+                return VM_ERROR_CAPABILITY;
+            }
+
+            Value *pattern = vm_pop(vm);
+
+            /* For now, selective receive with pattern just checks mailbox.
+             * A full implementation would scan the mailbox for matching messages.
+             * This is a simplified version that checks the first message. */
+            Message *msg = block_receive(block);
+            if (msg) {
+                bool matched = true;
+
+                /* Simple pattern matching: if pattern is a map, check keys */
+                if (pattern && pattern->type == VAL_MAP && msg->value && msg->value->type == VAL_MAP) {
+                    /* Get keys from pattern map */
+                    Value *keys_val = map_keys(pattern);
+                    if (keys_val && keys_val->type == VAL_ARRAY) {
+                        Array *keys = keys_val->as.array;
+                        for (size_t i = 0; i < keys->length && matched; i++) {
+                            Value *key = keys->items[i];
+                            if (key && key->type == VAL_STRING) {
+                                const char *key_str = key->as.string->data;
+                                Value *pattern_val = map_get(pattern, key_str);
+                                Value *msg_val = map_get(msg->value, key_str);
+
+                                if (!msg_val) {
+                                    matched = false;
+                                } else if (pattern_val && pattern_val->type != VAL_NIL) {
+                                    /* Check value matches if pattern specifies a value */
+                                    if (!value_equals(pattern_val, msg_val)) {
+                                        matched = false;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (matched) {
+                    /* Create result map with sender and value */
+                    Value *result = value_map();
+                    map_set(result, "sender", value_pid(msg->sender));
+                    map_set(result, "value", msg->value);
+                    msg->value = NULL;
+                    message_free(msg);
+                    vm_push(vm, result);
+                } else {
+                    /* Message doesn't match - put it back (simplified: we can't easily do this
+                     * with current mailbox, so we just discard it for now) */
+                    /* TODO: Implement proper message queue with save/restore for selective receive */
+                    message_free(msg);
+                    frame->ip--;
+                    block->state = BLOCK_WAITING;
+                    return VM_YIELD;
+                }
+            } else {
+                /* No message available */
+                frame->ip--;
+                block->state = BLOCK_WAITING;
+                return VM_YIELD;
+            }
             break;
         }
 
