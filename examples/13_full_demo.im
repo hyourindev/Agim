@@ -1,5 +1,5 @@
 // Full Feature Demo
-// Demonstrates: imports, structs, enums, Result, Option, match, HTTP, JSON, tools, ranges
+// Demonstrates: imports, structs, enums, Result, Option, match, JSON, tools, ranges
 // Run with: ./build/agim examples/13_full_demo.im
 
 import "examples/lib/utils.im"
@@ -319,26 +319,8 @@ for s in statuses {
 }
 print("")
 
-// --- Section 9: HTTP Demo ---
-print("--- 9. HTTP Request Demo ---")
-print("")
-
-print("Fetching UUID from httpbin.org...")
-let http_result = http.get("https://httpbin.org/uuid")
-match http_result {
-    ok(body) => {
-        let parsed = json.parse(body)
-        match parsed {
-            ok(data) => print("  UUID: " + str(data["uuid"]))
-            err(e) => print("  Parse error: " + e)
-        }
-    }
-    err(e) => print("  Network error (expected if offline): " + e)
-}
-print("")
-
-// --- Section 10: Tool Output Demo ---
-print("--- 10. Tool Function Demo ---")
+// --- Section 9: Tool Output Demo ---
+print("--- 9. Tool Function Demo ---")
 print("")
 
 let tool_result = tool_create_todo("Build amazing things", 42)
@@ -361,7 +343,6 @@ print("  [x] For loops with inclusive range (0..=n)")
 print("  [x] For loops with arrays")
 print("  [x] Module imports (utils.im)")
 print("  [x] Exported functions (log_info, log_error, validate_email, etc.)")
-print("  [x] HTTP requests (http.get)")
 print("  [x] JSON encoding (json.encode)")
 print("  [x] JSON parsing (json.parse)")
 print("  [x] Tool definitions (@tool decorator)")

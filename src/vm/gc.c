@@ -60,9 +60,6 @@ Heap *heap_new(const GCConfig *config) {
     heap->gray_count = 0;
     heap->gray_capacity = 0;
 
-    /* Card table for write barriers */
-    memset(heap->card_table, 0, sizeof(heap->card_table));
-
     heap->generational_enabled = true;
     heap->young_count = 0;
     heap->old_count = 0;
@@ -724,13 +721,6 @@ bool gc_mark_increment(Heap *heap, size_t max_objects) {
     return heap->gray_count == 0;
 }
 
-/* Card Table Operations */
-
-static void gc_clear_card_table(Heap *heap) {
-    if (!heap) return;
-    memset(heap->card_table, 0, sizeof(heap->card_table));
-}
-
 /* Generational GC */
 
 static void remember_set_add(Heap *heap, Value *value) {
@@ -767,9 +757,6 @@ static void remember_set_clear(Heap *heap) {
         }
     }
     heap->remember_count = 0;
-
-    /* Clear card table as well */
-    gc_clear_card_table(heap);
 }
 
 void gc_write_barrier(Heap *heap, Value *container, Value *value) {
@@ -778,10 +765,6 @@ void gc_write_barrier(Heap *heap, Value *container, Value *value) {
 
     if (value_is_old_gen(container) && !value_is_old_gen(value)) {
         remember_set_add(heap, container);
-
-        /* Also mark the card as dirty for faster scanning */
-        size_t card_idx = ((uintptr_t)container / GC_CARD_SIZE) % GC_CARD_TABLE_SIZE;
-        heap->card_table[card_idx] = 1;
     }
 }
 

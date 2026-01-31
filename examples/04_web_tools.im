@@ -1,51 +1,101 @@
-// Web Tools - HTTP requests with error handling
+// Data Processing Tools - Working with JSON and local data
 // Demonstrates typed functions with Result types
 
-struct HttpResponse {
-    status: int,
-    body: string
+struct DataRecord {
+    id: int,
+    name: string,
+    value: float
 }
 
-@tool(description: "Fetch a URL and return the content")
-fn fetch_url(url: string) -> Result<string, string> {
-    return http.get(url)
+@tool(description: "Parse JSON data and extract a field")
+fn extract_field(json_str: string, field: string) -> Result<any, string> {
+    let parsed = json.parse(json_str)
+    match parsed {
+        ok(data) => {
+            if data[field] != nil {
+                return ok(data[field])
+            }
+            return err("Field not found: " + field)
+        }
+        err(e) => return err("JSON parse error: " + e)
+    }
 }
 
-@tool(description: "Check if a URL is reachable")
-fn check_url(url: string) -> bool {
-    let result = http.get(url)
+@tool(description: "Validate JSON structure")
+fn validate_json(json_str: string) -> bool {
+    let result = json.parse(json_str)
     return is_ok(result)
 }
 
-@tool(description: "Parse JSON response from URL")
-fn fetch_json(url: string) -> Result<map<string, any>, string> {
-    let response = http.get(url)
-    match response {
-        ok(body) => return json.parse(body)
-        err(e) => return err("HTTP error: " + e)
+@tool(description: "Convert data record to JSON")
+fn record_to_json(record: DataRecord) -> string {
+    let data: map<string, any> = {
+        "id": record.id,
+        "name": record.name,
+        "value": record.value
+    }
+    return json.encode(data)
+}
+
+@tool(description: "Create a data record from JSON")
+fn json_to_record(json_str: string) -> Result<DataRecord, string> {
+    let parsed = json.parse(json_str)
+    match parsed {
+        ok(data) => {
+            return ok(DataRecord {
+                id: data["id"],
+                name: data["name"],
+                value: data["value"]
+            })
+        }
+        err(e) => return err("Failed to parse record: " + e)
     }
 }
 
 // Demo
-print("=== Web Tools Demo ===")
+print("=== Data Processing Tools Demo ===")
 print("")
 
-print("Fetching httpbin.org/uuid...")
-let result: Result<string, string> = http.get("https://httpbin.org/uuid")
+// Test JSON validation
+let valid_json = "{\"name\": \"test\", \"value\": 42}"
+let invalid_json = "{name: invalid}"
 
-match result {
-    ok(body) => {
-        print("Success!")
-        let parse_result = json.parse(body)
-        match parse_result {
-            ok(data) => print("UUID: " + data["uuid"])
-            err(e) => print("Parse error: " + e)
-        }
-    }
-    err(e) => print("Failed to fetch: " + e)
+print("Validating JSON strings...")
+print("  '" + valid_json + "' -> " + str(validate_json(valid_json)))
+print("  '" + invalid_json + "' -> " + str(validate_json(invalid_json)))
+
+print("")
+
+// Test field extraction
+print("Extracting fields from JSON...")
+let data_str = "{\"id\": 1, \"name\": \"Alice\", \"score\": 95.5}"
+let name_result = extract_field(data_str, "name")
+match name_result {
+    ok(value) => print("  name: " + str(value))
+    err(e) => print("  Error: " + e)
+}
+
+let missing_result = extract_field(data_str, "missing")
+match missing_result {
+    ok(value) => print("  missing: " + str(value))
+    err(e) => print("  Error: " + e)
 }
 
 print("")
-print("Checking URL reachability...")
-let reachable: bool = check_url("https://httpbin.org/get")
-print("httpbin.org reachable: " + str(reachable))
+
+// Test record conversion
+print("Working with DataRecord structs...")
+let record = DataRecord {
+    id: 42,
+    name: "Widget",
+    value: 19.99
+}
+
+let json_output = record_to_json(record)
+print("  Record to JSON: " + json_output)
+
+let record_result = json_to_record(json_output)
+match record_result {
+    ok(r) => print("  JSON to Record: id=" + str(r.id) + ", name=" + r.name + ", value=" + str(r.value))
+    err(e) => print("  Error: " + e)
+}

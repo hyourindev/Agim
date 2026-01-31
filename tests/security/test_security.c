@@ -25,7 +25,6 @@
 #include <unistd.h>
 
 #include "vm/sandbox.h"
-#include "net/http.h"
 #include "vm/vm.h"
 #include "vm/value.h"
 #include "lang/agim.h"
@@ -153,115 +152,6 @@ TEST(test_sandbox_cwd) {
     sandbox_free(sb);
 }
 
-/* HTTP URL Validation Tests */
-
-TEST(test_http_url_valid) {
-    /* Valid URLs */
-    ASSERT(http_url_valid("http://example.com", false));
-    ASSERT(http_url_valid("https://example.com", false));
-    ASSERT(http_url_valid("https://example.com/path", false));
-    ASSERT(http_url_valid("https://example.com:8080/path", false));
-
-    /* Invalid URLs */
-    ASSERT(!http_url_valid("file:///etc/passwd", false));
-    ASSERT(!http_url_valid("ftp://example.com", false));
-    ASSERT(!http_url_valid("", false));
-    ASSERT(!http_url_valid(NULL, false));
-
-    /* Private IPs blocked by default */
-    ASSERT(!http_url_valid("http://localhost/", false));
-    ASSERT(!http_url_valid("http://127.0.0.1/", false));
-    ASSERT(!http_url_valid("http://10.0.0.1/", false));
-    ASSERT(!http_url_valid("http://192.168.1.1/", false));
-    ASSERT(!http_url_valid("http://172.16.0.1/", false));
-
-    /* Private IPs allowed when flag set */
-    ASSERT(http_url_valid("http://localhost/", true));
-    ASSERT(http_url_valid("http://127.0.0.1/", true));
-    ASSERT(http_url_valid("http://10.0.0.1/", true));
-}
-
-TEST(test_http_ssrf_bypass_prevention) {
-    /*
-     * Test that various IP encoding tricks used in SSRF attacks are blocked.
-     * These are common bypass techniques that attempt to reach internal services.
-     */
-
-    /* Octal encoding: 0177.0.0.1 = 127.0.0.1 */
-    ASSERT(!http_url_valid("http://0177.0.0.1/", false));
-    ASSERT(!http_url_valid("http://0177.0.0.01/", false));
-
-    /* Decimal encoding: 2130706433 = 127.0.0.1 */
-    ASSERT(!http_url_valid("http://2130706433/", false));
-
-    /* Hex encoding: 0x7f.0.0.1 = 127.0.0.1 */
-    ASSERT(!http_url_valid("http://0x7f.0.0.1/", false));
-    ASSERT(!http_url_valid("http://0x7f.0x0.0x0.0x1/", false));
-
-    /* Mixed encoding */
-    ASSERT(!http_url_valid("http://0x7f.0.0.01/", false));
-
-    /* IPv6 loopback */
-    ASSERT(!http_url_valid("http://::1/", false));
-    ASSERT(!http_url_valid("http://0:0:0:0:0:0:0:1/", false));
-
-    /* IPv6-mapped IPv4 addresses */
-    ASSERT(!http_url_valid("http://::ffff:127.0.0.1/", false));
-    ASSERT(!http_url_valid("http://::ffff:10.0.0.1/", false));
-    ASSERT(!http_url_valid("http://0:0:0:0:0:ffff:127.0.0.1/", false));
-
-    /* Bracketed IPv6 */
-    ASSERT(!http_url_valid("http://[::1]/", false));
-
-    /* Localhost variants */
-    ASSERT(!http_url_valid("http://LOCALHOST/", false));
-    ASSERT(!http_url_valid("http://LocalHost/", false));
-    ASSERT(!http_url_valid("http://localhost.localdomain/", false));
-
-    /* 10.x.x.x range (private) with encoding */
-    ASSERT(!http_url_valid("http://012.0.0.1/", false));  /* Octal 10 = 012 */
-    ASSERT(!http_url_valid("http://167772161/", false));  /* Decimal 10.0.0.1 */
-
-    /* 192.168.x.x range with encoding */
-    ASSERT(!http_url_valid("http://0300.0250.0.1/", false));  /* Octal 192.168.0.1 */
-    ASSERT(!http_url_valid("http://3232235521/", false));     /* Decimal 192.168.0.1 */
-
-    /* 172.16-31.x.x range with encoding */
-    ASSERT(!http_url_valid("http://0254.020.0.1/", false));  /* Octal 172.16.0.1 */
-
-    /* 0.0.0.0 */
-    ASSERT(!http_url_valid("http://0.0.0.0/", false));
-    ASSERT(!http_url_valid("http://0/", false));
-
-    /* Broadcast */
-    ASSERT(!http_url_valid("http://255.255.255.255/", false));
-    ASSERT(!http_url_valid("http://4294967295/", false));  /* Decimal broadcast */
-
-    /* Valid public IPs should still work */
-    ASSERT(http_url_valid("http://8.8.8.8/", false));
-    ASSERT(http_url_valid("http://1.1.1.1/", false));
-    ASSERT(http_url_valid("http://208.67.222.222/", false));
-}
-
-TEST(test_http_url_encode) {
-    char *encoded;
-
-    encoded = http_url_encode("hello world");
-    ASSERT(encoded != NULL);
-    ASSERT(strcmp(encoded, "hello%20world") == 0);
-    free(encoded);
-
-    encoded = http_url_encode("a=b&c=d");
-    ASSERT(encoded != NULL);
-    ASSERT(strcmp(encoded, "a%3Db%26c%3Dd") == 0);
-    free(encoded);
-
-    encoded = http_url_encode("safe-string_123.txt");
-    ASSERT(encoded != NULL);
-    ASSERT(strcmp(encoded, "safe-string_123.txt") == 0);
-    free(encoded);
-}
-
 /* VM Bounds Checking Tests */
 
 TEST(test_bounds_negative_index) {
@@ -319,41 +209,6 @@ TEST(test_recursion_limit) {
     ASSERT(result != AGIM_OK);
 
     free(source);
-}
-
-/* HTTP Injection Prevention Tests */
-
-TEST(test_http_no_command_injection) {
-    /*
-     * Test that URLs with shell metacharacters don't cause command injection.
-     * The old implementation used system("curl 'URL' > ...") which was vulnerable.
-     * The new implementation uses libcurl directly.
-     */
-
-    /* This URL contains shell injection attempt */
-    const char *malicious_url = "http://example.com'; rm -rf /tmp/test_marker; echo '";
-
-    /* Create a marker file */
-    FILE *f = fopen("/tmp/test_marker", "w");
-    if (f) {
-        fprintf(f, "test");
-        fclose(f);
-    }
-
-    /* Try to "fetch" the malicious URL */
-    /* The HTTP client should either reject it or handle it safely */
-    HttpResponse *resp = http_get(malicious_url);
-
-    /* The marker file should still exist (injection didn't work) */
-    f = fopen("/tmp/test_marker", "r");
-    bool marker_exists = (f != NULL);
-    if (f) fclose(f);
-
-    /* Clean up */
-    unlink("/tmp/test_marker");
-    if (resp) http_response_free(resp);
-
-    ASSERT(marker_exists);
 }
 
 /* Path Traversal in VM File Operations Tests */
@@ -838,35 +693,6 @@ TEST(test_timer_next_deadline_optimization) {
     timer_cancel(wheel, t1);
     timer_cancel(wheel, t2);
     timer_wheel_free(wheel);
-}
-
-/* DNS Rebinding Protection Tests */
-
-TEST(test_dns_rebinding_url_validation) {
-    /*
-     * Test that URL validation checks for private IPs in hostnames.
-     * The actual DNS rebinding protection is done at request time by
-     * checking the resolved IP address after DNS resolution.
-     * This test verifies the pre-resolution hostname checks.
-     */
-
-    /* Public hostnames should be allowed */
-    ASSERT(http_url_valid("http://example.com/", false));
-    ASSERT(http_url_valid("https://www.google.com/", false));
-
-    /* Localhost variants should be blocked */
-    ASSERT(!http_url_valid("http://localhost/", false));
-    ASSERT(!http_url_valid("http://localhost.localdomain/", false));
-
-    /* Private IP ranges in URL should be blocked */
-    ASSERT(!http_url_valid("http://10.0.0.1/", false));
-    ASSERT(!http_url_valid("http://172.16.0.1/", false));
-    ASSERT(!http_url_valid("http://192.168.1.1/", false));
-    ASSERT(!http_url_valid("http://127.0.0.1/", false));
-
-    /* With allow_private=true, private IPs are permitted */
-    ASSERT(http_url_valid("http://10.0.0.1/", true));
-    ASSERT(http_url_valid("http://localhost/", true));
 }
 
 /* Pool Allocator Lifecycle Tests */
@@ -1364,6 +1190,10 @@ TEST(test_string_intern_no_leak) {
 
 /* Error Code System Tests */
 
+/* WebSocket Fragment Limit Tests */
+
+/* Error Code System Tests */
+
 TEST(test_error_code_system) {
     /*
      * Test the thread-local error code system for allocation failures.
@@ -1400,20 +1230,12 @@ TEST(test_error_code_system) {
 int main(void) {
     printf("Running security tests...\n\n");
 
-    /* Initialize HTTP client */
-    http_init();
-
     printf("Sandbox tests:\n");
     RUN_TEST(test_sandbox_basic);
     RUN_TEST(test_sandbox_allow_read);
     RUN_TEST(test_sandbox_path_traversal);
     RUN_TEST(test_sandbox_permissive);
     RUN_TEST(test_sandbox_cwd);
-
-    printf("\nHTTP validation tests:\n");
-    RUN_TEST(test_http_url_valid);
-    RUN_TEST(test_http_url_encode);
-    RUN_TEST(test_http_ssrf_bypass_prevention);
 
     printf("\nVM bounds checking tests:\n");
     RUN_TEST(test_bounds_negative_index);
@@ -1422,9 +1244,6 @@ int main(void) {
 
     printf("\nParser recursion limit tests:\n");
     RUN_TEST(test_recursion_limit);
-
-    printf("\nCommand injection prevention tests:\n");
-    RUN_TEST(test_http_no_command_injection);
 
     printf("\nPath traversal prevention tests:\n");
     RUN_TEST(test_file_read_traversal);
@@ -1466,9 +1285,6 @@ int main(void) {
     RUN_TEST(test_timer_cancel_correctness);
     RUN_TEST(test_timer_next_deadline_optimization);
 
-    printf("\nDNS rebinding protection tests:\n");
-    RUN_TEST(test_dns_rebinding_url_validation);
-
     printf("\nPool allocator lifecycle tests:\n");
     RUN_TEST(test_pool_init_free);
     RUN_TEST(test_pool_alloc_dealloc);
@@ -1500,9 +1316,6 @@ int main(void) {
 
     printf("\nError code system tests:\n");
     RUN_TEST(test_error_code_system);
-
-    /* Cleanup */
-    http_cleanup();
 
     printf("\n%d/%d tests passed\n", tests_passed, tests_run);
     return tests_passed == tests_run ? 0 : 1;

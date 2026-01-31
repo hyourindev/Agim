@@ -36,10 +36,6 @@ typedef enum GCPhase {
 /* Incremental marking constants */
 #define GC_MARK_WORK_PACKET_SIZE 256
 
-/* Card table for generational GC write barriers */
-#define GC_CARD_SIZE 512
-#define GC_CARD_TABLE_SIZE 4096
-
 /* Heap (Per-Block) */
 
 typedef struct Heap {
@@ -60,9 +56,6 @@ typedef struct Heap {
     Value **gray_list;
     size_t gray_count;
     size_t gray_capacity;
-
-    /* Card table for efficient write barrier */
-    uint8_t card_table[GC_CARD_TABLE_SIZE];
 
     /* Generational GC state */
     bool generational_enabled;

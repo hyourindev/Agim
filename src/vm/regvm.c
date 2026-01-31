@@ -608,8 +608,10 @@ RegVMResult regvm_run(RegVM *vm, RegChunk *chunk) {
         new_frame->base = 0;
         new_frame->result_reg = result_reg;
 
-        /* Initialize new frame registers to nil */
-        for (int j = 0; j < REG_MAX_REGISTERS; j++) {
+        /* Initialize only registers that will be used (lazy initialization).
+         * This reduces per-call overhead from 2KB to typically <256 bytes. */
+        uint8_t max_reg = target_chunk->num_regs > 0 ? target_chunk->num_regs : 16;
+        for (int j = 0; j <= max_reg && j < REG_MAX_REGISTERS; j++) {
             new_frame->regs[j] = NANBOX_NIL;
         }
 

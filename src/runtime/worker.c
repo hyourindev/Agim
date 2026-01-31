@@ -319,7 +319,9 @@ Block *worker_steal(Worker *worker) {
 static bool all_work_done(Scheduler *sched) {
     size_t spawned = atomic_load(&sched->total_spawned);
     size_t terminated = atomic_load(&sched->total_terminated);
-    return spawned > 0 && terminated >= spawned;
+    size_t in_flight = atomic_load(&sched->blocks_in_flight);
+    /* Only terminate when all blocks are done AND none are in-flight */
+    return spawned > 0 && terminated >= spawned && in_flight == 0;
 }
 
 static void *worker_loop(void *arg) {
@@ -349,6 +351,9 @@ static void *worker_loop(void *arg) {
         if (block) {
             idle_spins = 0;
             backoff_us = 10;
+
+            /* Track block as in-flight to prevent premature termination */
+            atomic_fetch_add(&worker->scheduler->blocks_in_flight, 1);
 
             VM *vm = block->vm;
             vm->scheduler = worker->scheduler;
@@ -382,6 +387,9 @@ static void *worker_loop(void *arg) {
                 atomic_fetch_add(&worker->scheduler->total_terminated, 1);
                 break;
             }
+
+            /* Mark block as no longer in-flight */
+            atomic_fetch_sub(&worker->scheduler->blocks_in_flight, 1);
         } else {
             idle_spins++;
 

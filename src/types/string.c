@@ -47,9 +47,19 @@ Value *value_string(const char *str) {
 }
 
 /* String Interning Cache
- * 4-way set-associative cache for commonly used strings to reduce allocation
- * overhead. Thread-safe using atomic operations with CAS pattern.
- * Uses 1024 sets x 4 ways = 4096 total entries for better hit rate.
+ *
+ * 4-way set-associative cache (4096 entries total) for common strings.
+ * Thread-safe using atomic operations with CAS pattern.
+ *
+ * Memory behavior:
+ * - Entries are evicted when new strings hash to the same slot
+ * - Max overhead: ~256KB (4096 entries * ~64 bytes avg string)
+ * - This overhead is acceptable for typical usage patterns per CLAUDE.md
+ *
+ * Trade-offs:
+ * - Larger cache = better hit rate for repeated strings
+ * - No explicit cleanup mechanism - relies on natural eviction
+ * - Evicted entries may still be in use (refcounted)
  */
 
 #define INTERN_CACHE_SETS 1024

@@ -11,6 +11,7 @@
 #ifndef AGIM_RUNTIME_BLOCK_H
 #define AGIM_RUNTIME_BLOCK_H
 
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdatomic.h>
 #include <stddef.h>
@@ -51,7 +52,7 @@ typedef struct BlockLimits {
 typedef struct BlockCounters {
     size_t reductions;
     size_t messages_sent;
-    size_t messages_received;
+    _Atomic(size_t) messages_received;  /* Atomic: updated by multiple sender threads */
     size_t gc_collections;
     size_t gc_bytes_collected;
 } BlockCounters;
@@ -104,6 +105,8 @@ typedef struct Block {
     Pid *monitored_by;
     uint32_t monitored_by_count;
     uint32_t monitored_by_capacity;
+
+    pthread_mutex_t link_mutex;  /* Protects links, monitors, monitored_by arrays */
 
     struct Block *next;
     struct Block *prev;

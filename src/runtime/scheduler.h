@@ -62,6 +62,7 @@ typedef struct RunQueue {
     Block *head;
     Block *tail;
     size_t count;
+    pthread_mutex_t lock;  /* Protects run queue in multi-threaded mode */
 } RunQueue;
 
 /* Scheduler */
@@ -93,6 +94,7 @@ typedef struct Scheduler {
     _Atomic(size_t) total_terminated;
     _Atomic(size_t) total_reductions;
     _Atomic(size_t) context_switches;
+    _Atomic(size_t) blocks_in_flight;  /* Track blocks currently being executed */
 
     uint64_t start_time_ms;
 } Scheduler;

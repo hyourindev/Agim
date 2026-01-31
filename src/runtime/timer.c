@@ -112,11 +112,6 @@ TimerWheel *timer_wheel_new(const TimerConfig *config) {
         return NULL;
     }
 
-    /* Initialize per-bucket locks for parallel timer operations */
-    for (size_t i = 0; i < wheel->wheel_size; i++) {
-        pthread_mutex_init(&wheel->buckets[i].lock, NULL);
-    }
-
     pthread_mutex_init(&wheel->lock, NULL);
 
     return wheel;
@@ -128,15 +123,12 @@ void timer_wheel_free(TimerWheel *wheel) {
     pthread_mutex_lock(&wheel->lock);
 
     for (size_t i = 0; i < wheel->wheel_size; i++) {
-        pthread_mutex_lock(&wheel->buckets[i].lock);
         TimerEntry *entry = wheel->buckets[i].head;
         while (entry) {
             TimerEntry *next = entry->next;
             free(entry);
             entry = next;
         }
-        pthread_mutex_unlock(&wheel->buckets[i].lock);
-        pthread_mutex_destroy(&wheel->buckets[i].lock);
     }
 
     TimerEntry *entry = wheel->free_list;

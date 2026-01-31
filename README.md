@@ -10,7 +10,7 @@ Agim is an Erlang-inspired language and runtime designed specifically for AI age
 - **Message passing** - Isolated agents communicate via async mailboxes
 - **Fault tolerance** - "Let it crash" philosophy with supervisor trees
 - **Capability-based security** - Fine-grained permission control for untrusted code
-- **Built-in networking** - HTTP, WebSocket, TLS, TCP, SSE out of the box
+- **File I/O** - Read, write, and manage files with sandboxed access
 - **LLM integration** - First-class tool calling and inference callbacks
 
 ## Quick Start
@@ -309,9 +309,9 @@ Tools are functions exposed to AI agents for tool calling:
 
 ```
 // Using decorator syntax
-@tool(description: "Search the web for information")
-fn search(query: string) -> Result<[string], string> {
-    return http_get("https://api.search.com?q=" + query)
+@tool(description: "Read a file and return its contents")
+fn read_file(path: string) -> Result<string, string> {
+    return fs.read(path)
 }
 
 // Using tool keyword
@@ -557,15 +557,6 @@ agim/
 │   │   ├── checkpoint.c # Process state checkpointing
 │   │   └── serialize.c  # Value serialization
 │   │
-│   ├── net/             # Networking Stack
-│   │   ├── tcp.c        # TCP client/server
-│   │   ├── tls.c        # TLS/SSL via BearSSL
-│   │   ├── http.c       # HTTP client
-│   │   ├── http_parser.c# HTTP protocol parser
-│   │   ├── websocket.c  # WebSocket client (RFC 6455)
-│   │   ├── sse.c        # Server-Sent Events
-│   │   └── url.c        # URL parsing
-│   │
 │   ├── dist/            # Distribution
 │   │   └── node.c       # Distributed node communication
 │   │
@@ -588,8 +579,7 @@ agim/
 │
 ├── tests/               # Test suite
 ├── bench/               # Benchmarks
-├── examples/            # Example programs (55+)
-└── vendor/              # Dependencies (BearSSL)
+└── examples/            # Example programs
 ```
 
 ---
@@ -603,7 +593,6 @@ Agim is designed to run **untrusted agent code** safely. Every process runs in a
 | `CAP_SPAWN` | Create new processes | Denied |
 | `CAP_SEND` | Send messages to other processes | Denied |
 | `CAP_RECEIVE` | Receive messages | Denied |
-| `CAP_HTTP` | Make HTTP/HTTPS requests | Denied |
 | `CAP_FILE_READ` | Read files from disk | Denied |
 | `CAP_FILE_WRITE` | Write files to disk | Denied |
 | `CAP_SHELL` | Execute shell commands | Denied |
@@ -611,7 +600,6 @@ Agim is designed to run **untrusted agent code** safely. Every process runs in a
 | `CAP_ENV` | Access environment variables | Denied |
 | `CAP_MEMORY` | Use persistent memory store | Denied |
 | `CAP_INFER` | Call LLM inference | Denied |
-| `CAP_WEBSOCKET` | WebSocket connections | Denied |
 
 ```c
 // Capability enforcement in VM
@@ -667,9 +655,6 @@ if (!block_has_cap(vm->block, CAP_SHELL)) {
 |----------|-------------|
 | `read_file(path)` | Read file contents |
 | `write_file(path, data)` | Write to file |
-| `http_get(url)` | HTTP GET request |
-| `http_post(url, body)` | HTTP POST request |
-| `ws_connect(url)` | WebSocket connection |
 | `shell(cmd)` | Execute shell command |
 
 ### Concurrency
@@ -701,10 +686,10 @@ The `examples/` directory contains 55+ programs:
 |-------|----------|
 | 01-10 | Basics: Hello World, Fibonacci, FizzBuzz, Primes, Arrays |
 | 11-20 | Data Structures: Stack, Queue, File I/O, JSON |
-| 21-25 | Networking: HTTP APIs, Shell Commands |
+| 21-25 | Tools: Shell Commands, Data Processing |
 | 26-35 | Agent Utilities: Parsing, Time, Base64, Validation |
 | 36-45 | Patterns: State Machine, Cache, Pipeline, Rate Limiter |
-| 46-55 | Advanced: WebSocket, SSE, Process Exec, LLM Client |
+| 46-55 | Advanced: Process Exec, LLM Client, Concurrency |
 
 ---
 

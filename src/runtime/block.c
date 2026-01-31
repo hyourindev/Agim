@@ -85,7 +85,7 @@ bool block_send(Block *target, Pid sender, Value *value) {
         return false;
     }
 
-    target->counters.messages_received++;
+    atomic_fetch_add(&target->counters.messages_received, 1);
 
     return true;
 }
@@ -159,6 +159,8 @@ Block *block_new(Pid pid, const char *name, const BlockLimits *limits) {
     block->monitored_by_count = 0;
     block->monitored_by_capacity = 0;
 
+    pthread_mutex_init(&block->link_mutex, NULL);
+
     block->next = NULL;
     block->prev = NULL;
 
@@ -190,6 +192,8 @@ void block_free(Block *block) {
     }
 
     mailbox_free(&block->mailbox);
+
+    pthread_mutex_destroy(&block->link_mutex);
 
     free(block->links);
 
@@ -339,8 +343,11 @@ bool block_check_cap(Block *block, Capability cap) {
 bool block_link(Block *block, Pid other) {
     if (!block || other == PID_INVALID) return false;
 
+    pthread_mutex_lock(&block->link_mutex);
+
     for (size_t i = 0; i < block->link_count; i++) {
         if (block->links[i] == other) {
+            pthread_mutex_unlock(&block->link_mutex);
             return true;
         }
     }
@@ -348,24 +355,33 @@ bool block_link(Block *block, Pid other) {
     if (block->link_count >= block->link_capacity) {
         uint32_t new_cap = block->link_capacity == 0 ? 4 : block->link_capacity * 2;
         Pid *new_links = realloc(block->links, sizeof(Pid) * new_cap);
-        if (!new_links) return false;
+        if (!new_links) {
+            pthread_mutex_unlock(&block->link_mutex);
+            return false;
+        }
         block->links = new_links;
         block->link_capacity = new_cap;
     }
 
     block->links[block->link_count++] = other;
+    pthread_mutex_unlock(&block->link_mutex);
     return true;
 }
 
 void block_unlink(Block *block, Pid other) {
     if (!block) return;
 
+    pthread_mutex_lock(&block->link_mutex);
+
     for (size_t i = 0; i < block->link_count; i++) {
         if (block->links[i] == other) {
             block->links[i] = block->links[--block->link_count];
+            pthread_mutex_unlock(&block->link_mutex);
             return;
         }
     }
+
+    pthread_mutex_unlock(&block->link_mutex);
 }
 
 const Pid *block_get_links(const Block *block, size_t *count) {
@@ -373,6 +389,8 @@ const Pid *block_get_links(const Block *block, size_t *count) {
         if (count) *count = 0;
         return NULL;
     }
+    /* Note: Caller must ensure block is not concurrently modified,
+     * or use block_get_links_copy() for a safe snapshot */
     if (count) *count = block->link_count;
     return block->links;
 }
@@ -382,8 +400,11 @@ const Pid *block_get_links(const Block *block, size_t *count) {
 bool block_monitor(Block *block, Pid target) {
     if (!block || target == PID_INVALID) return false;
 
+    pthread_mutex_lock(&block->link_mutex);
+
     for (size_t i = 0; i < block->monitor_count; i++) {
         if (block->monitors[i] == target) {
+            pthread_mutex_unlock(&block->link_mutex);
             return true;
         }
     }
@@ -391,31 +412,43 @@ bool block_monitor(Block *block, Pid target) {
     if (block->monitor_count >= block->monitor_capacity) {
         uint32_t new_cap = block->monitor_capacity == 0 ? 4 : block->monitor_capacity * 2;
         Pid *new_monitors = realloc(block->monitors, sizeof(Pid) * new_cap);
-        if (!new_monitors) return false;
+        if (!new_monitors) {
+            pthread_mutex_unlock(&block->link_mutex);
+            return false;
+        }
         block->monitors = new_monitors;
         block->monitor_capacity = new_cap;
     }
 
     block->monitors[block->monitor_count++] = target;
+    pthread_mutex_unlock(&block->link_mutex);
     return true;
 }
 
 void block_demonitor(Block *block, Pid target) {
     if (!block) return;
 
+    pthread_mutex_lock(&block->link_mutex);
+
     for (size_t i = 0; i < block->monitor_count; i++) {
         if (block->monitors[i] == target) {
             block->monitors[i] = block->monitors[--block->monitor_count];
+            pthread_mutex_unlock(&block->link_mutex);
             return;
         }
     }
+
+    pthread_mutex_unlock(&block->link_mutex);
 }
 
 bool block_add_monitored_by(Block *block, Pid monitor_pid) {
     if (!block || monitor_pid == PID_INVALID) return false;
 
+    pthread_mutex_lock(&block->link_mutex);
+
     for (size_t i = 0; i < block->monitored_by_count; i++) {
         if (block->monitored_by[i] == monitor_pid) {
+            pthread_mutex_unlock(&block->link_mutex);
             return true;
         }
     }
@@ -423,24 +456,33 @@ bool block_add_monitored_by(Block *block, Pid monitor_pid) {
     if (block->monitored_by_count >= block->monitored_by_capacity) {
         uint32_t new_cap = block->monitored_by_capacity == 0 ? 4 : block->monitored_by_capacity * 2;
         Pid *new_monitored = realloc(block->monitored_by, sizeof(Pid) * new_cap);
-        if (!new_monitored) return false;
+        if (!new_monitored) {
+            pthread_mutex_unlock(&block->link_mutex);
+            return false;
+        }
         block->monitored_by = new_monitored;
         block->monitored_by_capacity = new_cap;
     }
 
     block->monitored_by[block->monitored_by_count++] = monitor_pid;
+    pthread_mutex_unlock(&block->link_mutex);
     return true;
 }
 
 void block_remove_monitored_by(Block *block, Pid monitor_pid) {
     if (!block) return;
 
+    pthread_mutex_lock(&block->link_mutex);
+
     for (size_t i = 0; i < block->monitored_by_count; i++) {
         if (block->monitored_by[i] == monitor_pid) {
             block->monitored_by[i] = block->monitored_by[--block->monitored_by_count];
+            pthread_mutex_unlock(&block->link_mutex);
             return;
         }
     }
+
+    pthread_mutex_unlock(&block->link_mutex);
 }
 
 const Pid *block_get_monitors(const Block *block, size_t *count) {
@@ -448,6 +490,7 @@ const Pid *block_get_monitors(const Block *block, size_t *count) {
         if (count) *count = 0;
         return NULL;
     }
+    /* Note: Caller must ensure block is not concurrently modified */
     if (count) *count = block->monitor_count;
     return block->monitors;
 }

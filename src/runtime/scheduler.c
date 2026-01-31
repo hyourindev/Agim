@@ -100,7 +100,8 @@ static bool registry_grow_shard(RegistryShard *shard) {
     return true;
 }
 
-static bool registry_insert(BlockRegistry *reg, Block *block) {
+/* Internal insert without updating total_count (caller handles it) */
+static bool registry_insert_internal(BlockRegistry *reg, Block *block) {
     Pid pid = block->pid;
     size_t shard_idx = registry_shard_index(pid);
     RegistryShard *shard = &reg->shards[shard_idx];
@@ -128,6 +129,14 @@ static bool registry_insert(BlockRegistry *reg, Block *block) {
 
     pthread_mutex_unlock(&shard->lock);
 
+    return true;
+}
+
+__attribute__((unused))
+static bool registry_insert(BlockRegistry *reg, Block *block) {
+    if (!registry_insert_internal(reg, block)) {
+        return false;
+    }
     atomic_fetch_add(&reg->total_count, 1);
     return true;
 }
@@ -207,6 +216,7 @@ static void runqueue_init(RunQueue *queue) {
     queue->head = NULL;
     queue->tail = NULL;
     queue->count = 0;
+    pthread_mutex_init(&queue->lock, NULL);
 }
 
 static void runqueue_push(RunQueue *queue, Block *block) {
@@ -240,7 +250,7 @@ static Block *runqueue_pop(RunQueue *queue) {
     return block;
 }
 
-static void runqueue_remove(RunQueue *queue, Block *block) {
+static void runqueue_remove_internal(RunQueue *queue, Block *block) {
     if (block->prev) {
         block->prev->next = block->next;
     } else {
@@ -256,6 +266,22 @@ static void runqueue_remove(RunQueue *queue, Block *block) {
     block->next = NULL;
     block->prev = NULL;
     queue->count--;
+}
+
+__attribute__((unused))
+static void runqueue_remove(RunQueue *queue, Block *block) {
+    runqueue_remove_internal(queue, block);
+}
+
+/* Thread-safe version for multi-threaded scheduler */
+static void scheduler_runqueue_remove(Scheduler *scheduler, Block *block) {
+    if (scheduler->worker_count > 0) {
+        pthread_mutex_lock(&scheduler->run_queue.lock);
+        runqueue_remove_internal(&scheduler->run_queue, block);
+        pthread_mutex_unlock(&scheduler->run_queue.lock);
+    } else {
+        runqueue_remove_internal(&scheduler->run_queue, block);
+    }
 }
 
 /* Scheduler Lifecycle */
@@ -316,6 +342,7 @@ Scheduler *scheduler_new(const SchedulerConfig *config) {
     atomic_store(&scheduler->total_terminated, 0);
     atomic_store(&scheduler->total_reductions, 0);
     atomic_store(&scheduler->context_switches, 0);
+    atomic_store(&scheduler->blocks_in_flight, 0);
 
     scheduler->start_time_ms = timer_current_time_ms();
 
@@ -341,6 +368,8 @@ void scheduler_free(Scheduler *scheduler) {
 
     registry_free(&scheduler->registry);
 
+    pthread_mutex_destroy(&scheduler->run_queue.lock);
+
     if (scheduler->groups) {
         procgroup_registry_free(scheduler->groups);
     }
@@ -357,12 +386,24 @@ void scheduler_free(Scheduler *scheduler) {
 /* Block Management */
 
 static bool register_block(Scheduler *scheduler, Block *block) {
-    size_t current = atomic_load(&scheduler->registry.total_count);
-    if (current >= scheduler->config.max_blocks) {
-        return false;
-    }
+    size_t max = scheduler->config.max_blocks;
 
-    return registry_insert(&scheduler->registry, block);
+    /* Use CAS loop to atomically check and increment count, avoiding TOCTOU race */
+    size_t current = atomic_load(&scheduler->registry.total_count);
+    while (current < max) {
+        if (atomic_compare_exchange_weak(&scheduler->registry.total_count,
+                                          &current, current + 1)) {
+            /* Successfully reserved a slot, now insert */
+            if (!registry_insert_internal(&scheduler->registry, block)) {
+                /* Insert failed, revert the count */
+                atomic_fetch_sub(&scheduler->registry.total_count, 1);
+                return false;
+            }
+            return true;
+        }
+        /* CAS failed, current was updated - retry */
+    }
+    return false;  /* Max blocks reached */
 }
 
 bool scheduler_register_block(Scheduler *scheduler, Block *block) {
@@ -429,7 +470,7 @@ void scheduler_kill(Scheduler *scheduler, Pid pid) {
         block_crash(block, "killed");
 
         if (atomic_load(&block->state) == BLOCK_RUNNABLE) {
-            runqueue_remove(&scheduler->run_queue, block);
+            scheduler_runqueue_remove(scheduler, block);
         }
 
         scheduler->total_terminated++;
@@ -489,7 +530,7 @@ void scheduler_propagate_exit(Scheduler *scheduler, Block *exited_block) {
             block_crash(linked_block, reason);
 
             if (atomic_load(&linked_block->state) == BLOCK_RUNNABLE) {
-                runqueue_remove(&scheduler->run_queue, linked_block);
+                scheduler_runqueue_remove(scheduler, linked_block);
             }
 
             atomic_fetch_add(&scheduler->total_terminated, 1);
@@ -510,12 +551,25 @@ void scheduler_enqueue(Scheduler *scheduler, Block *block) {
     if (!scheduler || !block) return;
 
     if (atomic_load(&block->state) == BLOCK_RUNNABLE) {
-        runqueue_push(&scheduler->run_queue, block);
+        if (scheduler->worker_count > 0) {
+            pthread_mutex_lock(&scheduler->run_queue.lock);
+            runqueue_push(&scheduler->run_queue, block);
+            pthread_mutex_unlock(&scheduler->run_queue.lock);
+        } else {
+            runqueue_push(&scheduler->run_queue, block);
+        }
     }
 }
 
 Block *scheduler_dequeue(Scheduler *scheduler) {
     if (!scheduler) return NULL;
+
+    if (scheduler->worker_count > 0) {
+        pthread_mutex_lock(&scheduler->run_queue.lock);
+        Block *block = runqueue_pop(&scheduler->run_queue);
+        pthread_mutex_unlock(&scheduler->run_queue.lock);
+        return block;
+    }
     return runqueue_pop(&scheduler->run_queue);
 }
 
@@ -608,7 +662,7 @@ bool scheduler_step(Scheduler *scheduler) {
                     } else if (is_abnormal) {
                         block_crash(linked, "linked process crashed");
                         if (atomic_load(&linked->state) == BLOCK_RUNNABLE) {
-                            runqueue_remove(&scheduler->run_queue, linked);
+                            scheduler_runqueue_remove(scheduler, linked);
                         }
                     }
                     block_unlink(linked, block->pid);

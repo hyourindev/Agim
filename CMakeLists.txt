@@ -60,30 +60,6 @@ include_directories(${CMAKE_SOURCE_DIR}/src)
 # Export compile commands for IDE support
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# BearSSL library (vendored TLS implementation)
-file(GLOB BEARSSL_SOURCES
-    ${CMAKE_SOURCE_DIR}/vendor/bearssl/src/*.c
-    ${CMAKE_SOURCE_DIR}/vendor/bearssl/src/aead/*.c
-    ${CMAKE_SOURCE_DIR}/vendor/bearssl/src/codec/*.c
-    ${CMAKE_SOURCE_DIR}/vendor/bearssl/src/ec/*.c
-    ${CMAKE_SOURCE_DIR}/vendor/bearssl/src/hash/*.c
-    ${CMAKE_SOURCE_DIR}/vendor/bearssl/src/int/*.c
-    ${CMAKE_SOURCE_DIR}/vendor/bearssl/src/kdf/*.c
-    ${CMAKE_SOURCE_DIR}/vendor/bearssl/src/mac/*.c
-    ${CMAKE_SOURCE_DIR}/vendor/bearssl/src/rand/*.c
-    ${CMAKE_SOURCE_DIR}/vendor/bearssl/src/rsa/*.c
-    ${CMAKE_SOURCE_DIR}/vendor/bearssl/src/ssl/*.c
-    ${CMAKE_SOURCE_DIR}/vendor/bearssl/src/symcipher/*.c
-    ${CMAKE_SOURCE_DIR}/vendor/bearssl/src/x509/*.c
-)
-add_library(bearssl STATIC ${BEARSSL_SOURCES})
-target_include_directories(bearssl
-    PUBLIC ${CMAKE_SOURCE_DIR}/vendor/bearssl/inc
-    PRIVATE ${CMAKE_SOURCE_DIR}/vendor/bearssl/src
-)
-# Suppress warnings from vendored code
-target_compile_options(bearssl PRIVATE -w)
-
 # Utility library
 add_library(agim_util STATIC
     src/util/alloc.c
@@ -116,14 +92,6 @@ add_library(agim_vm STATIC
     src/debug/debug.c
     src/debug/trace.c
     src/vm/primitives.c
-    # Networking
-    src/net/url.c
-    src/net/tcp.c
-    src/net/tls.c
-    src/net/http_parser.c
-    src/net/http.c
-    src/net/sse.c
-    src/net/websocket.c
     # Runtime
     src/runtime/mailbox.c
     src/runtime/capability.c
@@ -148,8 +116,8 @@ add_library(agim_vm STATIC
     # Types (included to resolve circular dependency)
     $<TARGET_OBJECTS:agim_types>
 )
-target_include_directories(agim_vm PUBLIC src ${CMAKE_SOURCE_DIR}/vendor/bearssl/inc)
-target_link_libraries(agim_vm PUBLIC agim_util bearssl pthread m)
+target_include_directories(agim_vm PUBLIC src)
+target_link_libraries(agim_vm PUBLIC agim_util pthread m)
 
 # Agim compiler library
 add_library(agim_lang STATIC
@@ -218,6 +186,23 @@ if(AGIM_BUILD_TESTS)
     target_link_libraries(test_regvm agim_vm)
     add_test(NAME test_regvm COMMAND test_regvm)
 
+    # Comprehensive test suites (Phase 1: Testing Infrastructure)
+    add_executable(test_vm_edge_cases tests/vm/test_vm_edge_cases.c)
+    target_link_libraries(test_vm_edge_cases agim_vm)
+    add_test(NAME test_vm_edge_cases COMMAND test_vm_edge_cases)
+
+    add_executable(test_gc_comprehensive tests/vm/test_gc_comprehensive.c)
+    target_link_libraries(test_gc_comprehensive agim_vm)
+    add_test(NAME test_gc_comprehensive COMMAND test_gc_comprehensive)
+
+    add_executable(test_scheduler_comprehensive tests/vm/test_scheduler_comprehensive.c)
+    target_link_libraries(test_scheduler_comprehensive agim_vm)
+    add_test(NAME test_scheduler_comprehensive COMMAND test_scheduler_comprehensive)
+
+    add_executable(test_vm_stack_operations tests/vm/test_vm_stack_operations.c)
+    target_link_libraries(test_vm_stack_operations agim_vm)
+    add_test(NAME test_vm_stack_operations COMMAND test_vm_stack_operations)
+
     # Language tests
     add_executable(test_lexer tests/lang/test_lexer.c)
     target_link_libraries(test_lexer agim_lang)
@@ -258,19 +243,6 @@ if(AGIM_BUILD_TESTS)
     add_executable(test_security tests/security/test_security.c)
     target_link_libraries(test_security agim_lang)
     add_test(NAME test_security COMMAND test_security)
-
-    # Network tests
-    add_executable(test_tls tests/net/test_tls.c)
-    target_link_libraries(test_tls agim_vm)
-    add_test(NAME test_tls COMMAND test_tls)
-
-    add_executable(test_streaming tests/net/test_streaming.c)
-    target_link_libraries(test_streaming agim_vm)
-    add_test(NAME test_streaming COMMAND test_streaming)
-
-    add_executable(test_websocket tests/net/test_websocket.c)
-    target_link_libraries(test_websocket agim_vm)
-    add_test(NAME test_websocket COMMAND test_websocket)
 
     # End-to-end tests for Erlang-like VM features
     add_executable(test_e2e_lifecycle tests/e2e/test_e2e_lifecycle.c)
