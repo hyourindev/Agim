@@ -600,12 +600,22 @@ VMResult vm_run(VM *vm) {
         DISPATCH();
 
     TARGET(dup): {
+        /* Security: check for underflow before duplicating */
+        if (vm->stack_top <= vm->stack) {
+            vm_set_error(vm, "stack underflow");
+            return VM_ERROR_STACK_UNDERFLOW;
+        }
         NanValue top = vm_peek_nan(vm, 0);
         vm_push_nan(vm, top);
         DISPATCH();
     }
 
     TARGET(swap): {
+        /* Security: check for underflow - need at least 2 elements */
+        if (vm->stack_top - vm->stack < 2) {
+            vm_set_error(vm, "stack underflow");
+            return VM_ERROR_STACK_UNDERFLOW;
+        }
         NanValue a = vm_pop_nan(vm);
         NanValue b = vm_pop_nan(vm);
         vm_push_nan(vm, a);
@@ -1021,26 +1031,38 @@ VMResult vm_run(VM *vm) {
             break;
 
         case OP_DUP: {
+            /* Security: check for underflow before duplicating */
+            if (vm->stack_top <= vm->stack) {
+                vm_set_error(vm, "stack underflow");
+                return VM_ERROR_STACK_UNDERFLOW;
+            }
             Value *top = vm_peek(vm, 0);
-            if (!top) return VM_ERROR_STACK_UNDERFLOW;
             vm_push(vm, top);
             break;
         }
 
         case OP_DUP2: {
             /* Duplicate top two stack items: [a, b] -> [a, b, a, b] */
+            /* Security: need at least 2 elements */
+            if (vm->stack_top - vm->stack < 2) {
+                vm_set_error(vm, "stack underflow");
+                return VM_ERROR_STACK_UNDERFLOW;
+            }
             Value *b = vm_peek(vm, 0);
             Value *a = vm_peek(vm, 1);
-            if (!a || !b) return VM_ERROR_STACK_UNDERFLOW;
             vm_push(vm, a);
             vm_push(vm, b);
             break;
         }
 
         case OP_SWAP: {
+            /* Security: need at least 2 elements */
+            if (vm->stack_top - vm->stack < 2) {
+                vm_set_error(vm, "stack underflow");
+                return VM_ERROR_STACK_UNDERFLOW;
+            }
             Value *a = vm_pop(vm);
             Value *b = vm_pop(vm);
-            if (!a || !b) return VM_ERROR_STACK_UNDERFLOW;
             vm_push(vm, a);
             vm_push(vm, b);
             break;

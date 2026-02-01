@@ -488,11 +488,7 @@ void test_dup_empty_stack(void) {
     Bytecode *code = bytecode_new();
     Chunk *chunk = code->main;
 
-    /*
-     * DUP on empty stack: fast path doesn't check underflow for performance.
-     * vm_peek_nan returns NANBOX_NIL, which gets pushed. This is by design -
-     * the compiler should never generate OP_DUP on an empty stack.
-     */
+    /* DUP on empty stack should return underflow error */
     chunk_write_opcode(chunk, OP_DUP, 1);
     chunk_write_opcode(chunk, OP_HALT, 1);
 
@@ -500,10 +496,11 @@ void test_dup_empty_stack(void) {
     vm_load(vm, code);
     VMResult result = vm_run(vm);
 
-    /* Fast path continues with NIL value */
-    ASSERT_EQ(VM_HALT, result);
-    Value *v = vm_peek(vm, 0);
-    ASSERT(value_is_nil(v));
+    ASSERT_EQ(VM_ERROR_STACK_UNDERFLOW, result);
+
+    /* Verify error message is set */
+    const char *error = vm_error(vm);
+    ASSERT(error != NULL);
 
     vm_free(vm);
     bytecode_free(code);
@@ -552,12 +549,7 @@ void test_dup2_insufficient_stack(void) {
     Bytecode *code = bytecode_new();
     Chunk *chunk = code->main;
 
-    /*
-     * DUP2 goes through slow path which checks for underflow via vm_peek.
-     * With only one value, vm_peek(1) returns NULL, triggering underflow.
-     * However, vm_peek returns nanbox_to_value which may return nil for invalid peek.
-     * The actual behavior depends on implementation - test the documented behavior.
-     */
+    /* DUP2 with only one value should fail - needs 2 elements */
     chunk_add_constant(chunk, value_int(1));
     chunk_write_opcode(chunk, OP_CONST, 1);
     chunk_write_byte(chunk, 0, 1);
@@ -569,9 +561,7 @@ void test_dup2_insufficient_stack(void) {
     vm_load(vm, code);
     VMResult result = vm_run(vm);
 
-    /* Slow path returns error or continues with nil depending on impl */
-    /* Either underflow error or halt with nil values is acceptable */
-    ASSERT(result == VM_ERROR_STACK_UNDERFLOW || result == VM_HALT);
+    ASSERT_EQ(VM_ERROR_STACK_UNDERFLOW, result);
 
     vm_free(vm);
     bytecode_free(code);
@@ -657,11 +647,7 @@ void test_swap_empty_stack(void) {
     Bytecode *code = bytecode_new();
     Chunk *chunk = code->main;
 
-    /*
-     * SWAP on empty stack: fast path doesn't check underflow for performance.
-     * vm_pop_nan returns NANBOX_NIL on underflow, and the values get pushed back.
-     * This is by design - compiler should never generate OP_SWAP on empty stack.
-     */
+    /* SWAP on empty stack should return underflow error */
     chunk_write_opcode(chunk, OP_SWAP, 1);
     chunk_write_opcode(chunk, OP_HALT, 1);
 
@@ -669,8 +655,11 @@ void test_swap_empty_stack(void) {
     vm_load(vm, code);
     VMResult result = vm_run(vm);
 
-    /* Fast path continues - pops NIL, NIL, pushes them back */
-    ASSERT_EQ(VM_HALT, result);
+    ASSERT_EQ(VM_ERROR_STACK_UNDERFLOW, result);
+
+    /* Verify error message is set */
+    const char *error = vm_error(vm);
+    ASSERT(error != NULL);
 
     vm_free(vm);
     bytecode_free(code);
@@ -685,10 +674,7 @@ void test_swap_single_element(void) {
     chunk_write_byte(chunk, 0, 1);
     chunk_write_byte(chunk, 0, 1);
 
-    /*
-     * SWAP with one element: fast path pops 42, then pops NIL (underflow),
-     * then pushes 42, then pushes NIL. Stack ends up with [42, nil].
-     */
+    /* SWAP with only one element should fail - needs 2 elements */
     chunk_write_opcode(chunk, OP_SWAP, 1);
     chunk_write_opcode(chunk, OP_HALT, 1);
 
@@ -696,15 +682,7 @@ void test_swap_single_element(void) {
     vm_load(vm, code);
     VMResult result = vm_run(vm);
 
-    /* Fast path continues with NIL from underflow */
-    ASSERT_EQ(VM_HALT, result);
-
-    /* Top should be NIL (from underflow pop), below should be 42 */
-    Value *v = vm_peek(vm, 0);
-    ASSERT(value_is_nil(v));
-
-    v = vm_peek(vm, 1);
-    ASSERT_EQ(42, v->as.integer);
+    ASSERT_EQ(VM_ERROR_STACK_UNDERFLOW, result);
 
     vm_free(vm);
     bytecode_free(code);

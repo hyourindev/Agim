@@ -10,6 +10,11 @@
 #ifndef AGIM_RUNTIME_PROCGROUP_H
 #define AGIM_RUNTIME_PROCGROUP_H
 
+/* Required for pthread_rwlock_t */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>

@@ -203,6 +203,110 @@ if(AGIM_BUILD_TESTS)
     target_link_libraries(test_vm_stack_operations agim_vm)
     add_test(NAME test_vm_stack_operations COMMAND test_vm_stack_operations)
 
+    add_executable(test_vm_arithmetic tests/vm/test_vm_arithmetic.c)
+    target_link_libraries(test_vm_arithmetic agim_vm)
+    add_test(NAME test_vm_arithmetic COMMAND test_vm_arithmetic)
+
+    add_executable(test_vm_comparison tests/vm/test_vm_comparison.c)
+    target_link_libraries(test_vm_comparison agim_vm)
+    add_test(NAME test_vm_comparison COMMAND test_vm_comparison)
+
+    add_executable(test_vm_control_flow tests/vm/test_vm_control_flow.c)
+    target_link_libraries(test_vm_control_flow agim_vm)
+    add_test(NAME test_vm_control_flow COMMAND test_vm_control_flow)
+
+    add_executable(test_vm_functions tests/vm/test_vm_functions.c)
+    target_link_libraries(test_vm_functions agim_vm)
+    add_test(NAME test_vm_functions COMMAND test_vm_functions)
+
+    add_executable(test_vm_memory tests/vm/test_vm_memory.c)
+    target_link_libraries(test_vm_memory agim_vm)
+    add_test(NAME test_vm_memory COMMAND test_vm_memory)
+
+    add_executable(test_vm_process tests/vm/test_vm_process.c)
+    target_link_libraries(test_vm_process agim_vm)
+    add_test(NAME test_vm_process COMMAND test_vm_process)
+
+    add_executable(test_gc_allocation tests/vm/test_gc_allocation.c)
+    target_link_libraries(test_gc_allocation agim_vm)
+    add_test(NAME test_gc_allocation COMMAND test_gc_allocation)
+
+    add_executable(test_gc_marking tests/vm/test_gc_marking.c)
+    target_link_libraries(test_gc_marking agim_vm)
+    add_test(NAME test_gc_marking COMMAND test_gc_marking)
+
+    add_executable(test_gc_sweeping tests/vm/test_gc_sweeping.c)
+    target_link_libraries(test_gc_sweeping agim_vm)
+    add_test(NAME test_gc_sweeping COMMAND test_gc_sweeping)
+
+    add_executable(test_gc_generational tests/vm/test_gc_generational.c)
+    target_link_libraries(test_gc_generational agim_vm)
+    add_test(NAME test_gc_generational COMMAND test_gc_generational)
+
+    add_executable(test_scheduler_lifecycle tests/vm/test_scheduler_lifecycle.c)
+    target_link_libraries(test_scheduler_lifecycle agim_vm)
+    add_test(NAME test_scheduler_lifecycle COMMAND test_scheduler_lifecycle)
+
+    add_executable(test_scheduler_spawn tests/vm/test_scheduler_spawn.c)
+    target_link_libraries(test_scheduler_spawn agim_vm)
+    add_test(NAME test_scheduler_spawn COMMAND test_scheduler_spawn)
+
+    add_executable(test_scheduler_registry tests/vm/test_scheduler_registry.c)
+    target_link_libraries(test_scheduler_registry agim_vm)
+    add_test(NAME test_scheduler_registry COMMAND test_scheduler_registry)
+
+    add_executable(test_scheduler_runqueue tests/vm/test_scheduler_runqueue.c)
+    target_link_libraries(test_scheduler_runqueue agim_vm)
+    add_test(NAME test_scheduler_runqueue COMMAND test_scheduler_runqueue)
+
+    add_executable(test_scheduler_execution tests/vm/test_scheduler_execution.c)
+    target_link_libraries(test_scheduler_execution agim_vm)
+    add_test(NAME test_scheduler_execution COMMAND test_scheduler_execution)
+
+    add_executable(test_scheduler_exit tests/vm/test_scheduler_exit.c)
+    target_link_libraries(test_scheduler_exit agim_vm)
+    add_test(NAME test_scheduler_exit COMMAND test_scheduler_exit)
+
+    add_executable(test_block_lifecycle tests/vm/test_block_lifecycle.c)
+    target_link_libraries(test_block_lifecycle agim_vm)
+    add_test(NAME test_block_lifecycle COMMAND test_block_lifecycle)
+
+    add_executable(test_block_capabilities tests/vm/test_block_capabilities.c)
+    target_link_libraries(test_block_capabilities agim_vm)
+    add_test(NAME test_block_capabilities COMMAND test_block_capabilities)
+
+    add_executable(test_block_linking tests/vm/test_block_linking.c)
+    target_link_libraries(test_block_linking agim_vm)
+    add_test(NAME test_block_linking COMMAND test_block_linking)
+
+    add_executable(test_block_monitoring tests/vm/test_block_monitoring.c)
+    target_link_libraries(test_block_monitoring agim_vm)
+    add_test(NAME test_block_monitoring COMMAND test_block_monitoring)
+
+    add_executable(test_block_messaging tests/vm/test_block_messaging.c)
+    target_link_libraries(test_block_messaging agim_vm)
+    add_test(NAME test_block_messaging COMMAND test_block_messaging)
+
+    add_executable(test_worker_deque tests/vm/test_worker_deque.c)
+    target_link_libraries(test_worker_deque agim_vm)
+    add_test(NAME test_worker_deque COMMAND test_worker_deque)
+
+    add_executable(test_worker_lifecycle tests/vm/test_worker_lifecycle.c)
+    target_link_libraries(test_worker_lifecycle agim_vm)
+    add_test(NAME test_worker_lifecycle COMMAND test_worker_lifecycle)
+
+    add_executable(test_worker_stealing tests/vm/test_worker_stealing.c)
+    target_link_libraries(test_worker_stealing agim_vm)
+    add_test(NAME test_worker_stealing COMMAND test_worker_stealing)
+
+    add_executable(test_worker_execution tests/vm/test_worker_execution.c)
+    target_link_libraries(test_worker_execution agim_vm)
+    add_test(NAME test_worker_execution COMMAND test_worker_execution)
+
+    add_executable(test_timer_wheel tests/vm/test_timer_wheel.c)
+    target_link_libraries(test_timer_wheel agim_vm)
+    add_test(NAME test_timer_wheel COMMAND test_timer_wheel)
+
     # Language tests
     add_executable(test_lexer tests/lang/test_lexer.c)
     target_link_libraries(test_lexer agim_lang)

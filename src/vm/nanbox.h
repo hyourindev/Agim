@@ -171,7 +171,16 @@ static inline bool nanbox_is_truthy(NanValue v) {
 /* Equality */
 
 static inline bool nanbox_equal(NanValue a, NanValue b) {
+    /* Handle NaN: NaN != NaN per IEEE 754 */
+    if (nanbox_is_double(a) && nanbox_is_double(b)) {
+        double da = nanbox_as_double(a);
+        double db = nanbox_as_double(b);
+        /* NaN comparison always returns false */
+        return da == db;
+    }
+    /* For non-doubles, bit equality is fine */
     if (a == b) return true;
+    /* Mixed int/float comparison */
     if (nanbox_is_number(a) && nanbox_is_number(b)) {
         return nanbox_to_float(a) == nanbox_to_float(b);
     }

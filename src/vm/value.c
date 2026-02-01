@@ -515,6 +515,23 @@ bool value_equals(const Value *a, const Value *b) {
         }
         return true;
     }
+    case VAL_MAP: {
+        Map *map_a = a->as.map;
+        Map *map_b = b->as.map;
+        if (map_a->size != map_b->size) return false;
+        /* Check all entries in map_a exist in map_b with same value */
+        for (size_t i = 0; i < map_a->capacity; i++) {
+            MapEntry *entry = map_a->buckets[i];
+            while (entry) {
+                Value *val_b = map_get(b, entry->key->data);
+                if (!val_b || !value_equals(entry->value, val_b)) {
+                    return false;
+                }
+                entry = entry->next;
+            }
+        }
+        return true;
+    }
     default:
         return a == b;
     }
