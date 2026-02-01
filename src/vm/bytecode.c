@@ -9,6 +9,7 @@
 
 #include "vm/bytecode.h"
 #include "vm/ic.h"
+#include "debug/log.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,7 +23,7 @@
 static void *alloc(size_t size) {
     void *ptr = malloc(size);
     if (!ptr) {
-        fprintf(stderr, "agim: out of memory\n");
+        LOG_FATAL("bytecode: out of memory allocating %zu bytes", size);
         exit(1);
     }
     return ptr;
@@ -31,7 +32,7 @@ static void *alloc(size_t size) {
 static void *realloc_safe(void *ptr, size_t size) {
     void *new_ptr = realloc(ptr, size);
     if (!new_ptr) {
-        fprintf(stderr, "agim: out of memory\n");
+        LOG_FATAL("bytecode: out of memory reallocating to %zu bytes", size);
         exit(1);
     }
     return new_ptr;
@@ -65,9 +66,9 @@ void chunk_free(Chunk *chunk) {
 
     free(chunk->code);
 
-    for (size_t i = 0; i < chunk->constants_size; i++) {
-        value_free(chunk->constants[i]);
-    }
+    /* Don't free constants - they may be shared with runtime structures
+     * (e.g., stored in VM globals). The GC handles freeing in production,
+     * and vm_free handles it in tests. */
     free(chunk->constants);
 
     free(chunk->ic_slots);
@@ -115,7 +116,7 @@ void chunk_patch_jump(Chunk *chunk, size_t offset) {
     size_t jump = chunk->code_size - offset - 2;
 
     if (jump > UINT16_MAX) {
-        fprintf(stderr, "agim: jump too large\n");
+        LOG_ERROR("bytecode: jump too large (%zu > %u)", jump, UINT16_MAX);
         return;
     }
 
@@ -484,7 +485,10 @@ static Value *deserialize_value(const uint8_t **buf, const uint8_t *end) {
         uint32_t len = read_u32(buf);
         if (*buf + len > end) return NULL;
         char *str = malloc(len + 1);
-        if (!str) return NULL;
+        if (!str) {
+            LOG_ERROR("bytecode: failed to allocate string of %u bytes during deserialization", len);
+            return NULL;
+        }
         memcpy(str, *buf, len);
         str[len] = '\0';
         *buf += len;
@@ -551,13 +555,13 @@ Bytecode *bytecode_deserialize(const uint8_t *data, size_t size) {
 
     uint32_t magic = read_u32(&p);
     if (magic != AGIM_MAGIC) {
-        fprintf(stderr, "agim: invalid bytecode file\n");
+        LOG_ERROR("bytecode: invalid bytecode file (bad magic)");
         return NULL;
     }
 
     uint32_t version = read_u32(&p);
     if (version > AGIM_BYTECODE_VERSION) {
-        fprintf(stderr, "agim: bytecode version %u not supported\n", version);
+        LOG_ERROR("bytecode: version %u not supported (max %u)", version, AGIM_BYTECODE_VERSION);
         return NULL;
     }
 
@@ -586,7 +590,10 @@ Bytecode *bytecode_deserialize(const uint8_t *data, size_t size) {
         uint32_t len = read_u32(&p);
         if (p + len > end) goto error;
         char *str = malloc(len + 1);
-        if (!str) goto error;
+        if (!str) {
+            LOG_ERROR("bytecode: failed to allocate string of %u bytes during load", len);
+            goto error;
+        }
         memcpy(str, p, len);
         str[len] = '\0';
         p += len;

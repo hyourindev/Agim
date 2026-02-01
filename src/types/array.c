@@ -9,6 +9,7 @@
 #include "vm/value.h"
 #include "vm/gc.h"
 #include "util/alloc.h"
+#include "debug/log.h"
 
 #include <stdatomic.h>
 #include <stdlib.h>
@@ -26,7 +27,10 @@ Heap *array_get_gc_heap(void) {
 
 Value *value_array_with_capacity(size_t capacity) {
     Value *v = agim_alloc(sizeof(Value));
-    if (!v) return NULL;
+    if (!v) {
+        LOG_ERROR("array: failed to allocate Value");
+        return NULL;
+    }
 
     v->type = VAL_ARRAY;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
@@ -36,6 +40,7 @@ Value *value_array_with_capacity(size_t capacity) {
 
     Array *arr = agim_alloc(sizeof(Array));
     if (!arr) {
+        LOG_ERROR("array: failed to allocate Array struct");
         agim_free(v);
         return NULL;
     }
@@ -43,6 +48,7 @@ Value *value_array_with_capacity(size_t capacity) {
     arr->capacity = capacity > 0 ? capacity : 8;
     arr->items = agim_alloc(sizeof(Value *) * arr->capacity);
     if (!arr->items) {
+        LOG_ERROR("array: failed to allocate items buffer for capacity %zu", arr->capacity);
         agim_free(arr);
         agim_free(v);
         return NULL;
@@ -99,6 +105,11 @@ Value *array_set(Value *v, size_t index, Value *item) {
     Heap *heap = gc_get_current_heap();
     if (heap) {
         gc_write_barrier(heap, writable, item);
+    }
+
+    /* Release the old value being replaced */
+    if (arr->items[index]) {
+        value_free(arr->items[index]);
     }
 
     arr->items[index] = item;
@@ -273,7 +284,14 @@ Value *array_clear(Value *v) {
 
     Value *writable = array_ensure_writable(v);
     if (writable && writable->type == VAL_ARRAY) {
-        writable->as.array->length = 0;
+        Array *arr = writable->as.array;
+        /* Free all elements before clearing */
+        for (size_t i = 0; i < arr->length; i++) {
+            if (arr->items[i]) {
+                value_free(arr->items[i]);
+            }
+        }
+        arr->length = 0;
     }
     return writable;
 }
@@ -292,7 +310,7 @@ Value *array_slice(const Value *v, size_t start, size_t end) {
 
     Value *result = value_array_with_capacity(end - start);
     for (size_t i = start; i < end; i++) {
-        array_push(result, arr->items[i]);
+        array_push(result, value_retain(arr->items[i]));
     }
     return result;
 }
@@ -308,10 +326,10 @@ Value *array_concat(const Value *a, const Value *b) {
     Value *result = value_array_with_capacity(len_a + len_b);
 
     for (size_t i = 0; i < len_a; i++) {
-        array_push(result, a->as.array->items[i]);
+        array_push(result, value_retain(a->as.array->items[i]));
     }
     for (size_t i = 0; i < len_b; i++) {
-        array_push(result, b->as.array->items[i]);
+        array_push(result, value_retain(b->as.array->items[i]));
     }
 
     return result;

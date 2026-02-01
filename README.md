@@ -1,5 +1,9 @@
 # Agim
 
+[![CI](https://github.com/hyourindev/Agim/actions/workflows/ci.yml/badge.svg)](https://github.com/hyourindev/Agim/actions/workflows/ci.yml)
+[![Coverage](https://codecov.io/gh/hyourindev/Agim/branch/main/graph/badge.svg)](https://codecov.io/gh/hyourindev/Agim)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 > **Work in Progress** - This project is under active development. The `.im` implementation language works, but the `.ag` declarative agent DSL is not yet implemented. APIs may change.
 
 **The Erlang for AI Agents** - Build fault-tolerant, distributed AI agent systems.

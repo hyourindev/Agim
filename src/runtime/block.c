@@ -11,6 +11,7 @@
 #include "runtime/mailbox.h"
 #include "runtime/supervisor.h"
 #include "runtime/telemetry.h"
+#include "debug/log.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -302,7 +303,13 @@ BlockState block_state(const Block *block) {
 
 void block_set_state(Block *block, BlockState state) {
     if (block) {
+        BlockState old_state = atomic_load(&block->state);
         atomic_store(&block->state, state);
+        if (old_state != state) {
+            LOG_DEBUG("block state: pid=%lu %s -> %s",
+                      block->pid, block_state_name(old_state),
+                      block_state_name(state));
+        }
     }
 }
 

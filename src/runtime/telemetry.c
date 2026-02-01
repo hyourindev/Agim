@@ -12,6 +12,7 @@
 #include "runtime/block.h"
 #include "runtime/timer.h"
 #include "vm/gc.h"
+#include "debug/log.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -74,10 +75,14 @@ uint64_t stats_uptime_ms(const BlockStats *stats) {
 
 static TraceBuffer *trace_buffer_new(size_t capacity) {
     TraceBuffer *buf = calloc(1, sizeof(TraceBuffer));
-    if (!buf) return NULL;
+    if (!buf) {
+        LOG_ERROR("telemetry: failed to allocate TraceBuffer");
+        return NULL;
+    }
 
     buf->events = calloc(capacity, sizeof(TraceEvent));
     if (!buf->events) {
+        LOG_ERROR("telemetry: failed to allocate %zu trace events", capacity);
         free(buf);
         return NULL;
     }
@@ -111,7 +116,10 @@ static void trace_buffer_push(TraceBuffer *buf, const TraceEvent *event) {
 
 Tracer *tracer_new(TraceFlags flags, size_t buffer_capacity) {
     Tracer *tracer = calloc(1, sizeof(Tracer));
-    if (!tracer) return NULL;
+    if (!tracer) {
+        LOG_ERROR("telemetry: failed to allocate Tracer");
+        return NULL;
+    }
 
     tracer->flags = flags;
     tracer->enabled = true;
@@ -122,6 +130,7 @@ Tracer *tracer_new(TraceFlags flags, size_t buffer_capacity) {
     if (buffer_capacity > 0) {
         tracer->buffer = trace_buffer_new(buffer_capacity);
         if (!tracer->buffer) {
+            LOG_ERROR("telemetry: failed to create trace buffer of capacity %zu", buffer_capacity);
             free(tracer);
             return NULL;
         }
@@ -386,6 +395,7 @@ TraceEvent *tracer_get_events(Tracer *tracer, size_t *count) {
 
     TraceEvent *events = malloc(sizeof(TraceEvent) * n);
     if (!events) {
+        LOG_ERROR("telemetry: failed to allocate %zu trace events for export", n);
         *count = 0;
         return NULL;
     }

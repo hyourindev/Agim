@@ -9,6 +9,7 @@
 #define AGIM_TEST_COMMON_H
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static int tests_run = 0;
@@ -19,6 +20,7 @@ static int tests_passed = 0;
         tests_run++;                                                    \
         if (!(cond)) {                                                  \
             printf("  FAIL: %s:%d: %s\n", __FILE__, __LINE__, #cond);   \
+            abort();                                                    \
         } else {                                                        \
             tests_passed++;                                             \
         }                                                               \
@@ -32,6 +34,7 @@ static int tests_passed = 0;
         if (_expected != _actual) {                                     \
             printf("  FAIL: %s:%d: expected %lld, got %lld\n",          \
                    __FILE__, __LINE__, _expected, _actual);             \
+            abort();                                                    \
         } else {                                                        \
             tests_passed++;                                             \
         }                                                               \
@@ -43,6 +46,7 @@ static int tests_passed = 0;
         if (strcmp((expected), (actual)) != 0) {                        \
             printf("  FAIL: %s:%d: expected \"%s\", got \"%s\"\n",      \
                    __FILE__, __LINE__, (expected), (actual));           \
+            abort();                                                    \
         } else {                                                        \
             tests_passed++;                                             \
         }                                                               \

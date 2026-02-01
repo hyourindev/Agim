@@ -6,6 +6,7 @@
  */
 
 #include "util/hash.h"
+#include "debug/log.h"
 
 /*
  * FNV-1a hash constants

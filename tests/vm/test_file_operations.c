@@ -31,7 +31,8 @@ static void setup_test_dir(void) {
 static void cleanup_test_dir(void) {
     char cmd[256];
     snprintf(cmd, sizeof(cmd), "rm -rf %s", TEST_DIR);
-    system(cmd);
+    int ret = system(cmd);
+    (void)ret;
 }
 
 static void create_test_file(const char *name, const char *content) {
@@ -251,7 +252,8 @@ void test_sandbox_symlink_escape(void) {
     /* Create a symlink that points outside */
     char link_path[256];
     snprintf(link_path, sizeof(link_path), "%s/escape", TEST_DIR);
-    symlink("/etc", link_path);
+    int link_ret = symlink("/etc", link_path);
+    (void)link_ret;
 
     /* Reading through symlink should be blocked */
     char malicious[256];

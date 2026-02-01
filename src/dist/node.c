@@ -10,6 +10,7 @@
 #include "dist/node.h"
 #include "runtime/serialize.h"
 #include "runtime/timer.h"
+#include "debug/log.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -47,7 +48,10 @@ NodeConfig node_config_default(void) {
 
 DistributedNode *node_new(const NodeConfig *config) {
     DistributedNode *node = calloc(1, sizeof(DistributedNode));
-    if (!node) return NULL;
+    if (!node) {
+        LOG_ERROR("node: failed to allocate DistributedNode");
+        return NULL;
+    }
 
     NodeConfig cfg = config ? *config : node_config_default();
 
@@ -368,7 +372,7 @@ bool node_start(DistributedNode *node) {
 
     /* Require non-zero cookie for security */
     if (node->config.cookie == 0) {
-        fprintf(stderr, "Error: Node cookie must be configured (non-zero) for security\n");
+        LOG_ERROR("node: cookie must be configured (non-zero) for security");
         return false;
     }
 

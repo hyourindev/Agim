@@ -11,6 +11,7 @@
 #include "runtime/block.h"
 #include "runtime/timer.h"
 #include "vm/vm.h"
+#include "debug/log.h"
 
 #ifdef AGIM_WITH_COMPILER
 #include "lang/lexer.h"
@@ -27,7 +28,10 @@
 
 static ModuleVersion *module_version_new(const char *name, Bytecode *code, uint32_t version) {
     ModuleVersion *ver = calloc(1, sizeof(ModuleVersion));
-    if (!ver) return NULL;
+    if (!ver) {
+        LOG_ERROR("hotreload: failed to allocate ModuleVersion for '%s' v%u", name, version);
+        return NULL;
+    }
 
     ver->name = name ? strdup(name) : NULL;
     ver->version = version;
@@ -80,6 +84,7 @@ Value *module_version_migrate(ModuleVersion *ver, Value *old_state, uint32_t fro
 
     VM *vm = vm_new();
     if (!vm) {
+        LOG_ERROR("hotreload: failed to create VM for migration");
         return old_state;
     }
 
@@ -107,7 +112,10 @@ Value *module_version_migrate(ModuleVersion *ver, Value *old_state, uint32_t fro
 
 static Module *module_new(const char *name) {
     Module *mod = calloc(1, sizeof(Module));
-    if (!mod) return NULL;
+    if (!mod) {
+        LOG_ERROR("hotreload: failed to allocate Module '%s'", name);
+        return NULL;
+    }
 
     mod->name = name ? strdup(name) : NULL;
     mod->current = NULL;
@@ -153,7 +161,10 @@ static void module_free(Module *mod) {
 
 ModuleRegistry *module_registry_new(void) {
     ModuleRegistry *reg = calloc(1, sizeof(ModuleRegistry));
-    if (!reg) return NULL;
+    if (!reg) {
+        LOG_ERROR("hotreload: failed to allocate ModuleRegistry");
+        return NULL;
+    }
 
     reg->modules = NULL;
     reg->count = 0;
@@ -190,7 +201,10 @@ static Module *registry_find(ModuleRegistry *reg, const char *name) {
 static bool registry_grow(ModuleRegistry *reg) {
     size_t new_capacity = reg->capacity ? reg->capacity * 2 : 8;
     Module **new_modules = realloc(reg->modules, sizeof(Module *) * new_capacity);
-    if (!new_modules) return false;
+    if (!new_modules) {
+        LOG_ERROR("hotreload: failed to grow registry to %zu modules", new_capacity);
+        return false;
+    }
 
     reg->modules = new_modules;
     reg->capacity = new_capacity;
@@ -206,12 +220,14 @@ ModuleVersion *module_load(ModuleRegistry *reg, const char *name, Bytecode *code
     if (!mod) {
         mod = module_new(name);
         if (!mod) {
+            LOG_ERROR("hotreload: failed to create module '%s'", name);
             pthread_rwlock_unlock(&reg->lock);
             return NULL;
         }
 
         if (reg->count >= reg->capacity) {
             if (!registry_grow(reg)) {
+                LOG_ERROR("hotreload: failed to grow registry for module '%s'", name);
                 module_free(mod);
                 pthread_rwlock_unlock(&reg->lock);
                 return NULL;
@@ -227,6 +243,7 @@ ModuleVersion *module_load(ModuleRegistry *reg, const char *name, Bytecode *code
 
     ModuleVersion *ver = module_version_new(name, code, version);
     if (!ver) {
+        LOG_ERROR("hotreload: failed to create version for module '%s'", name);
         pthread_mutex_unlock(&mod->lock);
         return NULL;
     }
@@ -257,19 +274,24 @@ ModuleVersion *module_load_file(ModuleRegistry *reg, const char *name, const cha
     if (!reg || !name || !path) return NULL;
 
     FILE *f = fopen(path, "rb");
-    if (!f) return NULL;
+    if (!f) {
+        LOG_ERROR("hotreload: failed to open file '%s'", path);
+        return NULL;
+    }
 
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
 
     if (size <= 0 || size > 10 * 1024 * 1024) {
+        LOG_ERROR("hotreload: invalid file size %ld for '%s'", size, path);
         fclose(f);
         return NULL;
     }
 
     char *source = malloc((size_t)size + 1);
     if (!source) {
+        LOG_ERROR("hotreload: failed to allocate %ld bytes for source '%s'", size, path);
         fclose(f);
         return NULL;
     }
@@ -278,6 +300,7 @@ ModuleVersion *module_load_file(ModuleRegistry *reg, const char *name, const cha
     fclose(f);
 
     if (read != (size_t)size) {
+        LOG_ERROR("hotreload: partial read %zu/%ld for '%s'", read, size, path);
         free(source);
         return NULL;
     }
@@ -285,12 +308,14 @@ ModuleVersion *module_load_file(ModuleRegistry *reg, const char *name, const cha
 
     Lexer *lexer = lexer_new(source);
     if (!lexer) {
+        LOG_ERROR("hotreload: failed to create lexer for '%s'", path);
         free(source);
         return NULL;
     }
 
     Parser *parser = parser_new(lexer);
     if (!parser) {
+        LOG_ERROR("hotreload: failed to create parser for '%s'", path);
         lexer_free(lexer);
         free(source);
         return NULL;
@@ -298,6 +323,7 @@ ModuleVersion *module_load_file(ModuleRegistry *reg, const char *name, const cha
 
     AstNode *ast = parser_parse(parser);
     if (!ast) {
+        LOG_ERROR("hotreload: failed to parse '%s'", path);
         parser_free(parser);
         lexer_free(lexer);
         free(source);
@@ -306,6 +332,7 @@ ModuleVersion *module_load_file(ModuleRegistry *reg, const char *name, const cha
 
     Compiler *compiler = compiler_new();
     if (!compiler) {
+        LOG_ERROR("hotreload: failed to create compiler for '%s'", path);
         ast_free(ast);
         parser_free(parser);
         lexer_free(lexer);
@@ -317,6 +344,7 @@ ModuleVersion *module_load_file(ModuleRegistry *reg, const char *name, const cha
 
     Bytecode *code = compiler_compile(compiler, ast);
     if (!code) {
+        LOG_ERROR("hotreload: failed to compile '%s'", path);
         compiler_free(compiler);
         ast_free(ast);
         parser_free(parser);
@@ -504,6 +532,7 @@ bool module_register_block(ModuleRegistry *reg, const char *name, uint64_t block
 
     mb = malloc(sizeof(ModuleBlock));
     if (!mb) {
+        LOG_ERROR("hotreload: failed to allocate ModuleBlock for pid %lu", (unsigned long)block_pid);
         pthread_mutex_unlock(&mod->lock);
         return false;
     }

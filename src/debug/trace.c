@@ -11,6 +11,7 @@
 #include "vm/vm.h"
 #include "vm/value.h"
 #include "vm/nanbox.h"
+#include "debug/log.h"
 
 #include <stdio.h>
 #include <inttypes.h>

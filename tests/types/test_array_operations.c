@@ -153,13 +153,15 @@ void test_array_set_out_of_bounds(void) {
     Value *arr = value_array();
     arr = array_push(arr, value_int(1));
 
-    Value *result = array_set(arr, 10, value_int(100));
+    Value *unused_val = value_int(100);
+    Value *result = array_set(arr, 10, unused_val);
 
     /* Out of bounds set returns the array unchanged (no modification) */
     ASSERT(result != NULL);
     ASSERT_EQ(1, array_length(result)); /* Length unchanged */
     ASSERT_EQ(1, array_get(result, 0)->as.integer); /* Original value unchanged */
 
+    value_free(unused_val); /* Was never added to array */
     value_free(result);
 }
 
@@ -201,6 +203,7 @@ void test_array_pop_single(void) {
     ASSERT(new_arr != NULL);
     ASSERT_EQ(0, array_length(new_arr));
 
+    value_free(popped);
     value_free(new_arr);
 }
 
@@ -216,6 +219,7 @@ void test_array_pop_multiple(void) {
     ASSERT_EQ(3, popped->as.integer);
     ASSERT_EQ(2, array_length(new_arr));
 
+    value_free(popped);
     value_free(new_arr);
 }
 
@@ -343,10 +347,12 @@ void test_array_find_exists(void) {
     arr = array_push(arr, value_int(20));
     arr = array_push(arr, value_int(30));
 
-    int64_t idx = array_find(arr, value_int(20));
+    Value *search = value_int(20);
+    int64_t idx = array_find(arr, search);
 
     ASSERT_EQ(1, idx);
 
+    value_free(search);
     value_free(arr);
 }
 
@@ -355,20 +361,24 @@ void test_array_find_not_exists(void) {
     arr = array_push(arr, value_int(10));
     arr = array_push(arr, value_int(20));
 
-    int64_t idx = array_find(arr, value_int(99));
+    Value *search = value_int(99);
+    int64_t idx = array_find(arr, search);
 
     ASSERT_EQ(-1, idx);
 
+    value_free(search);
     value_free(arr);
 }
 
 void test_array_find_empty(void) {
     Value *arr = value_array();
 
-    int64_t idx = array_find(arr, value_int(1));
+    Value *search = value_int(1);
+    int64_t idx = array_find(arr, search);
 
     ASSERT_EQ(-1, idx);
 
+    value_free(search);
     value_free(arr);
 }
 
@@ -380,8 +390,10 @@ void test_array_contains_true(void) {
     arr = array_push(arr, value_int(2));
     arr = array_push(arr, value_int(3));
 
-    ASSERT(array_contains(arr, value_int(2)));
+    Value *search = value_int(2);
+    ASSERT(array_contains(arr, search));
 
+    value_free(search);
     value_free(arr);
 }
 
@@ -390,8 +402,10 @@ void test_array_contains_false(void) {
     arr = array_push(arr, value_int(1));
     arr = array_push(arr, value_int(2));
 
-    ASSERT(!array_contains(arr, value_int(99)));
+    Value *search = value_int(99);
+    ASSERT(!array_contains(arr, search));
 
+    value_free(search);
     value_free(arr);
 }
 
@@ -482,6 +496,7 @@ void test_array_remove_middle(void) {
     ASSERT_EQ(1, array_get(new_arr, 0)->as.integer);
     ASSERT_EQ(3, array_get(new_arr, 1)->as.integer);
 
+    value_free(removed);
     value_free(new_arr);
 }
 
@@ -512,10 +527,14 @@ void test_array_null_inputs(void) {
     ASSERT(array_get(NULL, 0) == NULL);
 
     /* array_set returns input when NULL - defensive behavior */
-    ASSERT(array_set(NULL, 0, value_int(1)) == NULL);
+    Value *set_val = value_int(1);
+    ASSERT(array_set(NULL, 0, set_val) == NULL);
+    value_free(set_val);
 
     /* array_push returns input when NULL - defensive behavior */
-    ASSERT(array_push(NULL, value_int(1)) == NULL);
+    Value *push_val = value_int(1);
+    ASSERT(array_push(NULL, push_val) == NULL);
+    value_free(push_val);
 
     /* array_slice returns nil when NULL - defensive behavior */
     Value *slice_result = array_slice(NULL, 0, 1);
@@ -530,8 +549,13 @@ void test_array_null_inputs(void) {
     ASSERT_EQ(0, array_length(concat_result));
     value_free(concat_result);
 
-    ASSERT_EQ(-1, array_find(NULL, value_int(1)));
-    ASSERT(!array_contains(NULL, value_int(1)));
+    Value *find_val = value_int(1);
+    ASSERT_EQ(-1, array_find(NULL, find_val));
+    value_free(find_val);
+
+    Value *contains_val = value_int(1);
+    ASSERT(!array_contains(NULL, contains_val));
+    value_free(contains_val);
 }
 
 /* Main */

@@ -6,6 +6,7 @@
  */
 
 #include "lang/regalloc.h"
+#include "debug/log.h"
 #include <string.h>
 
 /* Initialization */

@@ -51,7 +51,7 @@ static bool prop_array_push_get_roundtrip(void *ctx) {
     PROP_ASSERT(value_is_int(retrieved));
     PROP_ASSERT(value_to_int(retrieved) == val);
 
-    value_free(retrieved);
+    /* Don't free retrieved - it points to element owned by arr */
     value_free(arr);
     return true;
 }
@@ -83,7 +83,7 @@ static bool prop_array_set_get_roundtrip(void *ctx) {
     PROP_ASSERT(retrieved != NULL);
     PROP_ASSERT(value_to_int(retrieved) == new_val);
 
-    value_free(retrieved);
+    /* Don't free retrieved - it points to element owned by result */
     value_free(result);
     return true;
 }

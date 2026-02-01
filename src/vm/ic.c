@@ -8,6 +8,7 @@
 #include "vm/ic.h"
 #include "vm/value.h"
 #include "types/map.h"
+#include "debug/log.h"
 
 #include <stdio.h>
 #include <string.h>

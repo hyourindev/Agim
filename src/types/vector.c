@@ -8,6 +8,7 @@
 #include "types/vector.h"
 #include "vm/value.h"
 #include "util/alloc.h"
+#include "debug/log.h"
 
 #include <math.h>
 #include <stdatomic.h>
@@ -19,10 +20,14 @@ Value *value_vector(size_t dim) {
     if (dim == 0) return value_nil();
 
     Value *v = agim_alloc(sizeof(Value));
-    if (!v) return NULL;
+    if (!v) {
+        LOG_ERROR("vector: failed to allocate Value");
+        return NULL;
+    }
 
     Vector *vec = agim_alloc(sizeof(Vector) + sizeof(double) * dim);
     if (!vec) {
+        LOG_ERROR("vector: failed to allocate Vector of dim %zu", dim);
         agim_free(v);
         return NULL;
     }

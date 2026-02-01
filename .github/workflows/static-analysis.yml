@@ -1,0 +1,108 @@
+name: Static Analysis
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run weekly on Sunday at 3 AM UTC
+    - cron: '0 3 * * 0'
+
+jobs:
+  clang-static-analyzer:
+    name: Clang Static Analyzer
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake clang clang-tools
+
+      - name: Run scan-build
+        run: |
+          mkdir -p build
+          cd build
+          scan-build cmake .. -DCMAKE_BUILD_TYPE=Debug
+          scan-build --status-bugs -o scan-results make -j$(nproc)
+
+      - name: Upload scan-build results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scan-build-results
+          path: build/scan-results/
+
+  cppcheck:
+    name: Cppcheck
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Cppcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cppcheck
+
+      - name: Run Cppcheck
+        run: |
+          cppcheck \
+            --enable=all \
+            --error-exitcode=1 \
+            --suppress=missingIncludeSystem \
+            --suppress=unusedFunction \
+            --inline-suppr \
+            -I src \
+            -I include \
+            --xml \
+            --xml-version=2 \
+            src/ 2> cppcheck-results.xml
+
+      - name: Generate HTML report
+        if: always()
+        run: |
+          cppcheck-htmlreport --file=cppcheck-results.xml --report-dir=cppcheck-html || true
+
+      - name: Upload Cppcheck results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cppcheck-results
+          path: |
+            cppcheck-results.xml
+            cppcheck-html/
+
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: c
+
+      - name: Build
+        run: |
+          mkdir -p build
+          cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Debug
+          make -j$(nproc)
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:c"

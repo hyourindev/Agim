@@ -10,6 +10,7 @@
 #include "vm/value.h"
 #include "util/alloc.h"
 #include "util/hash.h"
+#include "debug/log.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -18,7 +19,10 @@
 
 Value *value_nil(void) {
     Value *v = agim_alloc(sizeof(Value));
-    if (!v) return NULL;
+    if (!v) {
+        LOG_ERROR("value: failed to allocate nil value");
+        return NULL;
+    }
     v->type = VAL_NIL;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
     v->flags = 0;
@@ -29,7 +33,10 @@ Value *value_nil(void) {
 
 Value *value_bool(bool value) {
     Value *v = agim_alloc(sizeof(Value));
-    if (!v) return NULL;
+    if (!v) {
+        LOG_ERROR("value: failed to allocate bool value");
+        return NULL;
+    }
     v->type = VAL_BOOL;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
     v->flags = 0;
@@ -41,7 +48,10 @@ Value *value_bool(bool value) {
 
 Value *value_int(int64_t value) {
     Value *v = agim_alloc(sizeof(Value));
-    if (!v) return NULL;
+    if (!v) {
+        LOG_ERROR("value: failed to allocate int value");
+        return NULL;
+    }
     v->type = VAL_INT;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
     v->flags = 0;
@@ -53,7 +63,10 @@ Value *value_int(int64_t value) {
 
 Value *value_float(double value) {
     Value *v = agim_alloc(sizeof(Value));
-    if (!v) return NULL;
+    if (!v) {
+        LOG_ERROR("value: failed to allocate float value");
+        return NULL;
+    }
     v->type = VAL_FLOAT;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
     v->flags = 0;
@@ -973,16 +986,26 @@ void value_free(Value *v) {
     case VAL_STRING:
         agim_free(v->as.string);
         break;
-    case VAL_ARRAY:
-        agim_free(v->as.array->items);
-        agim_free(v->as.array);
+    case VAL_ARRAY: {
+        Array *arr = v->as.array;
+        for (size_t i = 0; i < arr->length; i++) {
+            if (arr->items[i]) {
+                value_free(arr->items[i]);
+            }
+        }
+        agim_free(arr->items);
+        agim_free(arr);
         break;
+    }
     case VAL_MAP: {
         Map *map = v->as.map;
         for (size_t i = 0; i < map->capacity; i++) {
             MapEntry *entry = map->buckets[i];
             while (entry) {
                 MapEntry *next = entry->next;
+                if (entry->value) {
+                    value_free(entry->value);
+                }
                 agim_free(entry->key);
                 agim_free(entry);
                 entry = next;
@@ -1009,19 +1032,34 @@ void value_free(Value *v) {
         agim_free(closure);
         break;
     }
-    case VAL_RESULT:
-        agim_free(v->as.result);
+    case VAL_RESULT: {
+        Result *res = v->as.result;
+        if (res && res->value) {
+            value_free(res->value);
+        }
+        agim_free(res);
         break;
-    case VAL_OPTION:
-        agim_free(v->as.option);
+    }
+    case VAL_OPTION: {
+        Option *opt = v->as.option;
+        if (opt && opt->is_some && opt->value) {
+            value_free(opt->value);
+        }
+        agim_free(opt);
         break;
+    }
     case VAL_STRUCT: {
         StructInstance *s = v->as.struct_val;
         if (s) {
-            agim_free(s->type_name);
             for (size_t i = 0; i < s->field_count; i++) {
-                agim_free(s->field_names[i]);
+                if (s->fields && s->fields[i]) {
+                    value_free(s->fields[i]);
+                }
+                if (s->field_names) {
+                    agim_free(s->field_names[i]);
+                }
             }
+            agim_free(s->type_name);
             agim_free(s->field_names);
             agim_free(s->fields);
             agim_free(s);
@@ -1031,6 +1069,9 @@ void value_free(Value *v) {
     case VAL_ENUM: {
         EnumInstance *e = v->as.enum_val;
         if (e) {
+            if (e->payload) {
+                value_free(e->payload);
+            }
             agim_free(e->type_name);
             agim_free(e->variant_name);
             agim_free(e);
@@ -1082,6 +1123,7 @@ Value *value_copy(const Value *v) {
         return value_pid(v->as.pid);
     case VAL_FUNCTION: {
         Value *copy = value_function(v->as.function->name, v->as.function->arity);
+        if (!copy) return NULL;
         copy->as.function->code_offset = v->as.function->code_offset;
         copy->as.function->locals_count = v->as.function->locals_count;
         copy->as.function->parent = v->as.function->parent;

@@ -8,6 +8,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "runtime/timer.h"
+#include "debug/log.h"
 
 #include <stdatomic.h>
 #include <stdint.h>
@@ -94,7 +95,10 @@ static void bucket_remove(TimerBucket *bucket, TimerEntry *entry) {
 
 TimerWheel *timer_wheel_new(const TimerConfig *config) {
     TimerWheel *wheel = malloc(sizeof(TimerWheel));
-    if (!wheel) return NULL;
+    if (!wheel) {
+        LOG_ERROR("timer: failed to allocate timer wheel");
+        return NULL;
+    }
 
     TimerConfig cfg = config ? *config : timer_config_default();
 
@@ -108,12 +112,15 @@ TimerWheel *timer_wheel_new(const TimerConfig *config) {
 
     wheel->buckets = calloc(wheel->wheel_size, sizeof(TimerBucket));
     if (!wheel->buckets) {
+        LOG_ERROR("timer: failed to allocate timer buckets");
         free(wheel);
         return NULL;
     }
 
     pthread_mutex_init(&wheel->lock, NULL);
 
+    LOG_DEBUG("timer: created wheel with %zu slots, %lums tick",
+              wheel->wheel_size, (unsigned long)wheel->tick_ms);
     return wheel;
 }
 
@@ -154,6 +161,7 @@ TimerEntry *timer_add(TimerWheel *wheel, Pid block_pid, uint64_t timeout_ms,
 
     TimerEntry *entry = timer_entry_alloc(wheel);
     if (!entry) {
+        LOG_ERROR("timer: failed to allocate timer entry for block %lu", (unsigned long)block_pid);
         pthread_mutex_unlock(&wheel->lock);
         return NULL;
     }

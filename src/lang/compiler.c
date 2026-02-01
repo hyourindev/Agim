@@ -9,6 +9,7 @@
 #include "lang/module.h"
 #include "util/alloc.h"
 #include "vm/value.h"
+#include "debug/log.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -60,6 +61,8 @@ struct Compiler {
 static void compile_error(Compiler *c, int line, const char *message) {
     if (c->had_error) return;
     c->had_error = true;
+
+    LOG_ERROR("compiler: line %d: %s", line, message ? message : "(no message)");
 
     /* Calculate required buffer size to avoid overflow */
     size_t msg_len = message ? strlen(message) : 0;
@@ -2563,6 +2566,10 @@ static void compile_fn(Compiler *c, AstNode *node, bool is_tool) {
 
     /* Create function value and store as global */
     Value *fn_val = value_function(node->as.fn_decl.name, node->as.fn_decl.param_count);
+    if (!fn_val) {
+        compile_error(c, node->line, "failed to allocate function value");
+        return;
+    }
     fn_val->as.function->code_offset = fn_index;
 
     size_t const_idx = chunk_add_constant(current_chunk(c), fn_val);
@@ -2797,6 +2804,10 @@ static void compile_program(Compiler *c, AstNode *node) {
 
 Compiler *compiler_new(void) {
     Compiler *c = agim_alloc(sizeof(Compiler));
+    if (!c) {
+        LOG_ERROR("compiler: failed to allocate compiler");
+        return NULL;
+    }
     c->code = NULL;
     c->current = NULL;
     c->error = NULL;
@@ -2804,6 +2815,7 @@ Compiler *compiler_new(void) {
     c->had_error = false;
     c->module_cache = NULL;
     c->source_path = NULL;
+    LOG_DEBUG("compiler: created new compiler instance");
     return c;
 }
 

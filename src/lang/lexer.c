@@ -7,6 +7,7 @@
 
 #include "lang/lexer.h"
 #include "util/alloc.h"
+#include "debug/log.h"
 
 #include <ctype.h>
 #include <string.h>
@@ -169,6 +170,10 @@ const char *token_type_name(TokenType type) {
 
 Lexer *lexer_new(const char *source) {
     Lexer *lexer = agim_alloc(sizeof(Lexer));
+    if (!lexer) {
+        LOG_ERROR("lexer: failed to allocate lexer");
+        return NULL;
+    }
     lexer->source = source;
     lexer->start = source;
     lexer->current = source;
@@ -176,6 +181,7 @@ Lexer *lexer_new(const char *source) {
     lexer->column = 1;
     lexer->start_column = 1;
     lexer->has_peeked = false;
+    LOG_DEBUG("lexer: created new lexer instance");
     return lexer;
 }
 

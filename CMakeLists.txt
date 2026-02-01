@@ -152,6 +152,8 @@ add_library(agim_vm STATIC
     src/debug/debug.c
     src/debug/trace.c
     src/debug/log.c
+    src/debug/metrics.c
+    src/debug/health.c
     src/vm/primitives.c
     # Runtime
     src/runtime/mailbox.c
@@ -484,6 +486,15 @@ if(AGIM_BUILD_TESTS)
     target_link_libraries(test_use_after_free agim_vm)
     add_test(NAME test_use_after_free COMMAND test_use_after_free)
 
+    # Debug/Observability tests
+    add_executable(test_metrics tests/debug/test_metrics.c)
+    target_link_libraries(test_metrics agim_vm)
+    add_test(NAME test_metrics COMMAND test_metrics)
+
+    add_executable(test_health tests/debug/test_health.c)
+    target_link_libraries(test_health agim_vm)
+    add_test(NAME test_health COMMAND test_health)
+
     # End-to-end tests for Erlang-like VM features
     add_executable(test_e2e_lifecycle tests/e2e/test_e2e_lifecycle.c)
     target_link_libraries(test_e2e_lifecycle agim_vm)
@@ -557,6 +568,11 @@ if(AGIM_BUILD_TESTS)
     target_include_directories(test_gc_properties PRIVATE tests/property)
     target_link_libraries(test_gc_properties agim_vm)
     add_test(NAME test_gc_properties COMMAND test_gc_properties)
+
+    add_executable(test_string_properties tests/property/test_string_properties.c)
+    target_include_directories(test_string_properties PRIVATE tests/property)
+    target_link_libraries(test_string_properties agim_vm)
+    add_test(NAME test_string_properties COMMAND test_string_properties)
 endif()
 
 # Agim CLI
@@ -579,6 +595,17 @@ target_link_libraries(agim_spawn_bench agim_vm)
 add_executable(agim_gc_bench bench/gc_bench.c)
 target_link_libraries(agim_gc_bench agim_vm)
 
+add_executable(agim_mailbox_bench bench/mailbox_bench.c)
+target_link_libraries(agim_mailbox_bench agim_vm)
+
+add_executable(agim_skynet_bench bench/skynet_bench.c)
+target_link_libraries(agim_skynet_bench agim_vm)
+
+add_executable(agim_ring_bench bench/ring_bench.c)
+target_link_libraries(agim_ring_bench agim_vm)
+
+add_executable(agim_io_bench bench/io_bench.c)
+
 # Fuzz targets (libFuzzer - Clang only)
 if(AGIM_ENABLE_FUZZING)
     # Lexer fuzzer
@@ -600,4 +627,9 @@ if(AGIM_ENABLE_FUZZING)
     add_executable(fuzz_nanbox fuzz/fuzz_nanbox.c)
     target_link_libraries(fuzz_nanbox agim_vm ${AGIM_FUZZER_LINK_FLAGS})
     target_link_options(fuzz_nanbox PRIVATE ${AGIM_FUZZER_LINK_FLAGS})
+
+    # JSON fuzzer
+    add_executable(fuzz_json fuzz/fuzz_json.c)
+    target_link_libraries(fuzz_json agim_vm ${AGIM_FUZZER_LINK_FLAGS})
+    target_link_options(fuzz_json PRIVATE ${AGIM_FUZZER_LINK_FLAGS})
 endif()

@@ -14,6 +14,7 @@
 
 #include "runtime/mailbox.h"
 #include "vm/value.h"
+#include "debug/log.h"
 
 #include <stdlib.h>
 #include <time.h>
@@ -22,7 +23,10 @@
 
 Message *message_new(Pid sender, Value *value) {
     Message *msg = malloc(sizeof(Message));
-    if (!msg) return NULL;
+    if (!msg) {
+        LOG_ERROR("mailbox: failed to allocate message from sender %lu", (unsigned long)sender);
+        return NULL;
+    }
 
     msg->sender = sender;
     msg->value = value;
@@ -228,6 +232,8 @@ SendResult mailbox_push_ex(Mailbox *mailbox, Message *msg) {
         if (current >= mailbox->max_messages) {
             switch (mailbox->overflow_policy) {
             case OVERFLOW_DROP_NEW:
+                LOG_DEBUG("mailbox: dropping new message, count limit reached (%zu/%zu)",
+                          current, mailbox->max_messages);
                 atomic_fetch_add_explicit(&mailbox->dropped_count, 1, memory_order_relaxed);
                 return SEND_FULL;
 
@@ -253,6 +259,8 @@ SendResult mailbox_push_ex(Mailbox *mailbox, Message *msg) {
         if (current_bytes + msg_size > mailbox->max_bytes) {
             switch (mailbox->overflow_policy) {
             case OVERFLOW_DROP_NEW:
+                LOG_DEBUG("mailbox: dropping new message, byte limit reached (%zu+%zu > %zu)",
+                          current_bytes, msg_size, mailbox->max_bytes);
                 atomic_fetch_add_explicit(&mailbox->dropped_count, 1, memory_order_relaxed);
                 return SEND_FULL;
 
@@ -344,9 +352,6 @@ Message *mailbox_receive(Mailbox *mailbox, uint64_t timeout_ms) {
         deadline.tv_nsec -= 1000000000;
     }
 
-    /* TOCTOU fix: Pop inside the critical section to prevent message theft.
-     * The message could be stolen by another thread between mutex unlock
-     * and the final pop if we pop outside the critical section. */
     while ((msg = mailbox_pop(mailbox)) == NULL) {
         int rc = pthread_cond_timedwait(&mailbox->cond, &mailbox->cond_mutex, &deadline);
         if (rc != 0) {

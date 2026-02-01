@@ -7,6 +7,7 @@
 
 #include "util/pool.h"
 #include "util/alloc.h"
+#include "debug/log.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -151,12 +152,12 @@ void pool_dealloc(MemoryPool *pool, void *ptr) {
     if (!pool_owns_ptr(pool, ptr)) {
         pthread_mutex_unlock(&pool->lock);
 #ifdef AGIM_DEBUG
-        fprintf(stderr, "agim: pool_dealloc called with pointer not owned by pool "
-                "(ptr=%p, block_size=%zu)\n", ptr, pool->block_size);
+        LOG_FATAL("pool: dealloc called with pointer not owned by pool (ptr=%p, block_size=%zu)",
+                  ptr, pool->block_size);
         abort();
 #else
         /* In release mode, log warning but don't corrupt the free list */
-        fprintf(stderr, "agim: warning: invalid pool_dealloc ignored (ptr=%p)\n", ptr);
+        LOG_WARN("pool: invalid dealloc ignored (ptr=%p)", ptr);
         return;
 #endif
     }
@@ -286,21 +287,21 @@ void pools_dealloc(void *ptr, size_t size) {
 
     /* Check for double-free */
     if (header->magic == POOL_MAGIC_FREE) {
-        fprintf(stderr, "agim: double-free detected in pool (ptr=%p, size=%zu)\n", ptr, size);
+        LOG_FATAL("pool: double-free detected (ptr=%p, size=%zu)", ptr, size);
         abort();
     }
 
     /* Check for invalid pointer (not allocated by pool) */
     if (header->magic != POOL_MAGIC_ALLOCATED) {
-        fprintf(stderr, "agim: invalid pointer passed to pools_dealloc "
-                "(ptr=%p, size=%zu, magic=0x%08x)\n", ptr, size, header->magic);
+        LOG_FATAL("pool: invalid pointer passed to dealloc (ptr=%p, size=%zu, magic=0x%08x)",
+                  ptr, size, header->magic);
         abort();
     }
 
     /* Check size matches */
     if (header->size != (uint32_t)size) {
-        fprintf(stderr, "agim: size mismatch in pools_dealloc "
-                "(ptr=%p, expected=%u, got=%zu)\n", ptr, header->size, size);
+        LOG_FATAL("pool: size mismatch in dealloc (ptr=%p, expected=%u, got=%zu)",
+                  ptr, header->size, size);
         abort();
     }
 

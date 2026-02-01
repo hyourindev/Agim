@@ -255,6 +255,7 @@ void test_state_machine_history(void) {
 
     for (int i = 0; i < 2; i++) {
         Message *msg = block_receive(machine);
+        ASSERT(msg != NULL && msg->value != NULL);
         const char *event = value_to_string(msg->value);
 
         if (state == STATE_IDLE && strcmp(event, "start") == 0) {

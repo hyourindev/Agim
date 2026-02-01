@@ -88,10 +88,12 @@ void test_array(void) {
 
     Value *new_arr;
     Value *popped = array_pop(arr, &new_arr);
+    ASSERT(popped != NULL);
     arr = new_arr;
     ASSERT_EQ(3, popped->as.integer);
     ASSERT_EQ(2, array_length(arr));
 
+    value_free(popped);
     value_free(arr);
 }
 
@@ -109,6 +111,7 @@ void test_map(void) {
     ASSERT(!map_has(m, "baz"));
 
     Value *foo = map_get(m, "foo");
+    ASSERT(foo != NULL);
     ASSERT_EQ(42, foo->as.integer);
 
     value_free(m);

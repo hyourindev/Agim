@@ -113,7 +113,7 @@ void test_array_cow_on_set(void) {
 
     /* Set should trigger COW - returns a NEW Value */
     arr = array_set(arr, 0, value_int(100));
-
+    ASSERT(arr != NULL);
     ASSERT_EQ(1, atomic_load(&arr->refcount));
     ASSERT(arr != original_value);
 
@@ -204,7 +204,7 @@ void test_map_cow_on_delete(void) {
 
     /* Delete should trigger COW - returns NEW Value */
     m = map_delete(m, "foo");
-
+    ASSERT(m != NULL);
     ASSERT_EQ(1, atomic_load(&m->refcount));
     ASSERT(m != original_value);
 
@@ -226,7 +226,7 @@ void test_map_cow_on_clear(void) {
 
     /* Clear should trigger COW - returns NEW Value */
     m = map_clear(m);
-
+    ASSERT(m != NULL);
     ASSERT_EQ(1, atomic_load(&m->refcount));
     ASSERT(m != original_value);
     ASSERT_EQ(0, map_size(m));

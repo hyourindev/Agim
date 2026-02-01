@@ -11,6 +11,7 @@
 #include "runtime/worker.h"
 #include "runtime/scheduler.h"
 #include "vm/vm.h"
+#include "debug/log.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -211,12 +212,16 @@ static void *worker_loop(void *arg);
 
 Worker *worker_new(int id, Scheduler *scheduler) {
     Worker *worker = malloc(sizeof(Worker));
-    if (!worker) return NULL;
+    if (!worker) {
+        LOG_ERROR("worker: allocation failed for worker %d", id);
+        return NULL;
+    }
 
     worker->id = id;
     worker->scheduler = scheduler;
     worker->vm = vm_new();
     if (!worker->vm) {
+        LOG_ERROR("worker: VM creation failed for worker %d", id);
         free(worker);
         return NULL;
     }
@@ -235,6 +240,7 @@ Worker *worker_new(int id, Scheduler *scheduler) {
     worker->rng_state = (uint64_t)id * 2654435761UL + (uint64_t)(uintptr_t)worker;
     if (worker->rng_state == 0) worker->rng_state = 1;
 
+    LOG_DEBUG("worker: created worker %d", id);
     return worker;
 }
 

@@ -11,6 +11,7 @@
 #include "runtime/block.h"
 #include "runtime/scheduler.h"
 #include "runtime/timer.h"
+#include "debug/log.h"
 
 #include <stdatomic.h>
 
@@ -42,7 +43,10 @@ Checkpoint *checkpoint_create(Block *block) {
     if (!block) return NULL;
 
     Checkpoint *cp = calloc(1, sizeof(Checkpoint));
-    if (!cp) return NULL;
+    if (!cp) {
+        LOG_ERROR("checkpoint: failed to allocate Checkpoint");
+        return NULL;
+    }
 
     cp->timestamp_ms = timer_current_time_ms();
     cp->checkpoint_id = cp->timestamp_ms;
@@ -58,6 +62,7 @@ Checkpoint *checkpoint_create(Block *block) {
     if (block->vm && block->vm->globals) {
         SerializeResult res = serialize_value(block->vm->globals, &cp->globals_state);
         if (res != SERIALIZE_OK) {
+            LOG_ERROR("checkpoint: failed to serialize globals for block %lu", block->pid);
             checkpoint_free(cp);
             return NULL;
         }

@@ -39,7 +39,8 @@ static void cleanup_checkpoint_dir(void)
 	/* Remove test files */
 	char cmd[256];
 	snprintf(cmd, sizeof(cmd), "rm -rf %s", test_checkpoint_dir);
-	system(cmd);
+	int ret = system(cmd);
+	(void)ret;
 }
 
 /* Test 1: Create checkpoint from block */

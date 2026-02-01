@@ -10,6 +10,7 @@
 #include "vm/gc.h"
 #include "vm/nanbox_convert.h"
 #include "util/alloc.h"
+#include "debug/log.h"
 
 #include <stdatomic.h>
 #include <string.h>
@@ -28,10 +29,14 @@ Value *value_closure(Function *function, size_t upvalue_count) {
     if (!function) return value_nil();
 
     Value *v = agim_alloc(sizeof(Value));
-    if (!v) return NULL;
+    if (!v) {
+        LOG_ERROR("closure: failed to allocate Value");
+        return NULL;
+    }
 
     Closure *closure = agim_alloc(sizeof(Closure));
     if (!closure) {
+        LOG_ERROR("closure: failed to allocate Closure");
         agim_free(v);
         return NULL;
     }
@@ -40,6 +45,7 @@ Value *value_closure(Function *function, size_t upvalue_count) {
     if (upvalue_count > 0) {
         upvalues = agim_alloc(sizeof(Upvalue *) * upvalue_count);
         if (!upvalues) {
+            LOG_ERROR("closure: failed to allocate %zu upvalues", upvalue_count);
             agim_free(closure);
             agim_free(v);
             return NULL;
@@ -69,7 +75,10 @@ bool value_is_closure(const Value *v) {
 
 Upvalue *upvalue_new(NanValue *slot) {
     Upvalue *upvalue = agim_alloc(sizeof(Upvalue));
-    if (!upvalue) return NULL;
+    if (!upvalue) {
+        LOG_ERROR("closure: failed to allocate Upvalue");
+        return NULL;
+    }
     upvalue->location = slot;
     upvalue->closed = NANBOX_NIL;
     upvalue->next = NULL;

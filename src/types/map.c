@@ -12,6 +12,7 @@
 #include "vm/gc.h"
 #include "util/alloc.h"
 #include "util/hash.h"
+#include "debug/log.h"
 
 #include <stdatomic.h>
 #include <string.h>
@@ -28,7 +29,10 @@ Heap *map_get_gc_heap(void) {
 
 Value *value_map_with_capacity(size_t capacity) {
     Value *v = agim_alloc(sizeof(Value));
-    if (!v) return NULL;
+    if (!v) {
+        LOG_ERROR("map: failed to allocate Value");
+        return NULL;
+    }
 
     v->type = VAL_MAP;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
@@ -38,6 +42,7 @@ Value *value_map_with_capacity(size_t capacity) {
 
     Map *map = agim_alloc(sizeof(Map));
     if (!map) {
+        LOG_ERROR("map: failed to allocate Map struct");
         agim_free(v);
         return NULL;
     }
@@ -45,6 +50,7 @@ Value *value_map_with_capacity(size_t capacity) {
     map->capacity = capacity > 0 ? capacity : 16;
     map->buckets = agim_alloc(sizeof(MapEntry *) * map->capacity);
     if (!map->buckets) {
+        LOG_ERROR("map: failed to allocate buckets for capacity %zu", map->capacity);
         agim_free(map);
         agim_free(v);
         return NULL;
@@ -237,6 +243,10 @@ Value *map_set(Value *v, const char *key, Value *value) {
 
     MapEntry *existing = find_entry_internal(map, key, key_hash);
     if (existing) {
+        /* Free the old value being replaced */
+        if (existing->value) {
+            value_free(existing->value);
+        }
         existing->value = value;
         return writable;
     }
@@ -303,6 +313,10 @@ Value *map_delete(Value *v, const char *key) {
             } else {
                 map->buckets[index] = entry->next;
             }
+            /* Free the deleted value */
+            if (entry->value) {
+                value_free(entry->value);
+            }
             agim_free(entry->key);
             agim_free(entry);
             map->size--;
@@ -326,6 +340,10 @@ Value *map_clear(Value *v) {
         MapEntry *entry = map->buckets[i];
         while (entry) {
             MapEntry *next = entry->next;
+            /* Free the value */
+            if (entry->value) {
+                value_free(entry->value);
+            }
             agim_free(entry->key);
             agim_free(entry);
             entry = next;
@@ -362,7 +380,7 @@ Value *map_values(const Value *v) {
     for (size_t i = 0; i < map->capacity; i++) {
         MapEntry *entry = map->buckets[i];
         while (entry) {
-            result = array_push(result, entry->value);
+            result = array_push(result, value_retain(entry->value));
             entry = entry->next;
         }
     }
@@ -380,7 +398,7 @@ Value *map_entries(const Value *v) {
         while (entry) {
             Value *pair = value_array_with_capacity(2);
             pair = array_push(pair, value_string(entry->key->data));
-            pair = array_push(pair, entry->value);
+            pair = array_push(pair, value_retain(entry->value));
             result = array_push(result, pair);
             entry = entry->next;
         }

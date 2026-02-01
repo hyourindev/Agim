@@ -6,6 +6,7 @@
  */
 
 #include "runtime/capability.h"
+#include "debug/log.h"
 
 const char *capability_name(Capability cap) {
     switch (cap) {

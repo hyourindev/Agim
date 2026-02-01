@@ -11,6 +11,7 @@
 #include "types/string.h"
 #include "types/array.h"
 #include "types/map.h"
+#include "debug/log.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -57,13 +58,17 @@ bool serial_buffer_ensure(SerialBuffer *buf, size_t needed) {
     size_t new_capacity = buf->capacity ? buf->capacity : INITIAL_CAPACITY;
     while (new_capacity < required) {
         if (new_capacity > SIZE_MAX / 2) {
+            LOG_ERROR("serialize: buffer size overflow");
             return false;  /* Overflow protection */
         }
         new_capacity *= 2;
     }
 
     uint8_t *new_data = realloc(buf->data, new_capacity);
-    if (!new_data) return false;
+    if (!new_data) {
+        LOG_ERROR("serialize: failed to grow buffer to %zu bytes", new_capacity);
+        return false;
+    }
 
     buf->data = new_data;
     buf->capacity = new_capacity;

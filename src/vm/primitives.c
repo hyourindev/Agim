@@ -7,11 +7,16 @@
 
 #include "vm/primitives.h"
 #include "util/alloc.h"
+#include "debug/log.h"
 
 /* Primitives Runtime */
 
 PrimitivesRuntime *primitives_new(void) {
     PrimitivesRuntime *rt = agim_alloc(sizeof(PrimitivesRuntime));
+    if (!rt) {
+        LOG_ERROR("primitives: failed to allocate PrimitivesRuntime");
+        return NULL;
+    }
 
     inference_init(&rt->inference);
     tools_init(&rt->tools);

@@ -14,6 +14,7 @@
 #include "types/string.h"
 #include "types/closure.h"
 #include "util/alloc.h"
+#include "debug/log.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -25,6 +26,10 @@
 
 RegChunk *regchunk_new(void) {
     RegChunk *chunk = agim_alloc(sizeof(RegChunk));
+    if (!chunk) {
+        LOG_ERROR("regvm: failed to allocate RegChunk");
+        return NULL;
+    }
 
     chunk->code_capacity = 256;
     chunk->code_size = 0;

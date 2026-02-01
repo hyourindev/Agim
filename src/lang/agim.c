@@ -12,6 +12,7 @@
 #include "lang/compiler.h"
 #include "vm/vm.h"
 #include "util/alloc.h"
+#include "debug/log.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,6 +37,7 @@ Bytecode *agim_compile(const char *source, const char **error) {
 
     if (!ast) {
         if (error && parser_error(parser)) {
+            LOG_ERROR("compile: parse error: %s", parser_error(parser));
             size_t len = strlen(parser_error(parser));
             *error = agim_alloc(len + 1);
             memcpy((char *)*error, parser_error(parser), len + 1);
@@ -72,10 +74,13 @@ Bytecode *agim_compile(const char *source, const char **error) {
 
     if (!code) {
         if (error && compiler_error(compiler)) {
+            LOG_ERROR("compile: compiler error: %s", compiler_error(compiler));
             size_t len = strlen(compiler_error(compiler));
             *error = agim_alloc(len + 1);
             memcpy((char *)*error, compiler_error(compiler), len + 1);
         }
+    } else {
+        LOG_DEBUG("compile: compiled source successfully");
     }
 
     compiler_free(compiler);
@@ -91,6 +96,7 @@ Bytecode *agim_compile_file(const char *path, const char **error) {
 
     FILE *file = fopen(path, "rb");
     if (!file) {
+        LOG_ERROR("compile: could not open file: %s", path);
         if (error) {
             char buffer[256];
             snprintf(buffer, sizeof(buffer), "could not open file: %s", path);

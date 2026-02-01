@@ -7,6 +7,7 @@
 
 #include "lang/parser.h"
 #include "util/alloc.h"
+#include "debug/log.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -35,6 +36,8 @@ static void error_at(Parser *parser, Token *token, const char *message) {
     if (parser->panic_mode) return;
     parser->panic_mode = true;
     parser->had_error = true;
+
+    LOG_ERROR("parser: line %d: %s", token->line, message ? message : "(no message)");
 
     /* Calculate required buffer size to avoid overflow */
     size_t msg_len = message ? strlen(message) : 0;
@@ -1567,6 +1570,10 @@ static AstNode *parse_declaration(Parser *parser) {
 
 Parser *parser_new(Lexer *lexer) {
     Parser *parser = agim_alloc(sizeof(Parser));
+    if (!parser) {
+        LOG_ERROR("parser: failed to allocate parser");
+        return NULL;
+    }
     parser->lexer = lexer;
     parser->error = NULL;
     parser->error_line = 0;
@@ -1576,6 +1583,7 @@ Parser *parser_new(Lexer *lexer) {
 
     /* Prime the parser */
     advance(parser);
+    LOG_DEBUG("parser: created new parser instance");
     return parser;
 }
 

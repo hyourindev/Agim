@@ -339,6 +339,7 @@ void test_supervisor_pattern(void) {
     /* Each worker is monitored by supervisor */
     for (int i = 0; i < 3; i++) {
         Block *worker = scheduler_get_block(sched, workers[i]);
+        ASSERT(worker != NULL);
         ASSERT_EQ(1, worker->monitored_by_count);
     }
 

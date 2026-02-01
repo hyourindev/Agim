@@ -311,6 +311,7 @@ void test_execution_fairness(void) {
     /* All blocks should complete (fairness ensures none starve) */
     for (int i = 0; i < 3; i++) {
         Block *block = scheduler_get_block(sched, pids[i]);
+        ASSERT(block != NULL);
         ASSERT_EQ(BLOCK_DEAD, block_state(block));
         /* Each block should have done some reductions */
         ASSERT(block->counters.reductions > 0);

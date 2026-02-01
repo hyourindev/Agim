@@ -10,6 +10,7 @@
 #include "runtime/procgroup.h"
 #include "runtime/scheduler.h"
 #include "vm/value.h"
+#include "debug/log.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -18,7 +19,10 @@
 
 ProcessGroupRegistry *procgroup_registry_new(void) {
     ProcessGroupRegistry *reg = calloc(1, sizeof(ProcessGroupRegistry));
-    if (!reg) return NULL;
+    if (!reg) {
+        LOG_ERROR("procgroup: failed to allocate ProcessGroupRegistry");
+        return NULL;
+    }
 
     reg->groups = NULL;
     reg->count = 0;
@@ -58,7 +62,10 @@ void procgroup_registry_free(ProcessGroupRegistry *reg) {
 
 static ProcessGroup *group_new(const char *name) {
     ProcessGroup *group = calloc(1, sizeof(ProcessGroup));
-    if (!group) return NULL;
+    if (!group) {
+        LOG_ERROR("procgroup: failed to allocate ProcessGroup '%s'", name);
+        return NULL;
+    }
 
     strncpy(group->name, name, GROUP_NAME_MAX - 1);
     group->name[GROUP_NAME_MAX - 1] = '\0';
@@ -167,6 +174,7 @@ const char **procgroup_list(ProcessGroupRegistry *reg, size_t *count) {
 
     const char **names = malloc(sizeof(char *) * reg->count);
     if (!names) {
+        LOG_ERROR("procgroup: failed to allocate names array for %zu groups", reg->count);
         *count = 0;
         pthread_rwlock_unlock(&reg->lock);
         return NULL;
@@ -202,6 +210,8 @@ bool procgroup_join(ProcessGroupRegistry *reg, const char *name, Pid pid) {
         size_t new_capacity = group->capacity ? group->capacity * 2 : 8;
         Pid *new_members = realloc(group->members, sizeof(Pid) * new_capacity);
         if (!new_members) {
+            LOG_ERROR("procgroup: failed to grow members array to %zu for group '%s'",
+                      new_capacity, group->name);
             pthread_mutex_unlock(&group->lock);
             return false;
         }
@@ -288,6 +298,8 @@ Pid *procgroup_members(ProcessGroupRegistry *reg, const char *name, size_t *coun
 
     Pid *members = malloc(sizeof(Pid) * group->count);
     if (!members) {
+        LOG_ERROR("procgroup: failed to allocate members copy for group '%s' (%zu members)",
+                  group->name, group->count);
         pthread_mutex_unlock(&group->lock);
         return NULL;
     }

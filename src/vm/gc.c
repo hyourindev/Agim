@@ -8,6 +8,8 @@
 #include "vm/gc.h"
 #include "vm/nanbox.h"
 #include "types/closure.h"
+#include "util/alloc.h"
+#include "debug/log.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -82,13 +84,100 @@ Heap *heap_new(const GCConfig *config) {
     return heap;
 }
 
+/* Free a value's immediate memory without recursing into children.
+ * Used by heap_free since all objects are in the heap's object list
+ * and will be freed individually - we don't want to double-free children. */
+static void gc_free_shallow(Value *v) {
+    if (!v) return;
+
+    switch (v->type) {
+    case VAL_STRING:
+        agim_free(v->as.string);
+        break;
+    case VAL_ARRAY:
+        /* Don't free elements - they're separate heap objects */
+        agim_free(v->as.array->items);
+        agim_free(v->as.array);
+        break;
+    case VAL_MAP: {
+        Map *map = v->as.map;
+        for (size_t i = 0; i < map->capacity; i++) {
+            MapEntry *entry = map->buckets[i];
+            while (entry) {
+                MapEntry *next = entry->next;
+                /* Don't free entry->value - it's a separate heap object */
+                agim_free(entry->key);
+                agim_free(entry);
+                entry = next;
+            }
+        }
+        agim_free(map->buckets);
+        agim_free(map);
+        break;
+    }
+    case VAL_FUNCTION:
+        agim_free((void *)v->as.function->name);
+        agim_free(v->as.function);
+        break;
+    case VAL_BYTES:
+        agim_free(v->as.bytes->data);
+        agim_free(v->as.bytes);
+        break;
+    case VAL_VECTOR:
+        agim_free(v->as.vector);
+        break;
+    case VAL_CLOSURE: {
+        Closure *closure = (Closure *)v->as.closure;
+        agim_free(closure->upvalues);
+        agim_free(closure);
+        break;
+    }
+    case VAL_RESULT:
+        agim_free(v->as.result);
+        break;
+    case VAL_OPTION:
+        agim_free(v->as.option);
+        break;
+    case VAL_STRUCT: {
+        StructInstance *s = v->as.struct_val;
+        if (s) {
+            for (size_t i = 0; i < s->field_count; i++) {
+                if (s->field_names) {
+                    agim_free(s->field_names[i]);
+                }
+                /* Don't free s->fields[i] - it's a separate heap object */
+            }
+            agim_free(s->type_name);
+            agim_free(s->field_names);
+            agim_free(s->fields);
+            agim_free(s);
+        }
+        break;
+    }
+    case VAL_ENUM: {
+        EnumInstance *e = v->as.enum_val;
+        if (e) {
+            /* Don't free e->payload - it's a separate heap object */
+            agim_free(e->type_name);
+            agim_free(e->variant_name);
+            agim_free(e);
+        }
+        break;
+    }
+    default:
+        break;
+    }
+
+    agim_free(v);
+}
+
 void heap_free(Heap *heap) {
     if (!heap) return;
 
     Value *object = heap->objects;
     while (object) {
         Value *next = object->next;
-        value_free(object);
+        gc_free_shallow(object);
         object = next;
     }
 
@@ -163,7 +252,8 @@ Value *heap_alloc_with_gc(Heap *heap, ValueType type, VM *vm) {
             }
         }
         if (heap->bytes_allocated + size > heap->max_size) {
-            fprintf(stderr, "agim: heap limit exceeded\n");
+            LOG_ERROR("gc: heap limit exceeded (allocated=%zu, requested=%zu, max=%zu)",
+                      heap->bytes_allocated, size, heap->max_size);
             return NULL;
         }
     }
@@ -241,7 +331,8 @@ Value *heap_alloc(Heap *heap, ValueType type) {
     }
 
     if (heap->bytes_allocated + size > heap->max_size) {
-        fprintf(stderr, "agim: heap limit exceeded\n");
+        LOG_ERROR("gc: heap limit exceeded after GC (allocated=%zu, requested=%zu, max=%zu)",
+                  heap->bytes_allocated, size, heap->max_size);
         return NULL;
     }
 
@@ -446,9 +537,10 @@ static void sweep(Heap *heap) {
 /* Collection */
 
 void gc_collect(Heap *heap, VM *vm) {
-#ifdef AGIM_DEBUG
-    printf("-- gc begin (used: %zu bytes)\n", heap->bytes_allocated);
     size_t before = heap->bytes_allocated;
+
+#ifdef AGIM_DEBUG
+    printf("-- gc begin (used: %zu bytes)\n", before);
 #endif
 
     gc_mark_roots(vm);
@@ -461,9 +553,13 @@ void gc_collect(Heap *heap, VM *vm) {
 
     heap->gc_count++;
 
+    size_t freed = before - heap->bytes_allocated;
+    LOG_DEBUG("gc: freed=%zu bytes, now=%zu bytes, count=%zu",
+              freed, heap->bytes_allocated, heap->gc_count);
+
 #ifdef AGIM_DEBUG
     printf("-- gc end (freed: %zu bytes, now: %zu bytes)\n",
-           before - heap->bytes_allocated, heap->bytes_allocated);
+           freed, heap->bytes_allocated);
 #endif
 }
 

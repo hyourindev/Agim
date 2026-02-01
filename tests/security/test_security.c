@@ -527,6 +527,7 @@ static void *sort_thread_func(void *arg) {
         for (size_t i = 1; i < array_length(arr); i++) {
             Value *prev = array_get(arr, i - 1);
             Value *curr = array_get(arr, i);
+            ASSERT(prev != NULL && curr != NULL);
             ASSERT(prev->as.integer >= curr->as.integer);
         }
 

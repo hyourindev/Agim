@@ -382,7 +382,11 @@ void test_map_null_inputs(void) {
     ASSERT_EQ(0, map_size(NULL));
     ASSERT(map_get(NULL, "key") == NULL);
     ASSERT(!map_has(NULL, "key"));
-    ASSERT(map_set(NULL, "key", value_int(1)) == NULL);
+
+    Value *unused_val = value_int(1);
+    ASSERT(map_set(NULL, "key", unused_val) == NULL);
+    value_free(unused_val);
+
     ASSERT(map_delete(NULL, "key") == NULL);
 
     /* map_keys returns empty array when NULL - defensive behavior */

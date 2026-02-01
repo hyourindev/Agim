@@ -10,6 +10,7 @@
 
 #include "vm/sandbox.h"
 #include "util/alloc.h"
+#include "debug/log.h"
 
 #include <limits.h>
 #include <stdio.h>
@@ -42,7 +43,10 @@ void sandbox_set_global(Sandbox *sandbox) {
 
 Sandbox *sandbox_new(void) {
     Sandbox *sandbox = agim_alloc(sizeof(Sandbox));
-    if (!sandbox) return NULL;
+    if (!sandbox) {
+        LOG_ERROR("sandbox: failed to allocate sandbox");
+        return NULL;
+    }
 
     sandbox->allowed_read_dirs = NULL;
     sandbox->read_count = 0;

@@ -11,6 +11,7 @@
 #include "vm/value.h"
 #include "util/alloc.h"
 #include "util/hash.h"
+#include "debug/log.h"
 
 #include <string.h>
 
@@ -33,9 +34,18 @@ static MemoryEntry *memory_find(MemoryStore *store, const char *key) {
 
 MemoryStore *memory_store_new(void) {
     MemoryStore *store = agim_alloc(sizeof(MemoryStore));
+    if (!store) {
+        LOG_ERROR("memory: failed to allocate MemoryStore");
+        return NULL;
+    }
     store->capacity = 64;
     store->size = 0;
     store->buckets = agim_alloc(sizeof(MemoryEntry *) * store->capacity);
+    if (!store->buckets) {
+        LOG_ERROR("memory: failed to allocate buckets array (capacity %zu)", store->capacity);
+        agim_free(store);
+        return NULL;
+    }
     memset(store->buckets, 0, sizeof(MemoryEntry *) * store->capacity);
     return store;
 }
@@ -83,7 +93,16 @@ bool memory_set(MemoryStore *store, const char *key, Value *value) {
 
     /* Create new entry */
     MemoryEntry *entry = agim_alloc(sizeof(MemoryEntry));
+    if (!entry) {
+        LOG_ERROR("memory: failed to allocate MemoryEntry for key '%s'", key);
+        return false;
+    }
     entry->key = strdup(key);
+    if (!entry->key) {
+        LOG_ERROR("memory: failed to duplicate key '%s'", key);
+        agim_free(entry);
+        return false;
+    }
     entry->value = value_copy(value);
 
     /* Insert at bucket head */

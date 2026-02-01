@@ -9,6 +9,7 @@
 #include "lang/lexer.h"
 #include "lang/parser.h"
 #include "util/alloc.h"
+#include "debug/log.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,6 +28,10 @@
 
 ModuleCache *module_cache_new(void) {
     ModuleCache *cache = agim_alloc(sizeof(ModuleCache));
+    if (!cache) {
+        LOG_ERROR("module: failed to allocate ModuleCache");
+        return NULL;
+    }
     cache->modules = NULL;
     cache->count = 0;
     cache->capacity = 0;
@@ -100,12 +105,14 @@ void module_loading_pop(ModuleCache *cache) {
 char *module_resolve_path(const char *path, const char *base_path) {
     /* Security: Reject paths containing ".." to prevent path traversal attacks */
     if (strstr(path, "..") != NULL) {
+        LOG_WARN("module: rejecting path with '..': %s", path);
         return NULL;
     }
 
     /* If path is absolute, reject it for sandboxing unless explicitly allowed */
     if (path[0] == '/' || (strlen(path) > 1 && path[1] == ':')) {
         /* For now, reject absolute paths in sandboxed context */
+        LOG_WARN("module: rejecting absolute path: %s", path);
         return NULL;
     }
 

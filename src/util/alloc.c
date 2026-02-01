@@ -6,6 +6,7 @@
  */
 
 #include "util/alloc.h"
+#include "debug/log.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,6 +44,7 @@ void *agim_alloc(size_t size) {
     void *ptr = malloc(size);
     if (!ptr && size > 0) {
         agim_set_error(AGIM_E_NOMEM);
+        LOG_ERROR("alloc: failed to allocate %zu bytes", size);
     }
     return ptr;
 }
@@ -51,6 +53,7 @@ void *agim_realloc(void *ptr, size_t size) {
     void *new_ptr = realloc(ptr, size);
     if (!new_ptr && size > 0) {
         agim_set_error(AGIM_E_NOMEM);
+        LOG_ERROR("alloc: failed to realloc to %zu bytes", size);
     }
     return new_ptr;
 }

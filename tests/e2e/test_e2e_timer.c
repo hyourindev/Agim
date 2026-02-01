@@ -180,7 +180,7 @@ void test_timer_with_context(void)
 
 	int context_value = 42;
 	TimerEntry *entry = timer_add(wheel, 1, 10, test_callback, &context_value);
-
+	ASSERT(entry != NULL);
 	ASSERT(entry->callback_ctx == &context_value);
 
 	timer_wheel_free(wheel);

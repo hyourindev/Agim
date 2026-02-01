@@ -11,6 +11,7 @@
 #include "runtime/block.h"
 #include "vm/value.h"
 #include "util/alloc.h"
+#include "debug/log.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -59,6 +60,7 @@ bool tools_register_with_schema(ToolRegistry *registry, const char *name,
     Tool *existing = registry->tools;
     while (existing) {
         if (strcmp(existing->name, name) == 0) {
+            LOG_WARN("tools: tool '%s' already registered", name);
             return false;
         }
         existing = existing->next;
@@ -66,6 +68,10 @@ bool tools_register_with_schema(ToolRegistry *registry, const char *name,
 
     /* Create new tool */
     Tool *tool = agim_alloc(sizeof(Tool));
+    if (!tool) {
+        LOG_ERROR("tools: failed to allocate Tool for '%s'", name);
+        return false;
+    }
     tool->name = strdup(name);
     tool->description = description ? strdup(description) : NULL;
     tool->func = func;
@@ -121,17 +127,21 @@ Value *tools_call(ToolRegistry *registry, Block *block,
     }
 
     if (!tool) {
+        LOG_WARN("tools: tool '%s' not found", name);
         return NULL;
     }
 
     /* Check arity */
     if (arg_count < tool->min_args || arg_count > tool->max_args) {
+        LOG_ERROR("tools: tool '%s' arity mismatch (got %zu, expected %zu-%zu)",
+                  name, arg_count, tool->min_args, tool->max_args);
         return NULL;
     }
 
     /* Check capabilities */
     if (block && tool->required_caps) {
         if (!block_has_cap(block, tool->required_caps)) {
+            LOG_WARN("tools: block lacks required capabilities for tool '%s'", name);
             return NULL;
         }
     }
@@ -180,6 +190,10 @@ char *tools_get_schema_json(const Tool *tool) {
     /* Build OpenAI function calling compatible schema */
     size_t capacity = 1024;
     char *buf = agim_alloc(capacity);
+    if (!buf) {
+        LOG_ERROR("tools: failed to allocate schema buffer for tool '%s'", tool->name);
+        return NULL;
+    }
     size_t len = 0;
 
     len += snprintf(buf + len, capacity - len,
@@ -251,6 +265,10 @@ char *tools_get_all_schemas_json(ToolRegistry *registry) {
 
     size_t capacity = 4096;
     char *buf = agim_alloc(capacity);
+    if (!buf) {
+        LOG_ERROR("tools: failed to allocate all-schemas buffer");
+        return NULL;
+    }
     size_t len = 0;
 
     len += snprintf(buf + len, capacity - len, "[");
@@ -271,6 +289,7 @@ char *tools_get_all_schemas_json(ToolRegistry *registry) {
                 capacity *= 2;
                 char *new_buf = agim_realloc(buf, capacity);
                 if (!new_buf) {
+                    LOG_ERROR("tools: failed to grow all-schemas buffer to %zu bytes", capacity);
                     agim_free(schema);
                     agim_free(buf);
                     return NULL;
@@ -459,6 +478,7 @@ static Value *bytecode_tool_call(Block *block, Value **args, size_t arg_count,
                                   void *context) {
     BytecodeToolContext *ctx = (BytecodeToolContext *)context;
     if (!ctx || !ctx->vm || !ctx->code) {
+        LOG_ERROR("tools: bytecode tool called with invalid context");
         return value_nil();
     }
 
@@ -467,18 +487,22 @@ static Value *bytecode_tool_call(Block *block, Value **args, size_t arg_count,
 
     /* Validate function index */
     if (func_index >= ctx->code->functions_count) {
+        LOG_ERROR("tools: bytecode tool function index %zu out of bounds (max %zu)",
+                  func_index, ctx->code->functions_count);
         return value_nil();
     }
 
     /* Get the function chunk */
     Chunk *func_chunk = ctx->code->functions[func_index];
     if (!func_chunk) {
+        LOG_ERROR("tools: bytecode tool function chunk at index %zu is NULL", func_index);
         return value_nil();
     }
 
     /* Create a function value to call */
     Function *fn = agim_alloc(sizeof(Function));
     if (!fn) {
+        LOG_ERROR("tools: failed to allocate Function for bytecode tool");
         return value_nil();
     }
     fn->name = NULL;
@@ -489,6 +513,7 @@ static Value *bytecode_tool_call(Block *block, Value **args, size_t arg_count,
 
     Value *func_val = agim_alloc(sizeof(Value));
     if (!func_val) {
+        LOG_ERROR("tools: failed to allocate Value for bytecode tool function");
         agim_free(fn);
         return value_nil();
     }
@@ -563,7 +588,10 @@ void tools_register_from_bytecode(ToolRegistry *registry, Bytecode *code, VM *vm
 
         /* Create context for this tool */
         BytecodeToolContext *ctx = agim_alloc(sizeof(BytecodeToolContext));
-        if (!ctx) continue;
+        if (!ctx) {
+            LOG_ERROR("tools: failed to allocate BytecodeToolContext for tool '%s'", info->name);
+            continue;
+        }
 
         ctx->vm = vm;
         ctx->func_index = info->func_index;

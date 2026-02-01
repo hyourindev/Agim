@@ -7,6 +7,8 @@
  * SPDX-License-Identifier: MIT
  */
 
+#define _POSIX_C_SOURCE 200809L
+
 #include "debug/log.h"
 
 #include <pthread.h>

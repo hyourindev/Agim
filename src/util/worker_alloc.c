@@ -7,6 +7,7 @@
 
 #include "util/worker_alloc.h"
 #include "util/alloc.h"
+#include "debug/log.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -57,7 +58,10 @@ static void pool_free_all(WorkerPool *pool) {
 static bool pool_grow(WorkerPool *pool) {
     size_t chunk_size = sizeof(WorkerChunk) + pool->block_size * pool->blocks_per_chunk;
     WorkerChunk *chunk = malloc(chunk_size);
-    if (!chunk) return false;
+    if (!chunk) {
+        LOG_ERROR("worker_alloc: failed to allocate chunk of %zu bytes", chunk_size);
+        return false;
+    }
 
     chunk->next = pool->chunks;
     pool->chunks = chunk;

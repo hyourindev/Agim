@@ -7,6 +7,7 @@
 
 #include "lang/ast.h"
 #include "util/alloc.h"
+#include "debug/log.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -75,6 +76,11 @@ const char *ast_node_type_name(NodeType type) {
 
 AstNode *ast_new(NodeType type, int line) {
     AstNode *node = agim_alloc(sizeof(AstNode));
+    if (!node) {
+        LOG_ERROR("ast: failed to allocate AstNode type %s at line %d",
+                  ast_node_type_name(type), line);
+        return NULL;
+    }
     memset(node, 0, sizeof(AstNode));
     node->type = type;
     node->line = line;

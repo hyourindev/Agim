@@ -6,6 +6,7 @@
  */
 
 #include "builtin/inference.h"
+#include "debug/log.h"
 
 #include <stddef.h>
 
@@ -23,6 +24,7 @@ void inference_set_callback(InferenceState *state, InferCallback callback, void 
 
 Value *inference_call(InferenceState *state, Block *block, Value *prompt) {
     if (!state || !state->callback) {
+        LOG_WARN("inference: call attempted with no callback configured");
         return NULL;
     }
     return state->callback(block, prompt, state->context);

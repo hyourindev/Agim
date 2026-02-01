@@ -15,6 +15,7 @@
 #include "runtime/timer.h"
 #include "vm/primitives.h"
 #include "vm/value.h"
+#include "debug/log.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -346,11 +347,18 @@ Scheduler *scheduler_new(const SchedulerConfig *config) {
 
     scheduler->start_time_ms = timer_current_time_ms();
 
+    LOG_INFO("scheduler created: max_blocks=%zu, workers=%zu",
+             scheduler->config.max_blocks, scheduler->worker_count);
+
     return scheduler;
 }
 
 void scheduler_free(Scheduler *scheduler) {
     if (!scheduler) return;
+
+    LOG_INFO("scheduler shutting down: spawned=%zu, terminated=%zu",
+             atomic_load(&scheduler->total_spawned),
+             atomic_load(&scheduler->total_terminated));
 
     if (scheduler->workers) {
         for (size_t i = 0; i < scheduler->worker_count; i++) {
@@ -453,6 +461,9 @@ Pid scheduler_spawn_ex(Scheduler *scheduler, Bytecode *code, const char *name,
     }
 
     atomic_fetch_add(&scheduler->total_spawned, 1);
+
+    LOG_DEBUG("spawned block: pid=%lu, name=%s, caps=0x%x",
+              pid, name ? name : "(none)", caps);
 
     return pid;
 }

@@ -7,6 +7,7 @@
 
 #include "lang/typechecker.h"
 #include "util/alloc.h"
+#include "debug/log.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -16,6 +17,10 @@
 
 static Type *type_new(TypeKind kind) {
     Type *t = agim_alloc(sizeof(Type));
+    if (!t) {
+        LOG_ERROR("typechecker: failed to allocate Type");
+        return NULL;
+    }
     memset(t, 0, sizeof(Type));
     t->kind = kind;
     return t;
@@ -536,6 +541,10 @@ struct TypeChecker {
 
 TypeChecker *typechecker_new(void) {
     TypeChecker *tc = agim_alloc(sizeof(TypeChecker));
+    if (!tc) {
+        LOG_ERROR("typechecker: failed to allocate TypeChecker");
+        return NULL;
+    }
     tc->env = type_env_new();
     tc->error = NULL;
     tc->error_line = 0;

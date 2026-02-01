@@ -11,6 +11,7 @@
 #include "vm/value.h"
 #include "util/alloc.h"
 #include "util/hash.h"
+#include "debug/log.h"
 
 #include <ctype.h>
 #include <stdatomic.h>
@@ -20,7 +21,10 @@
 
 Value *value_string_n(const char *str, size_t length) {
     Value *v = agim_alloc(sizeof(Value));
-    if (!v) return NULL;
+    if (!v) {
+        LOG_ERROR("string: failed to allocate Value for string");
+        return NULL;
+    }
 
     v->type = VAL_STRING;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
@@ -30,6 +34,7 @@ Value *value_string_n(const char *str, size_t length) {
 
     String *s = agim_alloc(sizeof(String) + length + 1);
     if (!s) {
+        LOG_ERROR("string: failed to allocate String data of length %zu", length);
         agim_free(v);
         return NULL;
     }

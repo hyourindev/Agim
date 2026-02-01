@@ -1,0 +1,77 @@
+name: Fuzzing
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run nightly at 4 AM UTC
+    - cron: '0 4 * * *'
+
+jobs:
+  fuzz:
+    name: Fuzz Testing
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        fuzzer: [fuzz_lexer, fuzz_parser, fuzz_bytecode, fuzz_nanbox]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake clang
+
+      - name: Configure with fuzzing
+        run: |
+          mkdir -p build
+          cd build
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang \
+            -DAGIM_ENABLE_FUZZING=ON
+
+      - name: Build fuzzer
+        run: cmake --build build --target ${{ matrix.fuzzer }} -j$(nproc)
+
+      - name: Run fuzzer
+        run: |
+          cd build
+          mkdir -p fuzz-corpus-${{ matrix.fuzzer }}
+          mkdir -p fuzz-artifacts
+
+          # Copy seed corpus if exists
+          if [ -d ../fuzz/corpus/${{ matrix.fuzzer }} ]; then
+            cp -r ../fuzz/corpus/${{ matrix.fuzzer }}/* fuzz-corpus-${{ matrix.fuzzer }}/ 2>/dev/null || true
+          fi
+
+          # Run fuzzer for 5 minutes in CI, longer in nightly
+          FUZZ_TIME=300
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            FUZZ_TIME=3600
+          fi
+
+          timeout ${FUZZ_TIME}s ./${{ matrix.fuzzer }} \
+            fuzz-corpus-${{ matrix.fuzzer }} \
+            -artifact_prefix=fuzz-artifacts/ \
+            -max_len=4096 \
+            -print_final_stats=1 || true
+
+      - name: Upload crash artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crashes-${{ matrix.fuzzer }}
+          path: build/fuzz-artifacts/
+          if-no-files-found: ignore
+
+      - name: Upload corpus
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-corpus-${{ matrix.fuzzer }}
+          path: build/fuzz-corpus-${{ matrix.fuzzer }}/
+          if-no-files-found: ignore

@@ -1,0 +1,64 @@
+name: Coverage
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build lcov
+
+      - name: Configure with coverage
+        run: |
+          mkdir -p build
+          cd build
+          cmake .. \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DAGIM_ENABLE_COVERAGE=ON
+
+      - name: Build
+        run: cmake --build build -j$(nproc)
+
+      - name: Run tests
+        run: cd build && ctest --output-on-failure -j$(nproc)
+
+      - name: Generate coverage report
+        run: |
+          cd build
+          # Capture coverage data
+          lcov --capture --directory . --output-file coverage.info --ignore-errors mismatch
+          # Remove external files
+          lcov --remove coverage.info '/usr/*' '*/tests/*' '*/bench/*' --output-file coverage.info
+          # Generate HTML report
+          genhtml coverage.info --output-directory coverage-html
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: build/coverage.info
+          fail_ci_if_error: false
+          verbose: true
+
+      - name: Upload coverage report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: build/coverage-html/
+
+      - name: Coverage summary
+        run: |
+          cd build
+          lcov --summary coverage.info

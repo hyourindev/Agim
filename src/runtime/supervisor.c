@@ -12,6 +12,7 @@
 #include "runtime/scheduler.h"
 #include "runtime/timer.h"
 #include "vm/value.h"
+#include "debug/log.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,7 +35,10 @@ const char *exit_reason_name(ExitReason reason) {
 
 ChildSpec *child_spec_new(const char *name, Bytecode *code, RestartStrategy restart) {
     ChildSpec *spec = malloc(sizeof(ChildSpec));
-    if (!spec) return NULL;
+    if (!spec) {
+        LOG_ERROR("supervisor: failed to allocate child spec for '%s'", name ? name : "(unnamed)");
+        return NULL;
+    }
 
     spec->name = name ? strdup(name) : NULL;
     spec->init_code = code ? bytecode_retain(code) : NULL;
@@ -129,7 +133,10 @@ bool child_spec_can_restart(ChildSpec *spec, ExitReason reason) {
 
 Supervisor *supervisor_new(SupervisorStrategy strategy) {
     Supervisor *sup = malloc(sizeof(Supervisor));
-    if (!sup) return NULL;
+    if (!sup) {
+        LOG_ERROR("supervisor: failed to allocate supervisor");
+        return NULL;
+    }
 
     sup->strategy = strategy;
     sup->max_restarts = 5;
@@ -362,8 +369,8 @@ bool supervisor_handle_exit(Supervisor *sup, Scheduler *sched, Block *sup_block,
             return true;
         }
 
-        fprintf(stderr, "Supervisor: max restarts reached for child '%s'\n",
-                spec->name ? spec->name : "(unnamed)");
+        LOG_WARN("supervisor: max restarts reached for child '%s'",
+                 spec->name ? spec->name : "(unnamed)");
 
         return !supervisor_max_restarts_reached(sup);
     }
@@ -380,7 +387,7 @@ bool supervisor_handle_exit(Supervisor *sup, Scheduler *sched, Block *sup_block,
     sup->total_restart_count++;
 
     if (supervisor_max_restarts_reached(sup)) {
-        fprintf(stderr, "Supervisor: max total restarts reached, giving up\n");
+        LOG_ERROR("supervisor: max total restarts reached, giving up");
         return false;
     }
 
@@ -389,8 +396,11 @@ bool supervisor_handle_exit(Supervisor *sup, Scheduler *sched, Block *sup_block,
         {
             Pid new_pid = child_spec_start(spec, sched, sup_block);
             if (new_pid == PID_INVALID) {
-                fprintf(stderr, "Supervisor: failed to restart child '%s'\n",
-                        spec->name ? spec->name : "(unnamed)");
+                LOG_ERROR("supervisor: failed to restart child '%s'",
+                          spec->name ? spec->name : "(unnamed)");
+            } else {
+                LOG_DEBUG("supervisor: restarted child '%s' as pid %lu",
+                          spec->name ? spec->name : "(unnamed)", (unsigned long)new_pid);
             }
         }
         break;

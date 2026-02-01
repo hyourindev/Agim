@@ -10,6 +10,7 @@
 #include "lang/ast.h"
 #include "vm/value.h"
 #include "util/alloc.h"
+#include "debug/log.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -52,7 +53,7 @@ static void compile_error(int line, const char *msg) {
     compiler->had_error = true;
     compiler->error = msg;
     compiler->error_line = line;
-    fprintf(stderr, "error [line %d]: %s\n", line, msg);
+    LOG_ERROR("regcompiler: line %d: %s", line, msg);
 }
 
 const char *regcompile_error(void) {

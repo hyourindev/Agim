@@ -8,6 +8,7 @@
 #include "vm/bytecode.h"
 #include "vm/value.h"
 #include "vm/vm.h"
+#include "debug/log.h"
 
 #include <stdio.h>
 

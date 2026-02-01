@@ -21,6 +21,7 @@
 #include "vm/primitives.h"
 #include "types/closure.h"
 #include "debug/trace.h"
+#include "debug/log.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -83,7 +84,10 @@ static uint64_t secure_seed(void) {
 
 VM *vm_new(void) {
     VM *vm = alloc(sizeof(VM));
-    if (!vm) return NULL;  /* OOM - return NULL to caller */
+    if (!vm) {
+        LOG_ERROR("vm_new: allocation failed");
+        return NULL;
+    }
 
     /*
      * Lazy initialization: defer stack/frame allocation until first use.
@@ -126,6 +130,7 @@ static bool vm_ensure_initialized(VM *vm) {
     vm->stack_capacity = VM_STACK_INITIAL;
     vm->stack = malloc(sizeof(NanValue) * vm->stack_capacity);
     if (!vm->stack) {
+        LOG_ERROR("vm: stack allocation failed");
         return false;
     }
     vm->stack_top = vm->stack;
@@ -134,6 +139,7 @@ static bool vm_ensure_initialized(VM *vm) {
     vm->frames_capacity = VM_FRAMES_INITIAL;
     vm->frames = malloc(sizeof(CallFrame) * vm->frames_capacity);
     if (!vm->frames) {
+        LOG_ERROR("vm: frames allocation failed");
         free(vm->stack);
         vm->stack = NULL;
         vm->stack_top = NULL;
@@ -143,6 +149,8 @@ static bool vm_ensure_initialized(VM *vm) {
     vm->frame_count = 0;
 
     vm->initialized = true;
+    LOG_DEBUG("vm: initialized with stack_capacity=%zu frames_capacity=%zu",
+              vm->stack_capacity, vm->frames_capacity);
     return true;
 }
 
@@ -203,6 +211,7 @@ static bool vm_ensure_stack(VM *vm, size_t needed) {
 
     NanValue *new_stack = realloc(vm->stack, sizeof(NanValue) * new_capacity);
     if (!new_stack) {
+        LOG_ERROR("vm: stack growth failed (requested %zu slots)", new_capacity);
         return false;
     }
 
@@ -239,6 +248,7 @@ static bool vm_ensure_frames(VM *vm) {
 
     CallFrame *new_frames = realloc(vm->frames, sizeof(CallFrame) * new_capacity);
     if (!new_frames) {
+        LOG_ERROR("vm: frames growth failed (requested %zu frames)", new_capacity);
         return false;
     }
 
@@ -496,7 +506,7 @@ static inline bool check_jump_backward(CallFrame *frame, uint16_t offset) {
 void vm_load(VM *vm, Bytecode *code) {
     /* Ensure lazy initialization before accessing stack/frames */
     if (!vm_ensure_initialized(vm)) {
-        fprintf(stderr, "agim: failed to initialize VM\n");
+        LOG_ERROR("vm: failed to initialize VM");
         return;
     }
 
@@ -1385,6 +1395,7 @@ VMResult vm_run(VM *vm) {
             /* Create function for the closure */
             Function *fn = malloc(sizeof(Function));
             if (!fn) {
+                LOG_ERROR("vm: failed to allocate Function for closure");
                 vm_set_error(vm, "out of memory");
                 return VM_ERROR_RUNTIME;
             }
@@ -1673,6 +1684,7 @@ VMResult vm_run(VM *vm) {
                     size_t slice_len = (size_t)(end - start);
                     char *slice = malloc(slice_len + 1);
                     if (!slice) {
+                        LOG_ERROR("vm: failed to allocate string slice of %zu bytes", slice_len + 1);
                         vm_set_error(vm, "out of memory");
                         return VM_ERROR_RUNTIME;
                     }
