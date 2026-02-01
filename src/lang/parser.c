@@ -41,6 +41,11 @@ static void error_at(Parser *parser, Token *token, const char *message) {
     size_t token_len = token->length < 100 ? token->length : 100; /* Limit token in message */
     size_t needed = 50 + msg_len + token_len; /* Generous buffer for formatting */
 
+    /* Free any previous error message to prevent memory leak */
+    if (parser->error) {
+        agim_free(parser->error);
+    }
+
     parser->error = agim_alloc(needed);
     if (!parser->error) {
         parser->error_line = token->line;

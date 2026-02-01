@@ -455,7 +455,10 @@ static uint64_t read_u64(const uint8_t **buf) {
     return val;
 }
 
-static Value *deserialize_value(const uint8_t **buf) {
+static Value *deserialize_value(const uint8_t **buf, const uint8_t *end) {
+    /* Need at least 1 byte for type */
+    if (*buf + 1 > end) return NULL;
+
     uint8_t type = (*buf)[0];
     (*buf)++;
 
@@ -463,20 +466,25 @@ static Value *deserialize_value(const uint8_t **buf) {
     case VAL_NIL:
         return value_nil();
     case VAL_BOOL:
+        if (*buf + 1 > end) return NULL;
         return value_bool((*buf)++[0] != 0);
     case VAL_INT: {
+        if (*buf + 8 > end) return NULL;
         int64_t val = (int64_t)read_u64(buf);
         return value_int(val);
     }
     case VAL_FLOAT: {
+        if (*buf + 8 > end) return NULL;
         union { double d; uint64_t u; } conv;
         conv.u = read_u64(buf);
         return value_float(conv.d);
     }
     case VAL_STRING: {
+        if (*buf + 4 > end) return NULL;
         uint32_t len = read_u32(buf);
+        if (*buf + len > end) return NULL;
         char *str = malloc(len + 1);
-        if (!str) return value_nil();
+        if (!str) return NULL;
         memcpy(str, *buf, len);
         str[len] = '\0';
         *buf += len;
@@ -485,7 +493,7 @@ static Value *deserialize_value(const uint8_t **buf) {
         return v;
     }
     default:
-        return value_nil();
+        return NULL;
     }
 }
 
@@ -493,7 +501,12 @@ static bool deserialize_chunk(const uint8_t **buf, const uint8_t *end, Chunk *ch
     if (*buf + 4 > end) return false;
 
     uint32_t code_size = read_u32(buf);
-    if (*buf + code_size > end) return false;
+
+    /* Bounds check for code data */
+    if (code_size > (size_t)(end - *buf)) return false;
+
+    /* Prevent excessive allocation (max 16MB of bytecode) */
+    if (code_size > 16 * 1024 * 1024) return false;
 
     while (chunk->code_capacity < code_size) {
         chunk->code_capacity *= 2;
@@ -503,7 +516,10 @@ static bool deserialize_chunk(const uint8_t **buf, const uint8_t *end, Chunk *ch
     chunk->code_size = code_size;
     *buf += code_size;
 
-    if (*buf + code_size * 4 > end) return false;
+    /* code_size is already bounded to 16MB above, so no overflow possible */
+    size_t lines_bytes = (size_t)code_size * 4;
+    if (lines_bytes > (size_t)(end - *buf)) return false;
+
     while (chunk->lines_capacity < code_size) {
         chunk->lines_capacity *= 2;
         chunk->lines = realloc_safe(chunk->lines, sizeof(int) * chunk->lines_capacity);
@@ -515,8 +531,12 @@ static bool deserialize_chunk(const uint8_t **buf, const uint8_t *end, Chunk *ch
     if (*buf + 4 > end) return false;
     uint32_t const_count = read_u32(buf);
 
+    /* Prevent excessive constant count (max 1M constants) */
+    if (const_count > 1024 * 1024) return false;
+
     for (uint32_t i = 0; i < const_count; i++) {
-        Value *val = deserialize_value(buf);
+        Value *val = deserialize_value(buf, end);
+        if (!val) return false;
         chunk_add_constant(chunk, val);
     }
 
@@ -524,7 +544,7 @@ static bool deserialize_chunk(const uint8_t **buf, const uint8_t *end, Chunk *ch
 }
 
 Bytecode *bytecode_deserialize(const uint8_t *data, size_t size) {
-    if (size < 8) return NULL;
+    if (!data || size < 8) return NULL;
 
     const uint8_t *p = data;
     const uint8_t *end = data + size;

@@ -148,6 +148,28 @@ typedef struct SchedulerStats {
 SchedulerStats scheduler_stats(const Scheduler *scheduler);
 void scheduler_print_stats(const Scheduler *scheduler);
 
+/* Health Checks - for production monitoring (Kubernetes-style) */
+
+typedef enum {
+    HEALTH_OK,           /* System is healthy */
+    HEALTH_DEGRADED,     /* System is running but with issues */
+    HEALTH_UNHEALTHY     /* System is not functioning correctly */
+} HealthState;
+
+typedef struct HealthStatus {
+    HealthState state;
+    bool is_live;        /* Process is running (liveness probe) */
+    bool is_ready;       /* Ready to accept work (readiness probe) */
+    size_t blocks_alive;
+    size_t blocks_runnable;
+    size_t memory_used;  /* Approximate memory in use */
+    const char *message; /* Human-readable status message */
+} HealthStatus;
+
+HealthStatus scheduler_health_check(const Scheduler *scheduler);
+bool scheduler_is_live(const Scheduler *scheduler);
+bool scheduler_is_ready(const Scheduler *scheduler);
+
 /* Debug */
 
 void scheduler_print(const Scheduler *scheduler);

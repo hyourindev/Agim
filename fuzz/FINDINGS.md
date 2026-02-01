@@ -5,51 +5,46 @@
 | Fuzzer | Runs | Time | Result |
 |--------|------|------|--------|
 | fuzz_lexer | 2.6M | 60s | **PASS** - No crashes |
-| fuzz_parser | ~10K | 30s | **LEAK** - Memory leak found |
-| fuzz_bytecode | ~100 | <1s | **CRASH** - Heap buffer overflow |
+| fuzz_parser | ~10K | 30s | **FIXED** - Memory leak found and fixed |
+| fuzz_bytecode | ~100 | <1s | **FIXED** - Heap buffer overflow found and fixed |
 | fuzz_nanbox | 30M | 31s | **PASS** - No crashes |
 
-## Issues Found
+## Issues Found and Fixed
 
-### 1. Bytecode Deserializer - Heap Buffer Overflow (CRITICAL)
+### 1. Bytecode Deserializer - Heap Buffer Overflow (FIXED)
 
 **File:** `crash-3cf23a86f7742f894a189776b830900e7fc73bbc`
 
-**Type:** Heap buffer overflow in `bytecode_deserialize()`
+**Type:** Heap buffer overflow in `deserialize_value()` and `deserialize_chunk()`
 
-**Trigger:** Malformed bytecode with valid magic header but corrupted size fields
+**Root Cause:** No bounds checking when reading variable-length data from bytecode stream.
 
-**Input (hex):**
-```
-4147 494d 0000 0000 0000 0000 0000 4000  AGIM..........@.
-0000 0000 0032 0001 b7b7 b7b7 b7b7 b7b7  .....2..........
-...
-```
+**Fix Applied:** Added comprehensive bounds checking in `src/vm/bytecode.c`:
+- Added `end` pointer parameter to `deserialize_value()` to track buffer limits
+- Added checks before every read operation: `if (*buf + N > end) return NULL`
+- Fixed integer overflow vulnerability: `if (code_size > SIZE_MAX / 4) return false`
+- Added size validation: `if (lines_bytes > (size_t)(end - *buf)) return false`
 
-**Stack trace:**
-- `bytecode_deserialize` at bytecode.c
-- Uses size field (0x40 = 64 at offset 14) but data is malformed
+**Verification:** Fuzzer no longer crashes on the original input.
 
-**Recommendation:** Add bounds checking in bytecode_deserialize() for all size fields before allocation/copy.
-
-### 2. Parser - Memory Leak (MEDIUM)
+### 2. Parser - Memory Leak (FIXED)
 
 **File:** `leak-ffa1781b9307bfa3c48066a3708e6fda3078c949`
 
-**Type:** 90-byte memory leak in parser allocation
+**Type:** 90-byte memory leak in `error_at()`
 
-**Trigger:** Malformed input with garbage bytes
+**Root Cause:** When multiple parse errors occurred (in panic mode recovery), the old error string was overwritten without being freed first.
 
-**Input (hex):**
+**Fix Applied:** Added cleanup in `src/lang/parser.c:error_at()`:
+```c
+/* Free any previous error message to prevent memory leak */
+if (parser->error) {
+    agim_free(parser->error);
+}
+parser->error = agim_alloc(needed);
 ```
-90df 9c6f 816d 656e 7490 0a  ...o.ment..
-```
 
-**Stack trace:**
-- `parser_new()` at parser.c:1573
-- Allocates memory that isn't freed on parse error
-
-**Recommendation:** Ensure parser_free() is called even when parser_parse() fails, or fix the leak in error paths.
+**Verification:** Fuzzer no longer reports leaks on the original input.
 
 ## Passing Components
 
@@ -70,14 +65,17 @@
 CC=clang cmake .. -DAGIM_ENABLE_FUZZING=ON
 make fuzz_lexer fuzz_parser fuzz_bytecode fuzz_nanbox
 
-# Reproduce crashes
-./fuzz_bytecode fuzz/crashes/crash-3cf23a86f7742f894a189776b830900e7fc73bbc
-./fuzz_parser fuzz/crashes/leak-ffa1781b9307bfa3c48066a3708e6fda3078c949
+# Run fuzzers
+./fuzz_lexer -max_total_time=60
+./fuzz_parser -max_total_time=60
+./fuzz_bytecode -max_total_time=60
+./fuzz_nanbox -max_total_time=60
 ```
 
 ## Next Steps
 
-1. **P0 - Fix bytecode heap overflow** - Add size validation before memory operations
-2. **P1 - Fix parser memory leak** - Ensure cleanup on all error paths
+1. ~~**P0 - Fix bytecode heap overflow**~~ **DONE**
+2. ~~**P1 - Fix parser memory leak**~~ **DONE**
 3. Run fuzzers for longer (hours/days) in CI
 4. Add regression tests for these specific inputs
+5. Set up continuous fuzzing (OSS-Fuzz or ClusterFuzz)

@@ -80,6 +80,9 @@ typedef struct VM {
 
     void *block;
     void *scheduler;
+
+    /* Secure RNG state - seeded from /dev/urandom */
+    uint64_t rng_state;
 } VM;
 
 /* VM Lifecycle */

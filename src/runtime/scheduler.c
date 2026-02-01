@@ -800,6 +800,63 @@ void scheduler_print_stats(const Scheduler *scheduler) {
     printf("  Context switches: %zu\n", stats.context_switches);
 }
 
+/* Health Checks */
+
+HealthStatus scheduler_health_check(const Scheduler *scheduler) {
+    HealthStatus status = {0};
+
+    if (!scheduler) {
+        status.state = HEALTH_UNHEALTHY;
+        status.is_live = false;
+        status.is_ready = false;
+        status.message = "scheduler is NULL";
+        return status;
+    }
+
+    SchedulerStats stats = scheduler_stats(scheduler);
+    bool is_running = atomic_load(&scheduler->running);
+
+    status.blocks_alive = stats.blocks_alive;
+    status.blocks_runnable = stats.blocks_runnable;
+    status.memory_used = 0;  /* TODO: aggregate heap sizes when available */
+
+    /* Liveness: scheduler exists and was started */
+    status.is_live = is_running || stats.blocks_total > 0;
+
+    /* Readiness: scheduler can accept new work */
+    status.is_ready = is_running && stats.blocks_alive < scheduler->config.max_blocks;
+
+    /* Determine overall health state */
+    if (!status.is_live) {
+        status.state = HEALTH_UNHEALTHY;
+        status.message = "scheduler not running";
+    } else if (!status.is_ready) {
+        status.state = HEALTH_DEGRADED;
+        status.message = "scheduler at capacity or shutting down";
+    } else if (stats.blocks_runnable == 0 && stats.blocks_alive > 0) {
+        /* All blocks are waiting - might indicate deadlock */
+        status.state = HEALTH_DEGRADED;
+        status.message = "all blocks waiting (possible deadlock)";
+    } else {
+        status.state = HEALTH_OK;
+        status.message = "healthy";
+    }
+
+    return status;
+}
+
+bool scheduler_is_live(const Scheduler *scheduler) {
+    if (!scheduler) return false;
+    return atomic_load(&scheduler->running) ||
+           atomic_load(&scheduler->registry.total_count) > 0;
+}
+
+bool scheduler_is_ready(const Scheduler *scheduler) {
+    if (!scheduler) return false;
+    if (!atomic_load(&scheduler->running)) return false;
+    return atomic_load(&scheduler->registry.total_count) < scheduler->config.max_blocks;
+}
+
 /* Debug */
 
 static void print_block_callback(Block *block, void *ctx) {

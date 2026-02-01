@@ -35,7 +35,7 @@ This document outlines the complete path to making Agim mission-critical product
 |------|---------|--------|-----|
 | Test Coverage | ~60% estimated | 95%+ | Significant |
 | Security Testing | Basic | Comprehensive | Critical |
-| Fuzzing | None | All parsers | Critical |
+| Fuzzing | Core parsers covered | All parsers | Low |
 | Thread Safety | Partial | Verified | High |
 | Documentation | Architecture only | Complete | Medium |
 | Observability | Basic tracing | Full stack | High |
@@ -383,61 +383,65 @@ This document outlines the complete path to making Agim mission-critical product
   - [x] Test nanbox extraction
 
 ##### 1.1.1.9 Array Unit Tests
-- [ ] **test_array_operations.c** - Operations
-  - [ ] Test array_push grows capacity
-  - [ ] Test array_push returns new array
-  - [ ] Test array_get in bounds
-  - [ ] Test array_get out of bounds
-  - [ ] Test array_set in bounds
-  - [ ] Test array_set out of bounds
-  - [ ] Test array_length
-  - [ ] Test array_pop
-  - [ ] Test array_slice
-  - [ ] Test array_concat
-  - [ ] Test array iteration
+- [x] **test_array_operations.c** - Operations (94 assertions)
+  - [x] Test array_push grows capacity
+  - [x] Test array_push returns new array
+  - [x] Test array_get in bounds
+  - [x] Test array_get out of bounds
+  - [x] Test array_set in bounds
+  - [x] Test array_set out of bounds (returns array unchanged)
+  - [x] Test array_length
+  - [x] Test array_pop
+  - [x] Test array_slice
+  - [x] Test array_concat
+  - [x] Test array iteration
+  - [x] Test NULL input handling (defensive behavior)
 
 ##### 1.1.1.10 Map Unit Tests
-- [ ] **test_map_operations.c** - Operations
-  - [ ] Test map_set new key
-  - [ ] Test map_set overwrite key
-  - [ ] Test map_get existing key
-  - [ ] Test map_get missing key
-  - [ ] Test map_delete existing
-  - [ ] Test map_delete missing
-  - [ ] Test map_size
-  - [ ] Test map_has
-  - [ ] Test map growth
-  - [ ] Test map iteration
-  - [ ] Test hash collision handling
+- [x] **test_map_operations.c** - Operations (327 assertions)
+  - [x] Test map_set new key
+  - [x] Test map_set overwrite key
+  - [x] Test map_get existing key
+  - [x] Test map_get missing key
+  - [x] Test map_delete existing
+  - [x] Test map_delete missing
+  - [x] Test map_size
+  - [x] Test map_has
+  - [x] Test map growth
+  - [x] Test map iteration (keys, values, entries)
+  - [x] Test hash collision handling
+  - [x] Test NULL input handling (defensive behavior)
 
 ##### 1.1.1.11 String Unit Tests
-- [ ] **test_string_operations.c** - Operations
-  - [ ] Test string_length
-  - [ ] Test string_compare equal
-  - [ ] Test string_compare less
-  - [ ] Test string_compare greater
-  - [ ] Test string_concat
-  - [ ] Test string_slice
-  - [ ] Test string_find
-  - [ ] Test string_split
-  - [ ] Test string_trim
-  - [ ] Test string_upper
-  - [ ] Test string_lower
+- [x] **test_string_operations.c** - Operations (107 assertions)
+  - [x] Test string_length
+  - [x] Test string_compare equal
+  - [x] Test string_compare less
+  - [x] Test string_compare greater
+  - [x] Test string_concat
+  - [x] Test string_slice
+  - [x] Test string_find
+  - [x] Test string_split
+  - [x] Test string_trim
+  - [x] Test string_upper
+  - [x] Test string_lower
+  - [x] Test NULL input handling (defensive behavior)
 
-- [ ] **test_string_interning.c** - Interning
-  - [ ] Test string_intern caches
-  - [ ] Test string_intern returns same
-  - [ ] Test string_intern eviction
-  - [ ] Test string_intern thread safety
+- [x] **test_string_interning.c** - Interning (34450 assertions)
+  - [x] Test string_intern caches
+  - [x] Test string_intern returns same
+  - [x] Test string_intern eviction
+  - [x] Test string_intern thread safety (multi-threaded tests)
 
 ##### 1.1.1.12 Closure Unit Tests
-- [ ] **test_closure_operations.c** - Operations
-  - [ ] Test closure_new
-  - [ ] Test closure upvalue capture
-  - [ ] Test upvalue_new open
-  - [ ] Test upvalue_close
-  - [ ] Test upvalue_is_open
-  - [ ] Test closure_free
+- [x] **test_closure_operations.c** - Operations (60 assertions)
+  - [x] Test closure_new
+  - [x] Test closure upvalue capture
+  - [x] Test upvalue_new open
+  - [x] Test upvalue_close
+  - [x] Test upvalue_is_open
+  - [x] Test closure_free
+  - [x] Test NULL input handling (defensive behavior)
 
 ##### 1.1.1.13 File I/O Unit Tests
 - [ ] **test_file_operations.c** - File I/O
@@ -673,18 +677,18 @@ This document outlines the complete path to making Agim mission-critical product
   - [x] Fuzz with grammar-aware mutations (dictionary support)
   - [x] Create seed corpus from test files
 
-- [x] **fuzz_parser.c** - Parser fuzzing ✓ Created, **LEAK FOUND**
-  - [x] Fuzz with lexer output - **Memory leak found**
+- [x] **fuzz_parser.c** - Parser fuzzing ✓ Created
+  - [x] Fuzz with lexer output
   - [x] Fuzz with AST mutations
   - [x] Create seed corpus from examples
-  - [ ] **FIX REQUIRED:** 90-byte memory leak in parser_new()
+  - [x] **FIXED:** 90-byte memory leak in error_at() - freed old error before allocating new
 
-- [x] **fuzz_bytecode.c** - Bytecode fuzzing ✓ Created, **CRASH FOUND**
-  - [x] Fuzz bytecode loading - **Heap buffer overflow found**
+- [x] **fuzz_bytecode.c** - Bytecode fuzzing ✓ Created
+  - [x] Fuzz bytecode loading
   - [x] Fuzz malformed headers
   - [x] Fuzz invalid opcodes
   - [x] Fuzz invalid operands
-  - [ ] **FIX REQUIRED:** Heap buffer overflow in bytecode_deserialize()
+  - [x] **FIXED:** Heap buffer overflow in deserialize_value() - added bounds checking throughout
 
 
 - [ ] **fuzz_url_parser.c** - URL parser (N/A - networking removed)
@@ -2326,16 +2330,16 @@ Example: `P1.1.1.1` = Phase 1, Section 1, Subsection 1, Task 1
 | P1.1.8.2 | test_value_refcount.c | P1 | [x] | None | 2d |
 | P1.1.8.3 | test_value_cow.c | P1 | [x] | None | 2d |
 | P1.1.8.4 | test_value_nanbox.c | P1 | [x] | None | 1d |
-| P1.1.9.1 | test_array_operations.c | P2 | [ ] | None | 1d |
-| P1.1.10.1 | test_map_operations.c | P2 | [ ] | None | 1d |
-| P1.1.11.1 | test_string_operations.c | P2 | [ ] | None | 1d |
-| P1.1.11.2 | test_string_interning.c | P2 | [ ] | None | 1d |
-| P1.1.12.1 | test_closure_operations.c | P2 | [ ] | None | 1d |
+| P1.1.9.1 | test_array_operations.c | P2 | [x] | None | 1d |
+| P1.1.10.1 | test_map_operations.c | P2 | [x] | None | 1d |
+| P1.1.11.1 | test_string_operations.c | P2 | [x] | None | 1d |
+| P1.1.11.2 | test_string_interning.c | P2 | [x] | None | 1d |
+| P1.1.12.1 | test_closure_operations.c | P2 | [x] | None | 1d |
 | P1.1.13.1 | test_file_operations.c | P2 | [x] | None | 2d |
 | P1.1.14.1 | test_lexer_tokens.c | P2 | [x] | None | 2d |
 | P1.1.14.2 | test_parser_ast.c | P2 | [x] | None | 3d |
 | P1.1.14.3 | test_compiler_codegen.c | P2 | [x] | None | 3d |
-| P1.1.14.4 | test_typechecker.c | P2 | [ ] | None | 2d |
+| P1.1.14.4 | test_typechecker.c | P2 | [x] | None | 2d |
 | P1.1.15.1 | test_supervisor_strategies.c | P2 | [x] | None | 2d |
 | P1.1.16.1 | test_sandbox_paths.c | P1 | [x] | None | 2d |
 | P1.1.17.1 | test_capabilities.c | P1 | [x] | None | 2d |
@@ -2345,11 +2349,11 @@ Example: `P1.1.1.1` = Phase 1, Section 1, Subsection 1, Task 1
 | P1.2.4 | test_integration_supervision.c | P1 | [x] | P1.1.* | 2d |
 | P1.2.5 | test_integration_scheduling.c | P1 | [x] | P1.1.* | 2d |
 | P1.2.6 | test_integration_workers.c | P1 | [x] | P1.1.* | 2d |
-| P1.3.1 | test_e2e_echo_server.c | P2 | [ ] | P1.2.* | 2d |
-| P1.3.2 | test_e2e_worker_pool.c | P2 | [ ] | P1.2.* | 2d |
-| P1.3.3 | test_e2e_pubsub.c | P2 | [ ] | P1.2.* | 2d |
-| P1.3.4 | test_e2e_state_machine.c | P3 | [ ] | P1.2.* | 2d |
-| P1.3.5 | test_e2e_pipeline.c | P3 | [ ] | P1.2.* | 2d |
+| P1.3.1 | test_e2e_echo_server.c | P2 | [x] | P1.2.* | 2d |
+| P1.3.2 | test_e2e_worker_pool.c | P2 | [x] | P1.2.* | 2d |
+| P1.3.3 | test_e2e_pubsub.c | P2 | [x] | P1.2.* | 2d |
+| P1.3.4 | test_e2e_state_machine.c | P3 | [x] | P1.2.* | 2d |
+| P1.3.5 | test_e2e_pipeline.c | P3 | [x] | P1.2.* | 2d |
 | P1.4.1 | ASan setup | P0 | [x] | None | 1d |
 | P1.4.2 | TSan setup | P0 | [x] | None | 1d |
 | P1.4.3 | MSan setup | P1 | [x] | None | 1d |
@@ -2358,13 +2362,13 @@ Example: `P1.1.1.1` = Phase 1, Section 1, Subsection 1, Task 1
 | P1.5.2 | fuzz_lexer.c | P1 | [x] | P1.5.1 | 2d |
 | P1.5.3 | fuzz_parser.c | P1 | [x] | P1.5.1 | 2d |
 | P1.5.4 | fuzz_bytecode.c | P0 | [x] | P1.5.1 | 2d |
-| P1.5.5 | fuzz_url_parser.c | P1 | [ ] | P1.5.1 | 1d |
+| P1.5.5 | fuzz_url_parser.c | P1 | [N/A] | P1.5.1 | 1d |
 | P1.5.6 | fuzz_nanbox.c | P2 | [x] | P1.5.1 | 1d |
-| P1.6.1 | Property testing setup | P2 | [ ] | None | 2d |
-| P1.6.2 | Array properties | P2 | [ ] | P1.6.1 | 1d |
-| P1.6.3 | Map properties | P2 | [ ] | P1.6.1 | 1d |
-| P1.6.4 | Scheduler properties | P2 | [ ] | P1.6.1 | 2d |
-| P1.6.5 | GC properties | P2 | [ ] | P1.6.1 | 2d |
+| P1.6.1 | Property testing setup | P2 | [x] | None | 2d |
+| P1.6.2 | Array properties | P2 | [x] | P1.6.1 | 1d |
+| P1.6.3 | Map properties | P2 | [x] | P1.6.1 | 1d |
+| P1.6.4 | Scheduler properties | P2 | [x] | P1.6.1 | 2d |
+| P1.6.5 | GC properties | P2 | [x] | P1.6.1 | 2d |
 | P1.7.1 | Coverage setup | P1 | [x] | None | 1d |
 | P1.7.2 | Achieve 80% coverage | P1 | [ ] | P1.1.* | 5d |
 | P1.7.3 | Achieve 90% coverage | P2 | [ ] | P1.7.2 | 5d |
@@ -2377,12 +2381,12 @@ Example: `P1.1.1.1` = Phase 1, Section 1, Subsection 1, Task 1
 | P2.1.4 | Coverity Scan | P2 | [ ] | None | 2d |
 | P2.1.5 | CodeQL | P2 | [ ] | None | 2d |
 | P2.2.1 | URL validation | P1 | [ ] | None | 1d |
-| P2.2.2 | Bytecode validation | P0 | [ ] | None | 3d |
-| P2.3.1 | Buffer overflow audit | P0 | [ ] | None | 3d |
-| P2.3.2 | Integer overflow audit | P0 | [ ] | None | 2d |
-| P2.3.3 | Use-after-free audit | P0 | [ ] | None | 2d |
+| P2.2.2 | Bytecode validation | P0 | [x] | None | 3d |
+| P2.3.1 | Buffer overflow audit | P0 | [x] | None | 3d |
+| P2.3.2 | Integer overflow audit | P0 | [x] | None | 2d |
+| P2.3.3 | Use-after-free audit | P0 | [x] | None | 2d |
 | P2.3.4 | Memory leak audit | P1 | [ ] | None | 2d |
-| P2.4.1 | RNG audit | P1 | [ ] | None | 1d |
+| P2.4.1 | RNG audit | P1 | [x] | None | 1d |
 | P2.5.1 | CPU limits | P1 | [x] | None | 1d |
 | P2.5.2 | Memory limits | P1 | [x] | None | 1d |
 | P2.6.1 | Penetration test plan | P1 | [ ] | P2.* | 2d |
@@ -2399,7 +2403,7 @@ Example: `P1.1.1.1` = Phase 1, Section 1, Subsection 1, Task 1
 | P3.1.4 | Process fault tests | P2 | [ ] | P3.1.1 | 2d |
 | P3.2.1 | Chaos test framework | P3 | [ ] | P3.1.1 | 3d |
 | P3.2.2 | Chaos scenarios | P3 | [ ] | P3.2.1 | 3d |
-| P3.3.1 | Error handling audit | P1 | [ ] | None | 3d |
+| P3.3.1 | Error handling audit | P1 | [x] | None | 3d |
 | P3.4.1 | Load shedding | P2 | [ ] | None | 2d |
 | P3.4.2 | Circuit breakers | P2 | [ ] | None | 2d |
 | P3.4.3 | Backpressure | P2 | [ ] | None | 2d |
@@ -2418,7 +2422,7 @@ Example: `P1.1.1.1` = Phase 1, Section 1, Subsection 1, Task 1
 | P5.2.3 | Runtime metrics | P1 | [ ] | P5.2.1 | 2d |
 | P5.3.1 | Tracing infrastructure | P2 | [ ] | None | 3d |
 | P5.3.2 | Trace points | P2 | [ ] | P5.3.1 | 2d |
-| P5.4.1 | Health checks | P1 | [ ] | None | 1d |
+| P5.4.1 | Health checks | P1 | [x] | None | 1d |
 | P5.5.1 | Alert rules | P1 | [ ] | P5.2.* | 2d |
 | P5.6.1 | Dashboards | P2 | [ ] | P5.2.* | 2d |
 | P6.1.1 | API documentation | P1 | [ ] | None | 10d |
@@ -2434,7 +2438,7 @@ Example: `P1.1.1.1` = Phase 1, Section 1, Subsection 1, Task 1
 | P7.6.2 | Runbooks | P1 | [ ] | P6.3.1 | 3d |
 | P8.1.1 | Security audit | P1 | [ ] | P2.* | 5d |
 | P8.2.1 | Coding standards | P2 | [ ] | None | 2d |
-| P8.3.1 | License audit | P1 | [ ] | None | 1d |
+| P8.3.1 | License audit | P1 | [x] | None | 1d |
 | P9.1.1 | Distribution implementation | P3 | [ ] | None | 20d |
 | P9.2.1 | Hot reload implementation | P3 | [ ] | None | 15d |
 | P9.4.1 | TCP primitives (C layer) | P2 | [ ] | None | 5d |

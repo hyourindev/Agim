@@ -151,6 +151,7 @@ add_library(agim_vm STATIC
     src/vm/sandbox.c
     src/debug/debug.c
     src/debug/trace.c
+    src/debug/log.c
     src/vm/primitives.c
     # Runtime
     src/runtime/mailbox.c
@@ -205,6 +206,10 @@ if(AGIM_BUILD_TESTS)
     add_executable(test_bytecode tests/vm/test_bytecode.c)
     target_link_libraries(test_bytecode agim_vm)
     add_test(NAME test_bytecode COMMAND test_bytecode)
+
+    add_executable(test_bytecode_validation tests/vm/test_bytecode_validation.c)
+    target_link_libraries(test_bytecode_validation agim_vm)
+    add_test(NAME test_bytecode_validation COMMAND test_bytecode_validation)
 
     add_executable(test_vm tests/vm/test_vm.c)
     target_link_libraries(test_vm agim_vm)
@@ -422,6 +427,37 @@ if(AGIM_BUILD_TESTS)
     target_link_libraries(test_types agim_vm)
     add_test(NAME test_types COMMAND test_types)
 
+    # Type operations tests
+    add_executable(test_array_operations tests/types/test_array_operations.c)
+    target_link_libraries(test_array_operations agim_vm)
+    add_test(NAME test_array_operations COMMAND test_array_operations)
+
+    add_executable(test_map_operations tests/types/test_map_operations.c)
+    target_link_libraries(test_map_operations agim_vm)
+    add_test(NAME test_map_operations COMMAND test_map_operations)
+
+    add_executable(test_string_operations tests/types/test_string_operations.c)
+    target_link_libraries(test_string_operations agim_vm)
+    add_test(NAME test_string_operations COMMAND test_string_operations)
+
+    add_executable(test_string_interning tests/types/test_string_interning.c)
+    target_link_libraries(test_string_interning agim_vm)
+    add_test(NAME test_string_interning COMMAND test_string_interning)
+
+    add_executable(test_closure_operations tests/types/test_closure_operations.c)
+    target_link_libraries(test_closure_operations agim_vm)
+    add_test(NAME test_closure_operations COMMAND test_closure_operations)
+
+    # File operations tests (sandbox-based I/O)
+    add_executable(test_file_operations tests/vm/test_file_operations.c)
+    target_link_libraries(test_file_operations agim_vm)
+    add_test(NAME test_file_operations COMMAND test_file_operations)
+
+    # Type checker tests
+    add_executable(test_typechecker tests/lang/test_typechecker.c)
+    target_link_libraries(test_typechecker agim_lang)
+    add_test(NAME test_typechecker COMMAND test_typechecker)
+
     # Typed programs integration tests
     add_executable(test_typed_programs tests/lang/test_typed_programs.c)
     target_link_libraries(test_typed_programs agim_lang)
@@ -435,6 +471,18 @@ if(AGIM_BUILD_TESTS)
     add_executable(test_capabilities tests/security/test_capabilities.c)
     target_link_libraries(test_capabilities agim_vm)
     add_test(NAME test_capabilities COMMAND test_capabilities)
+
+    add_executable(test_buffer_overflow tests/security/test_buffer_overflow.c)
+    target_link_libraries(test_buffer_overflow agim_vm)
+    add_test(NAME test_buffer_overflow COMMAND test_buffer_overflow)
+
+    add_executable(test_integer_overflow tests/security/test_integer_overflow.c)
+    target_link_libraries(test_integer_overflow agim_vm)
+    add_test(NAME test_integer_overflow COMMAND test_integer_overflow)
+
+    add_executable(test_use_after_free tests/security/test_use_after_free.c)
+    target_link_libraries(test_use_after_free agim_vm)
+    add_test(NAME test_use_after_free COMMAND test_use_after_free)
 
     # End-to-end tests for Erlang-like VM features
     add_executable(test_e2e_lifecycle tests/e2e/test_e2e_lifecycle.c)
@@ -468,6 +516,47 @@ if(AGIM_BUILD_TESTS)
     add_executable(test_e2e_scheduler tests/e2e/test_e2e_scheduler.c)
     target_link_libraries(test_e2e_scheduler agim_vm)
     add_test(NAME test_e2e_scheduler COMMAND test_e2e_scheduler)
+
+    add_executable(test_e2e_echo_server tests/e2e/test_e2e_echo_server.c)
+    target_link_libraries(test_e2e_echo_server agim_vm)
+    add_test(NAME test_e2e_echo_server COMMAND test_e2e_echo_server)
+
+    add_executable(test_e2e_worker_pool tests/e2e/test_e2e_worker_pool.c)
+    target_link_libraries(test_e2e_worker_pool agim_vm)
+    add_test(NAME test_e2e_worker_pool COMMAND test_e2e_worker_pool)
+
+    add_executable(test_e2e_pubsub tests/e2e/test_e2e_pubsub.c)
+    target_link_libraries(test_e2e_pubsub agim_vm)
+    add_test(NAME test_e2e_pubsub COMMAND test_e2e_pubsub)
+
+    add_executable(test_e2e_state_machine tests/e2e/test_e2e_state_machine.c)
+    target_link_libraries(test_e2e_state_machine agim_vm)
+    add_test(NAME test_e2e_state_machine COMMAND test_e2e_state_machine)
+
+    add_executable(test_e2e_pipeline tests/e2e/test_e2e_pipeline.c)
+    target_link_libraries(test_e2e_pipeline agim_vm)
+    add_test(NAME test_e2e_pipeline COMMAND test_e2e_pipeline)
+
+    # Property-based tests
+    add_executable(test_array_properties tests/property/test_array_properties.c)
+    target_include_directories(test_array_properties PRIVATE tests/property)
+    target_link_libraries(test_array_properties agim_vm)
+    add_test(NAME test_array_properties COMMAND test_array_properties)
+
+    add_executable(test_map_properties tests/property/test_map_properties.c)
+    target_include_directories(test_map_properties PRIVATE tests/property)
+    target_link_libraries(test_map_properties agim_vm)
+    add_test(NAME test_map_properties COMMAND test_map_properties)
+
+    add_executable(test_scheduler_properties tests/property/test_scheduler_properties.c)
+    target_include_directories(test_scheduler_properties PRIVATE tests/property)
+    target_link_libraries(test_scheduler_properties agim_vm)
+    add_test(NAME test_scheduler_properties COMMAND test_scheduler_properties)
+
+    add_executable(test_gc_properties tests/property/test_gc_properties.c)
+    target_include_directories(test_gc_properties PRIVATE tests/property)
+    target_link_libraries(test_gc_properties agim_vm)
+    add_test(NAME test_gc_properties COMMAND test_gc_properties)
 endif()
 
 # Agim CLI

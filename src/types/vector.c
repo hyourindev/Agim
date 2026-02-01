@@ -19,13 +19,20 @@ Value *value_vector(size_t dim) {
     if (dim == 0) return value_nil();
 
     Value *v = agim_alloc(sizeof(Value));
+    if (!v) return NULL;
+
+    Vector *vec = agim_alloc(sizeof(Vector) + sizeof(double) * dim);
+    if (!vec) {
+        agim_free(v);
+        return NULL;
+    }
+
     v->type = VAL_VECTOR;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
     v->flags = VALUE_IMMUTABLE;
     v->gc_state = 0;
     v->next = NULL;
 
-    Vector *vec = agim_alloc(sizeof(Vector) + sizeof(double) * dim);
     vec->dim = dim;
     memset(vec->data, 0, sizeof(double) * dim);
 
@@ -37,13 +44,20 @@ Value *value_vector_from(const double *data, size_t dim) {
     if (!data || dim == 0) return value_nil();
 
     Value *v = agim_alloc(sizeof(Value));
+    if (!v) return NULL;
+
+    Vector *vec = agim_alloc(sizeof(Vector) + sizeof(double) * dim);
+    if (!vec) {
+        agim_free(v);
+        return NULL;
+    }
+
     v->type = VAL_VECTOR;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
     v->flags = VALUE_IMMUTABLE;
     v->gc_state = 0;
     v->next = NULL;
 
-    Vector *vec = agim_alloc(sizeof(Vector) + sizeof(double) * dim);
     vec->dim = dim;
     memcpy(vec->data, data, sizeof(double) * dim);
 

@@ -197,7 +197,7 @@ int main(int argc, char **argv) {
             exit_code = 1;
         } else {
             Value *result = vm_peek(main_block->vm, 0);
-            if (result) {
+            if (result && !value_is_nil(result)) {
                 value_print(result);
                 printf("\n");
             }

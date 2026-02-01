@@ -28,22 +28,34 @@ Value *value_closure(Function *function, size_t upvalue_count) {
     if (!function) return value_nil();
 
     Value *v = agim_alloc(sizeof(Value));
+    if (!v) return NULL;
+
+    Closure *closure = agim_alloc(sizeof(Closure));
+    if (!closure) {
+        agim_free(v);
+        return NULL;
+    }
+
+    Upvalue **upvalues = NULL;
+    if (upvalue_count > 0) {
+        upvalues = agim_alloc(sizeof(Upvalue *) * upvalue_count);
+        if (!upvalues) {
+            agim_free(closure);
+            agim_free(v);
+            return NULL;
+        }
+        memset(upvalues, 0, sizeof(Upvalue *) * upvalue_count);
+    }
+
     v->type = VAL_CLOSURE;
     atomic_store_explicit(&v->refcount, 1, memory_order_relaxed);
     v->flags = 0;
     v->gc_state = 0;
     v->next = NULL;
 
-    Closure *closure = agim_alloc(sizeof(Closure));
     closure->function = function;
     closure->upvalue_count = upvalue_count;
-
-    if (upvalue_count > 0) {
-        closure->upvalues = agim_alloc(sizeof(Upvalue *) * upvalue_count);
-        memset(closure->upvalues, 0, sizeof(Upvalue *) * upvalue_count);
-    } else {
-        closure->upvalues = NULL;
-    }
+    closure->upvalues = upvalues;
 
     v->as.closure = closure;
     return v;

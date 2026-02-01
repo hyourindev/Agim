@@ -1,3 +1,9 @@
+/* Feature test macro for nanosleep */
+#if !defined(_POSIX_C_SOURCE) || _POSIX_C_SOURCE < 199309L
+#undef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 199309L
+#endif
+
 /*
  * Agim - Concurrent GC Tests
  *
@@ -12,6 +18,7 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include <time.h>
 #include "../test_common.h"
 #include "vm/gc.h"
 #include "vm/vm.h"
@@ -557,7 +564,8 @@ void test_cow_during_gc(void) {
     signal_start(4);
 
     /* Let it run for a bit */
-    usleep(10000);  /* 10ms */
+    struct timespec ts = {0, 10000000};  /* 10ms */
+    nanosleep(&ts, NULL);
     atomic_store(&stop, true);
 
     for (int i = 0; i < 2; i++) {

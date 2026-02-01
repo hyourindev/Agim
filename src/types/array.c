@@ -138,16 +138,30 @@ static Value *array_ensure_writable(Value *v) {
     Array *old = v->as.array;
 
     Value *new_v = agim_alloc(sizeof(Value));
+    if (!new_v) return NULL;
+
+    Array *new_arr = agim_alloc(sizeof(Array));
+    if (!new_arr) {
+        agim_free(new_v);
+        return NULL;
+    }
+
+    Value **items = agim_alloc(sizeof(Value *) * old->capacity);
+    if (!items) {
+        agim_free(new_arr);
+        agim_free(new_v);
+        return NULL;
+    }
+
     new_v->type = VAL_ARRAY;
     atomic_store_explicit(&new_v->refcount, 1, memory_order_relaxed);
     new_v->flags = 0;
     new_v->gc_state = 0;
     new_v->next = NULL;
 
-    Array *new_arr = agim_alloc(sizeof(Array));
     new_arr->length = old->length;
     new_arr->capacity = old->capacity;
-    new_arr->items = agim_alloc(sizeof(Value *) * new_arr->capacity);
+    new_arr->items = items;
 
     for (size_t i = 0; i < old->length; i++) {
         new_arr->items[i] = value_retain(old->items[i]);

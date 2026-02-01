@@ -137,17 +137,31 @@ static Value *map_ensure_writable(Value *v) {
     Map *old = v->as.map;
 
     Value *new_v = agim_alloc(sizeof(Value));
+    if (!new_v) return NULL;
+
+    Map *new_map = agim_alloc(sizeof(Map));
+    if (!new_map) {
+        agim_free(new_v);
+        return NULL;
+    }
+
+    MapEntry **buckets = agim_alloc(sizeof(MapEntry *) * old->capacity);
+    if (!buckets) {
+        agim_free(new_map);
+        agim_free(new_v);
+        return NULL;
+    }
+    memset(buckets, 0, sizeof(MapEntry *) * old->capacity);
+
     new_v->type = VAL_MAP;
     atomic_store_explicit(&new_v->refcount, 1, memory_order_relaxed);
     new_v->flags = 0;
     new_v->gc_state = 0;
     new_v->next = NULL;
 
-    Map *new_map = agim_alloc(sizeof(Map));
     new_map->size = old->size;
     new_map->capacity = old->capacity;
-    new_map->buckets = agim_alloc(sizeof(MapEntry *) * new_map->capacity);
-    memset(new_map->buckets, 0, sizeof(MapEntry *) * new_map->capacity);
+    new_map->buckets = buckets;
 
     for (size_t i = 0; i < old->capacity; i++) {
         MapEntry *src = old->buckets[i];
@@ -155,9 +169,21 @@ static Value *map_ensure_writable(Value *v) {
 
         while (src) {
             MapEntry *entry = agim_alloc(sizeof(MapEntry));
+            if (!entry) {
+                /* Cleanup on allocation failure */
+                new_v->as.map = new_map;
+                value_free(new_v);
+                return NULL;
+            }
 
             size_t key_len = src->key->length;
             String *key_str = agim_alloc(sizeof(String) + key_len + 1);
+            if (!key_str) {
+                agim_free(entry);
+                new_v->as.map = new_map;
+                value_free(new_v);
+                return NULL;
+            }
             key_str->length = key_len;
             key_str->hash = src->key->hash;
             memcpy(key_str->data, src->key->data, key_len + 1);

@@ -106,9 +106,21 @@ Bytecode *agim_compile_file(const char *path, const char **error) {
     fseek(file, 0, SEEK_SET);
 
     char *source = agim_alloc(size + 1);
+    if (!source) {
+        fclose(file);
+        if (error) *error = "out of memory";
+        return NULL;
+    }
+
     size_t read = fread(source, 1, size, file);
-    source[read] = '\0';
     fclose(file);
+
+    if (read != (size_t)size) {
+        agim_free(source);
+        if (error) *error = "failed to read file";
+        return NULL;
+    }
+    source[read] = '\0';
 
     /* Lex */
     Lexer *lexer = lexer_new(source);

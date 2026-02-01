@@ -144,7 +144,7 @@ void test_link_multiple_blocks(void) {
 
     /* Verify links */
     size_t link_count;
-    const Pid *links = block_get_links(main_block, &link_count);
+    (void)block_get_links(main_block, &link_count);
     ASSERT_EQ(4, link_count);
 
     scheduler_free(sched);

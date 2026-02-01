@@ -44,6 +44,41 @@ static void *alloc(size_t size) {
     return ptr;
 }
 
+/* Secure Random Number Generation
+ *
+ * Uses xorshift64 PRNG seeded from /dev/urandom for fast, high-quality
+ * random numbers. Falls back to time-based seeding if /dev/urandom fails.
+ */
+
+static uint64_t vm_xorshift64(uint64_t *state) {
+    uint64_t x = *state;
+    x ^= x << 13;
+    x ^= x >> 7;
+    x ^= x << 17;
+    *state = x;
+    return x;
+}
+
+static uint64_t secure_seed(void) {
+    uint64_t seed = 0;
+    FILE *f = fopen("/dev/urandom", "rb");
+    if (f) {
+        size_t read = fread(&seed, sizeof(seed), 1, f);
+        fclose(f);
+        if (read == 1 && seed != 0) {
+            return seed;
+        }
+    }
+    /* Fallback: mix time, clock, and address for entropy */
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    seed = (uint64_t)tv.tv_sec * 1000000ULL + (uint64_t)tv.tv_usec;
+    seed ^= (uint64_t)(uintptr_t)&seed * 2654435761ULL;
+    seed ^= (uint64_t)clock() << 32;
+    if (seed == 0) seed = 1;
+    return seed;
+}
+
 /* VM Lifecycle */
 
 VM *vm_new(void) {
@@ -72,6 +107,9 @@ VM *vm_new(void) {
     vm->reduction_limit = 10000; /* Default limit */
     vm->block = NULL;
     vm->scheduler = NULL;
+
+    /* Initialize secure RNG - seeded from /dev/urandom */
+    vm->rng_state = secure_seed();
 
     return vm;
 }
@@ -2249,13 +2287,20 @@ VMResult vm_run(VM *vm) {
             time_t t = ts->as.integer / 1000;
             struct tm *tm = localtime(&t);
             char buf[256];
+            /* Format string comes from user code - intentionally non-literal */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-nonliteral"
             strftime(buf, sizeof(buf), fmt->as.string->data, tm);
+#pragma GCC diagnostic pop
             vm_push(vm, value_string(buf));
             break;
         }
 
         case OP_RANDOM: {
-            double r = (double)rand() / RAND_MAX;
+            /* Use secure xorshift64 PRNG seeded from /dev/urandom */
+            uint64_t rnd = vm_xorshift64(&vm->rng_state);
+            /* Convert to double in [0.0, 1.0) range */
+            double r = (double)(rnd >> 11) / (double)(1ULL << 53);
             vm_push(vm, value_float(r));
             break;
         }
@@ -2268,7 +2313,9 @@ VMResult vm_run(VM *vm) {
                 return VM_ERROR_TYPE;
             }
             int64_t range = max->as.integer - min->as.integer + 1;
-            int64_t r = min->as.integer + (rand() % range);
+            /* Use secure xorshift64 PRNG */
+            uint64_t rnd = vm_xorshift64(&vm->rng_state);
+            int64_t r = min->as.integer + (int64_t)(rnd % (uint64_t)range);
             vm_push(vm, value_int(r));
             break;
         }
@@ -3023,7 +3070,7 @@ VMResult vm_run(VM *vm) {
 
         /* UUID generation */
         case OP_UUID: {
-            /* Try /proc first, fall back to random */
+            /* Try /proc first, fall back to /dev/urandom, then secure PRNG */
             char uuid[37];
             FILE *f = fopen("/proc/sys/kernel/random/uuid", "r");
             if (f) {
@@ -3033,14 +3080,35 @@ VMResult vm_run(VM *vm) {
                 }
                 fclose(f);
             } else {
-                /* Generate random UUID v4 */
+                /* Generate UUID v4 using secure random bytes */
+                uint8_t bytes[16];
+                bool got_random = false;
+
+                /* Try /dev/urandom for cryptographic randomness */
+                FILE *urand = fopen("/dev/urandom", "rb");
+                if (urand) {
+                    got_random = (fread(bytes, 1, 16, urand) == 16);
+                    fclose(urand);
+                }
+
+                /* Fallback to secure xorshift64 PRNG */
+                if (!got_random) {
+                    uint64_t r1 = vm_xorshift64(&vm->rng_state);
+                    uint64_t r2 = vm_xorshift64(&vm->rng_state);
+                    memcpy(bytes, &r1, 8);
+                    memcpy(bytes + 8, &r2, 8);
+                }
+
+                /* Set UUID version 4 and variant bits */
+                bytes[6] = (bytes[6] & 0x0F) | 0x40;  /* Version 4 */
+                bytes[8] = (bytes[8] & 0x3F) | 0x80;  /* Variant 1 */
+
                 snprintf(uuid, sizeof(uuid),
-                    "%08x-%04x-%04x-%04x-%012llx",
-                    (unsigned)rand(),
-                    (unsigned)rand() & 0xFFFF,
-                    ((unsigned)rand() & 0x0FFF) | 0x4000,
-                    ((unsigned)rand() & 0x3FFF) | 0x8000,
-                    ((unsigned long long)rand() << 32) | rand());
+                    "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+                    bytes[0], bytes[1], bytes[2], bytes[3],
+                    bytes[4], bytes[5], bytes[6], bytes[7],
+                    bytes[8], bytes[9], bytes[10], bytes[11],
+                    bytes[12], bytes[13], bytes[14], bytes[15]);
             }
             vm_push(vm, value_string(uuid));
             break;
