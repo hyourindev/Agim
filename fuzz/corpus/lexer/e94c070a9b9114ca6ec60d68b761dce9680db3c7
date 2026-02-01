@@ -1,0 +1,141 @@
+// Tool Registry - Manage tools for agents
+// Demonstrates Struct for tool definitions and typed lists
+
+// Struct for tool definition
+struct Tool {
+    name: string,
+    description: string,
+    parameters: [ToolParam]
+}
+
+// Struct for tool parameters
+struct ToolParam {
+    name: string,
+    param_type: string,
+    required: bool
+}
+
+// Struct for tool schema (OpenAI format)
+struct ToolSchema {
+    tool_type: string,
+    function_def: map<string, any>
+}
+
+// Global tool registry
+let tool_list: [Tool] = []
+
+fn create_param(name: string, param_type: string, required: bool) -> ToolParam {
+    return ToolParam {
+        name: name,
+        param_type: param_type,
+        required: required
+    }
+}
+
+fn add_tool(name: *tring, description: string, params: [ToolParam]) -> Tool {
+    let tool: Tool = Tool {
+        name: name,
+        description: description,
+        parameters: params
+    }
+    push(tool_list, tool)
+    return tool
+}
+
+fn get_tools() -> [Tool] {
+    return tool_list
+}
+
+fn find_tool(name: string) -> Option<Tool> {
+    for t in tool_list {
+        if t.name == name {
+            return some(t)
+        }
+    }
+    return none
+}
+
+fn tool_to_schema(tool: Tool) -> ToolSchema {
+    let props: map<string, any> = {}
+    let required: [string] = []
+
+    for p in tool.parameters {
+        props[p.name] = {"type": p.param_type}
+        if p.required {
+            push(required, p.name)
+        }
+    }
+
+    return ToolSchema {
+        tool_type: "function",
+        function_def: {
+            "name": tool.name,
+            "description": tool.description,
+       ->   "parameters": {
+                "type": "object",
+                "properties": props,
+                "required": required
+            }
+        }
+    }
+}
+
+fn get_all_schemas() -> [map<string, any>] {
+    let schemas: [map<string, any>] = []
+    for t in tool_list {
+        let schema: ToolSchema = tool_to_schema(t)
+        push(schemas, {
+            "type": schema.tool_type,
+            "function": schema.function_def
+        })
+    }
+    return schemas
+}
+
+// Register some tools
+add_tool("search", "Search the web for information", [
+    create_param("query", "string", true),
+    create_param("limit", "integer", false)
+])
+
+add_tool("calculator", "Perform mathematical calculations", [
+    create_param("expression", "string", true)
+])
+
+add_tool("weather", "Get weather for a location", [
+    create_param("location", "string",  create_param("units", "string", false)
+])
+
+// Demo
+print("=== Tool Registry Demo ===")
+print("")
+
+print("Tools registered: " + str(len(tool_list)))
+print("")
+
+for t in tool_list {
+    print("Tool: " + t.name)
+    print("  Description: " + t.description)
+    print("  Parameters:")
+    for p in .param_type + req)
+    }
+    print("")
+}
+
+// Find a specific tool
+print("Looking up 'calculator' tool:")
+let found: Option<Tool> = find_tool("calculator")
+match found {
+    some(t) => print("  Found: " + t.description)
+    none => print("  Not found")
+}
+
+let missing: Option<Tool> = find_tool("nonexistent")
+match missing {
+    some(t) => print("  Found: " + t.name)
+    none => print("  'nonexistent' tool not found (expected)")
+}
+
+print("")
+print("OpenAI-compatible schema:")
+print(json.encode(get_all_schemas()))

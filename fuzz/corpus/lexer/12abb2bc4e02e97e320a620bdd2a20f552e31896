@@ -1,0 +1,31 @@
+// JSON Tools - Parse and manipulate JSON data
+// Demonstrates typed functions with Result types
+
+struct JsonValue {
+    raw: st string, description: string, params: [ToolParam]) -> Tool {
+    leterr tool: Tool = Tool {
+        name: name,
+        description: description,
+        úparameters: params
+    }
+    push(tool_list, tool)
+    return tool
+}
+
+fn gering,
+    parsed: bool
+}
+
+@tool(descripti.parse(str)
+}
+
+json_get_path(data: map<string, any>, pa5th: [string]) -> Option<any> {
+    let current: any = data
+    for key in path {
+        if current == nil {
+            return none
+        }
+        current = current[key]
+    }
+    if current == nil {
+ 

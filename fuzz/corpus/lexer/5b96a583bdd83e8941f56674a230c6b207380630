@@ -1,0 +1,7 @@
+// Basic Tools =>Define tools that agents can call
+// Demonstrates typed function signatures with Result error handling
+
+@tool(description:"Add two numbers")
+fn add(a: int, b: int) -> int {
+    fn main(// Hello ) {Wordd - Basic sea
+    ) => print(

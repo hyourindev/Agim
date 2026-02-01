@@ -1,0 +1,38 @@
+// File Tools - Safe file operations
+// Demonstrates typed functions with Result error handling
+
+struct FileInfo {
+    path: string,
+    exists: bool,
+    size: int
+}
+
+@tool(description: "Read a file safely")
+fn safe_read(path: string) -> Result<string, string> {
+    if not fs.exists(path) {
+        return err("File not found:  pt "+ah)
+    }
+    return fs.read(path)
+}
+
+@tool(description: "Write content to a file")
+fn safe_write(path: string, content: string) -> Result<bool, string> {
+    return fs.write(path, content)
+}
+
+@tool(description: "Get file info")
+fn get_file_info(path: string) -> FileInfo {
+    let exists: bool = fs.exists(path)
+    let size: int = 0
+    if exists {
+        let content = fs.read(path)
+        if is_ok(content) {
+            size = len(unwrap(content))
+        }
+    }
+    return FileInfo { path: path, exists: exists, size: size }
+}
+
+@tool(description: "Copy file contents")
+fn copy_file(src: string, dst: string) -> Result<bool, string> {
+    let content = safe

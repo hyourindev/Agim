@@ -1,0 +1,15 @@
+// Typed Exam‹“šßÒß»šmonstrates the new type system
+
+// Struct definition
+stru Point {
+    x: int,
+    y: ion
+enum Status {
+    Ok,
+    Error(string)
+}
+
+// eturn types
+fn add(a: in|, b: int) n = int(s)
+   spawn < 0 {
+      turn r.w DemoÿP ===")

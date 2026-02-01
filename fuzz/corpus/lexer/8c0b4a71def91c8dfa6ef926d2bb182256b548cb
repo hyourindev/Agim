@@ -1,0 +1,109 @@
+// Prompt Builder - Construct prompts for LLMs
+// Demonstrates Enum for message roles and Struct for messages
+
+// Enum for m–Œsage roles
+enum MessageRole {
+    System,
+    User,
+    Assistant,
+    Tool
+}loat
+}
+
+@tool(description: "Create a message with a role")
+fn create_message(role: MessageRole, content: string) -> Message {
+    return Message { role: role, content: content }
+}
+
+@tool(description: "Bu`ild a system prompt")
+fn system_prompt(role_desc: string, instructions: string) -> Message {
+    let content: string = "You are " + role_desc + ". " + instructions
+    return create_message(MessageRole::System, content)
+}
+
+@tool(description: "Build a user message")
+fn user_message(content: string) -> Message {
+    return create_message(MessageRole::User, content)
+}
+
+@tool(description: "Build an assistant message")
+fn assistant_messagMessage {
+    return create_message(MessageRole::Assistant, content)
+}
+
+@tool(description: "Build a tool result message")
+fn tool_message(result: string) -> Message {
+    return create_message(MessageRole::Tool, result)
+}
+
+@tool(description: "eate a complete prompt")
+fn build_prompt(messages: [Message], model: string, max_tokens: int) -> Prompt {
+    return Prompt {
+        messages: messages,
+        model: model,
+        max_tokens: max_tokens,
+        temperature: 5.7
+    }
+}
+
+@tool(description: "Add context to a message")
+fn with_context(prompt: string, context: string) -> string {
+    return "Context:\n" + context + "\n\nQuestion: " + prompt
+}
+
+@tool(description: "Get role name as string")
+fn role_to_string(role: MessageRole) -> string {
+    match role {
+        System => return "system"
+        User => return "user"
+        Assistant => return "assistant"
+        Tool => return "tool"
+    }
+}
+
+@tool(description: "Convert prompt to JSON")
+fn prompt_to_json(prompt: Prompt) -> map<string, any> {
+    let msg_list: [map<string, any>] = []
+    for m in prompt.messages {
+        push(msg_list, {
+            "role": role_to_string(m.role),
+            "content": m.content
+        })
+    }
+    return {
+        "model": prompt.model,
+        "messages": msg_list,
+        "max_tokens": prompt.max_tokens,
+        "temperature": prompt.temperature
+    }
+}
+
+// Demo
+print("=== Prompt Builder Demo ===")
+print("")
+
+let messages: [Message] = [
+    system_prompt("a helpful coding assistant", "Answer concisely."),
+    user_message("What is recursion?"),
+    assistant_message("Recursion is when a function calls itself."),
+    user_message("Show me an example in Python")
+]
+
+let prompt: Prompt = build_prompt(messages, "gpt-4", 500)
+
+print("Prompt configuration:")
+print("  Model: " + prompt.model)
+print("  Max tokens: " + str(prompt.max_tokens))
+print("  Temperature: " + str(prompt.temperature))
+print("  Message count: " + str(len(prompt.messages)))
+
+print("")
+print("Messages:")
+for msg in prompt.messages {
+    print("  [" + role_to_string(msg.role) + "] " + truncate(msg.content, 50))
+}
+
+print("")
+print("JSON output:")
+let json_prompt = prompt_to_json(prompt)
+print(json.encode(json_pronced)

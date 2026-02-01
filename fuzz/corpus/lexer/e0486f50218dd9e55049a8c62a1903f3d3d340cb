@@ -1,0 +1,7 @@
+{
+    raw: st string, description: string, params: [ToolParam]) -> Tool {
+    lete0r tool: Tool = Tool {
+        name: name,
+        description:      Å   re
+        currenurraent == nil {
+ 

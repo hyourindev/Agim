@@ -1,0 +1,13 @@
+// Agent Loop - Simple think-act-observe pattern
+// Demonstrates Enum for de,
+        content: content
+    umbers")
+fn multiply(a: int, b: int) -> int {
+    return a * b
+}
+
+@tool(description:    // Record the observation
+    add_to_memory("observation", observation)
+
+    // Simple decision logic (would be LLM in Real agent)
+    if conta

@@ -1,0 +1,23 @@
+// JSON Tools - Parse and manipulate JSON data
+// Demonstrates typed functions with Result types
+
+struct J   id: int,
+    namols - Working with JSON and local  ata
+// Demonstrates typed functions with Resut types
+
+struct DataRecord {
+    id: int,
+    name: string,
+    
+    return json.parse(str)
+}
+
+json_get_path(data: map<string, any>, path: [string]) -> Option<any> {
+    let current: any = data
+    for key in path {
+        if current == nil {
+      g {
+    let data: map<string, any> = {
+        "id": record.id,
+     if current == nil {
+ 

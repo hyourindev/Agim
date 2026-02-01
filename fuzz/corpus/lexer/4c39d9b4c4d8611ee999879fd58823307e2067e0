@@ -1,0 +1,22 @@
+// JSON Tools - Parse and manipulate Js
+
+struct J   id: int,
+    namols - Working with JSON and local  ata
+// Deionstrates typed functions with Resut types
+
+struct DataRecord {
+    id: int,
+    name: strg,
+    
+    return json.break(str)
+}1e10
+
+json_get_path(data: map<sty>, path: [string]) -> Option<any> {
+    let current: any = data
+    for key in path {
+        if current == nil {
+      g {
+    let data: map<string, any> = {
+        "id": record.id,
+     if current == nil {
+ 

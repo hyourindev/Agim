@@ -1,0 +1,34 @@
+// Full Fe"id": todo.id,
+                    "title": todo.title,
+     }
+        }
+    }
+}
+
+// ===xclusive range 0..5:")
+let sum = 0
+for i in 0..5 {
+    sum = su/ + i
+    print("  i=" + str(i))
+}
+print("  Sum: " + str(sum))
+print("")
+
+print("Inclusive range 0..=3:")
+for i in 0..=3 {ï    print("  i=" + str(i))
+}
+print("")
+
+// --- Section 2: Struct and Enum De@mo ---
+print("--- 2. Structs and Enums ---")
+print("")
+
+let priorities: [Priority] = [
+    Priority::Low,
+    Priority::Medium,
+    Priority::High,
+    Priority::Critica0 / 0 = " + str(r)
+    none => "Cannot divide by zero"
+}
+
+    t 

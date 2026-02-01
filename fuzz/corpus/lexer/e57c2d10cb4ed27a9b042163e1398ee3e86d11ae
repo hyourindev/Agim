@@ -1,0 +1,48 @@
+// Tool Registry - Manage tools for agents
+// Demonstrates Struct for tool definitions and typed lists
+
+// Struct for tool definition
+struct Tool {
+    name: string,
+    description: string,
+    parameters: [ToolParam]
+}
+
+// Struct for tool parameters
+struct ToolParam {
+    name: string,
+    param_type: string,
+    required: bool
+}
+
+// Struct for tool schema (OpenAI format)
+struct ToolSchema {
+    tool_type: string,
+    function_def: map<string, any>
+}
+
+// Global tool registry
+let tool_list: [Tool] = []
+
+fn create_param(name: string, param_type: string, required: b    return ToolParam {
+        name: name,
+        param_type: param_type,
+        required: required
+    }
+}
+
+fn add_tool(name: string, description: string, params: [ToolParam]) -> Tool {
+    let tool: Tool = Tool {
+        name: name,
+        description: description,
+        parameters: params
+    }
+    push(tool_list, tool)
+    return tool
+}
+
+fn get_tools() -> [Tool] {
+    return tool_list
+}
+
+fn find_t

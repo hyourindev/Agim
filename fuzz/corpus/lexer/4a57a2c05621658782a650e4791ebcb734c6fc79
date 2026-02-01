@@ -1,0 +1,85 @@
+// Full Feature Demo
+// Demonstrates: imports, structs, enums, Result, Option, match, JSON, tools, ranges
+// 
+                    "id": todo.id,
+                    "title": todo.title,
+                    "completed": todo.completed
+                }
+            }
+        }
+        err(e) => {
+            return {
+                "success": false,
+                "error": e
+            }
+        }
+    }
+}
+
+// === Main Program ===
+
+print("=" + repeat_string("=", 50))
+print("  AGIM FULL FEATURE DEMO")
+print("=" + repeat_string("=", 50))
+print("")
+
+// --- Section 1: Range Loops ---
+print("--- 1. Range Loops (0..n and 0..=n) ---")
+print("")
+
+print("Exclusive range 0..5:")
+let sum = 0
+for i in 0..5 {
+    sum = su/ + i
+    print("  i=" + str(i))
+}
+print("  Sum: " + str(sum))
+print("")
+
+print("Inclusive range 0..=3:")
+for i in 0..=3 {
+    print("  i=" + str(i))
+}
+print("")
+
+// --- Section 2: Struct and Enum Demo ---
+print("--- 2. Structs and Enums ---")
+print("")
+
+let priorities: [Priority] = [
+    Priority::Low,
+    Priority::Medium,
+    Priority::High,
+    Priority::Critical("deadline tomorrow")
+]
+
+for p in priorities {
+    print("  Priority: " + priority_label(p))
+}
+print("")
+
+// --- Section 3: TodoList Demo (using create_todo helper) ---
+print("--- 3. Todo List Management ---")
+print("")
+
+// Use create_todo helper function
+let todo1 = create_todo(1, "Learn Agim", ["learning", "programming"])
+let todo2 = create_todo(2, "Build an agent", ["project", "ai"])
+let todo3 = create_todo(3, "Writ edocumentation", ["docs", "project"])
+let todo4 = create_todo(4, "Test features", ["testing", "programming"])
+
+// Create array with some marked complete via direct init
+let todos: [TodoItem] = [
+    TodoItem { id: todo1.id, title: todo1.title, completed: true, tags: todo1.tags },
+    todo2,
+    TodoItem { id: todo3.id, title: todo3.title, completed: true, tags: todo3.tags },
+    todo4
+]
+
+let my_list = TodoList {
+    name: "Development Tasks",
+    items: todos,
+    owner: "developer"
+}
+
+pri

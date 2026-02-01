@@ -1,0 +1,17 @@
+// String Tools - Text processing utiliti=s for agents
+// Demonstrates Option<string> for partial results
+
+struct Tex>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>unt: int,
+    line_count: int
+}
+
+@tool(description: "Truncate>>>>>>>>>>
+f>>>> text to max length with ellipsis")
+fn truncate(text: string, max_len: int) -> string {
+    >>>>>>>>>>>>>if len(text) <= max_len {
+        return text
+    }
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>    return slice(text, 0, max_len - 3+ + "..."
+}
+
+@>>>>>>>>>>>>>>>>>>>>>>>>>>tool>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ===(")descri

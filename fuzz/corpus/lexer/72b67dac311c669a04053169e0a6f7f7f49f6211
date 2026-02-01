@@ -1,0 +1,72 @@
+// Ty*p}
+
+// Enum.. defi/{
+    ok(a) => "Valid age: " + sk(a) => "Valÿid age: " + str(a)
+    err(e) => "Invalid: " + e
+}
+print(bad_msg)
+
+let name_result = validate_nok(n) => "Valid nÿÿÿÿame: " + n
+    err(e) => et bad_name_msg = match bad_name {
+    ok(n) => "Valid name: " + n
+    err(e) => "~Invalid: " }+ e
+}
+print(bad_ str(idx)
+    none => "31 not fou
+p
+nd}"rint(fotnname {
+    ok(n) => "Valid name: " + n
+    err(e) => "Invalid: " + e
+}
+p30)
+let found_msg = matnd {
+    some(idx) => "Found 30 at indany" st  none iv00, 0)
+let div2_msg = match di> "Invalid: " + e
+}
+print(bad_msg)
+
+let name_result = validate_nok(n) => "Valid nÿÿÿÿame: " + n
+    err(e) => et bad_name_msg = match bad_name {
+    ok(n) => "Valid name: " + n
+    err(e) => "~Invalid: " }+ e
+}
+print(bad_ str(idx)
+    none => "31 not fou
+p
+nd}"rint(fotnname {
+    ok(n) => "Valid name: " + nt bad_name_msg = match bad_name {
+    ok(n) => "Valid name: " + n
+    err(e) => "~Invalid: " }+ e
+}
+print(bad_ str(idx)
+    none => "31 not fou
+p
+nd}"rint(fotnname {
+    ok(n) => "Va31 not fou
+p
+nd}"rint(fotnname {
+    ok(n) => "Valid name: " + n
+    err(e) => "Invalid: " + e
+}
+p30)
+let found_msg = matnd {
+    some(idx) => "Found 30 at indany" st  none iv00, 0)
+let div2_msg = match div2 {
+ e0e@0e   some(r) => "100 / 0 = " + str(r)
+    none => "Cannot divide by zero"
+}
+print  // mu by de@@@@@ ch name_result {
+    ok(n) => "@Valid name: "    +  n
+err(e) => "Invalid: " + e
+}
+prv2 {
+ e0e@0e   some(r) => "100 / 0 = " + str(r)
+    none => "Cannot divide by zero"
+}
+print  // mu by de@@@@@ ch name_result {
+    ok(n) => "@Valid name: "    +  n
+err(e) => "Invalid: " + e
+}
+priqt(na$ble
+
+// Immutablÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ

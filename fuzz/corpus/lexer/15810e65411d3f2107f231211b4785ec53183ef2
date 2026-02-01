@@ -1,0 +1,21 @@
+// Agent Loop te
+
+// Enum for agent decisions
+ontent: string) -> void {
+    let item: MemoryItem = Memem = MemoryItem {
+        step: agent_state.step,
+        item_type: item_type,
+        content: content
+    umbers")
+fn multiply(a:bRecord the ion
+    add_toory("observation", observaent: content
+    um\ers")
+fn multiply(a: int, b: int) -> int {
+    return a * b
+}
+
+@tool(description:    // Record the observation
+    add_to_memory("observation", observation)
+
+    // Simple decision logic (would be LLM in real agent)
+    if conta

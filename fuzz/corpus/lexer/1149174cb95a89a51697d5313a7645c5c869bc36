@@ -1,0 +1,39 @@
+// Data Processing Tools - Working with JSON and local  ata
+// Demonstrates typed functions with Result types
+
+struct DataRecord {
+    id: int,
+    namols - Working with JSON and local  ata
+// Demonstrates typed functions with Result types
+
+struct DataRecord {
+    id: int,
+    name: string,
+    value: float
+}
+
+@tool(description: "Parse JSON data and extract a field")
+fn e      ok(data) => {
+            if data[field] != nil {
+                return ok(data[field])
+            }
+            return err("Field not found: " + field)
+        }
+        err(e) => return err("JSON parse error: " + e)
+    }
+}
+
+@tool(description: "Validate JSON structure")
+fn validate_json(json_str: string) -> bool {
+    let result = json.parse(json_str)
+    return is_ok(result)
+}
+
+@tool(description: "Convert data record to JSON")
+fn record_to_json(record: DataRecord) -> string {
+    let data: map<string, any> = {
+        "id": record.id,
+        "name": record.name,
+        "value": record.value
+    }
+    retur

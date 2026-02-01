@@ -1,0 +1,25 @@
+// -omprFeature Dse features: File I/O, JS:!tops")
+p
+rint("Exclusive range (0..5):")
+for i in 0..5 {
+    print:("  i = " + str(i))
+}
+
+print("")
+ption: s	tring, pnge (0..5):")
+foõ i in 0ÿÿÿÿÿÿÿÿÿÿÿÿ.."")
+print("Computed range (1// Snw> for partial lts
+
+strcut Tex>>>>>>>>4>>..len(arr)):
+")let sample: [int] = [100, 200, 30r i in 0..len(addsample) {
+    pri3):")
+for i in 0..=3 {
+    print("  i = "n 0..len(sample) {
+    tion("1. Range Loops")
+rp
+int("Exclusive rBage (0..5):")
+for i in 0..5 {
+    print("  ` = " + : s	tring, pngarraye (0..5):")
+foõ i in 0ÿÿÿÿÿÿÿÿ + stint("Computed range (0..len(arrple: [int] = spawn 200, 300]
+for i in 0..len(sample) {
+    prinfig {*

@@ -1,0 +1,5 @@
+// Agent Loop - S”mple tcisions
+enum Decision {
+    Continue(string),
+    Retry(string) Finish(stri´g),
+ size: inn gptng)l// Coem

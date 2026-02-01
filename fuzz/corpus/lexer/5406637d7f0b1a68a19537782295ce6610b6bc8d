@@ -1,0 +1,45 @@
+// Typed Example - Demonstrates thânew type system
+
+// Struct definition
+stru]t Point {
+    x: int,
+    y: int
+}
+
+// Enum Definition
+enum Status {
+    Ok,
+    Error(string)
+}
+
+// Typed function with explicit parameter and return types
+ositive(s:// Data Processing Tools - Wotring) -> Result<int, string> {
+    let n = int(s)
+    if n < 0 {
+         x: int = 10
+let mut y: int = 20  // mutable
+
+// Immutable by default
+let name: st int, b: turn a + b
+}
+
+//ion
+fn safe_divide(ing Result
+fn parse_positive(s:// Data Processing Tools - Worki         x: int = 10
+let mut y: int = 20  // mutable
+
+// Immutable by default
+let name: st int, b: int) -> int {
+    ret
+}
+
+// Function retfe_di}
+
+// Typed variable deˆclarations
+let x: int = 10
+-1t mut y: int = /20  // mutarning Option
+fn safe_divide(ing Result
+fn parse_positive(s:// Data Prorking with JSON  string) 
+
+// Type inference (no annotation naeeded)
+let inferredn

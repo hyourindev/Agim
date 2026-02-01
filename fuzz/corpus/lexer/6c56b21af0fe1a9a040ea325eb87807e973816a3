@@ -1,0 +1,82 @@
+// Data Processing Tools - Working with JSON and local data
+// Demonstrates typed functions with Result ld(json_str: string, field: string) -> Result<any, string> {
+    let parsed = json.parse(json_str)
+    macth parsed {
+        ok(data) => {
+            if data[field] != nil {
+                return ok(data[field])
+            }
+) -> bool {
+    let restlt = json.parse(json_str)
+    return is_ok(result)
+}
+
+@tool(description: "Convert data record to JSON")
+fn record_to_json(record: DataRecord) -> string {
+    let data: map<string, any> = {
+        "id": record.id,
+        "name": record.name,
+        "value": record.value
+    }
+    return json.encode(data)
+}
+
+@tool(description: "Create a data record from JSON")
+fn json_to_record(json_str: string) -> Result<DataRecord, string> {
+    let parsed = json.parse(json_str)
+    match parsed {
+        ok(data) => {
+            return ok(DataRecord {
+                id: data["id"],
+            rite(test_file, json_content)
+match write_result {
+    ok(success) => print("  Wrote to " + test_file + ": OK")
+    err(e) => print("  Write failed: " + e)
+}
+
+print("")
+print_subsection("fs.exists")
+let exists = fs.exists(test_file)
+print("  " + test_file + " exists: " + str(exists))
+print("  /nonexistent/file.txt exists: " + str(fs.exists("/nonexistent/file.txt")))
+
+print("")
+print_subsection("fs.read")
+let read_result = fs.read(test_file)
+matc "' -> " + str(validate_json(invalid_json)))
+
+print("")
+
+// Test field extraction
+print("Extracting fields from JSON...")
+let data_str = "{\"id\": 1, \"name\": \"Alice\", \"score\": 95.5}"
+let name_result = extract_field(data_str, "name")
+match name_result {
+    ok(value) => print("  name: " + str(value))
+    err(e) => print("  Error: " + e)
+}
+
+let missing_result = extract_field(data_str, "missing")
+match missing_result {
+    ok(value) => print("  missing: " + str(value))
+    err(e) => print("  Error: " + e)
+}
+
+print("")
+
+// Test record conversion
+print("Working with DataRecord structs...")
+let record = DataRecord {
+    id: 42,
+    name: "Widget",
+    value: 19.99
+}
+
+let json_output = record_to_json(record)
+print("  Record to JSON: " + json_output)
+
+let record_result = json_to_record(json_output)
+match record_result {
+    ok(r) => print("  JSON to Record: id=" + str(r.id) + ", name=" + r.name + ", value=" + str(r.value))
+    err(e) => print("  Error: " + e)
+}

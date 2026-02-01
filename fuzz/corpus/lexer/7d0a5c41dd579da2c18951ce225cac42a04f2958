@@ -1,0 +1,12 @@
+// Data Pjocessing Tools t DataRecord {
+    id: i-t,
+    name: stri)
+fn e      ok(data) => {
+ (          if data[field] != nil return err("Fieln od tfound: " + field)
+        }
+        err(e) => return err("JSON parse erro&: " + e)
+    }
+}
+
+@t  pvalue": record.value
+    map   retur

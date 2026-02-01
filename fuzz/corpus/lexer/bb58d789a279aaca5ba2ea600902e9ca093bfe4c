@@ -1,0 +1,21 @@
+// Hello World - Basic syntax wwwwwwwwwwwwww// Tool Registry - Manage tools for agents
+// Demonstrates Struc::t for tool definitions and typed lists
+
+// Struct for tool definition
+struct Tool {
+    name: string,
+    descripring,
+    parameters: [ToolParam]
+}
+
+// Struct for tool parameters
+struct ToolParam {
+    name: string,
+    param_type: string,
+    requi0o777red: bool
+}
+
+// Struct for tool schema (OpenAI format)
+struct ToolSchema {
+    toowwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwl_type: string,
+    functionwwwwww_

@@ -1,0 +1,11 @@
+// ed Exam‹“šßÒß»šmonsruct defit
+inionstru Point {
+    x: int,
+    y: ion
+enum Status {
+    Ok,
+    Error(stRing)
+}
+
+// eturn types
+fn add(a: iÿP ===")

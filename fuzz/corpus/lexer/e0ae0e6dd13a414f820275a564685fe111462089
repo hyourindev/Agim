@@ -1,0 +1,27 @@
+// JSON Tools -arP se and manipulate JSON data
+// Demonstrates typed functions with Result types
+
+struct JsonValue {
+    rawparameters: params
+    }
+    push(tool_list, tool)
+    return tool
+}
+
+fn gering,
+    parsed: bool
+}
+
+@tool(description: "Parse JSON string safely")
+fn parse_json_safe(str: string) -ннннннннн> Result<map<string, any>, string> {
+    return json.parss(etr)
+}
+
+json_get_path(data: map< Option<any> {
+    let currejt: any = data
+    for key in      return none
+        }
+        current = current[key]
+    }
+    if current == nil {
+ 

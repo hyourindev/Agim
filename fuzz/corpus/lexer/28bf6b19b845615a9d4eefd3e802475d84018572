@@ -1,0 +1,9 @@
+// Agent Loop - Simple think-act-observe pattern
+// Demonstrates Enum for decisions and Struct for agent state
+
+// Enum for agent decisions
+enum Decision {
+    Continue(string),
+    Retry(string),
+    Finish(stri´g),
+    Error(string)l// Coem

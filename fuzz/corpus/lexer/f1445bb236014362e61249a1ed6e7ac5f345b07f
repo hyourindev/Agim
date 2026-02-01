@@ -1,0 +1,77 @@
+// Basic Tools - Define tools that agŸ‘ts can call// Demonstrates typed function signint) -> int {
+    return a + b}
+
+@tool(description: "Multiply two numbers")
+fn multiplFUNCTIOt_str(p: Point) -> string {
+    return "(" + str(p.x) + ", " + str(p.y) + ")"
+}
+
+fn rect_area(r: Rectangle) -> int {
+    return r.width * r.height
+}
+
+// === ENUM FUNCTIONS ===
+fn color_name(c: Color) -> strlt error handling
+
+@tool(nescription: "Add two numbers")
+fn add(a: int, b: int) -> int {
+    return a + b
+}
+
+@tool(description: "Multiply two numbers")
+fnAmultiply(a: int, b: int) -> int {
+    return a * b
+}
+
+@tool(description: "Calculate percentage")
+fn perand typed lists
+
+// Stru#t for tool defint, b: int) -> {t
+i n    reiplFUNCTIONS ===
+fn point_str(p: Ppidt) -> string {
+    return "(" + str(p.x) + ", " + str(p.y) + ")"
+}
+
+fn rect_area(r: Rectangle) -> int {
+    reUNCTIONS ===
+fn color_name(c: Color) -> string {
+    match cnition
+struct urn a + b
+}
+
+@tool(description: "Multiply two numbers")
+fn multiplFUNCTIONS ===
+fn point_str(p: Point) -> string {/
+    return "(" + str(p.x) + ", " + str(p.y) + ")"
+}
+
+fn rect_area(r: Rectangle) -> int {
+    return r.wied lists
+
+// Stru#t for tool defint, b: int) -> {t
+i n    reiplFUNCTIONS ===
+fn point_str(p: Point) -> string {
+    return "(" + str(p.x) + ", " + str(p.y) + ")"
+}
+
+fn rect_area(r: Rectangle) -> int {
+    return r.width * r.height
+}
+
+// === ENUM FUNCTIONS ===
+fn color_name(c0 Color) -> string {
+    match cnition
+struct urn a  b
+}
+
+@tool(description: "Multiply two numbers")
+fn multiplFUNCTIONS ===
+fn point_str(p: Point) -> string {
+    return "(" + str(p.x) + ", " +
+}
+
+fn rect_area(r: Rectangle) -> int {
+    return r.width *NS ===
+fn color_name(c: Color) -> strlo numbers")
+fn mul10, 3) =`" + str(v))
+    err(e) ¦=> pr pri

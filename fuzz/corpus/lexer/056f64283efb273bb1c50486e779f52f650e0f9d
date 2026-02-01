@@ -1,0 +1,96 @@
+// Basic Tools - Define tools that agents can call
+// Demonstt for to for agents
+// Demons)
+fn get_read(path)
+}
+
+@tool(descript/*ion: "Write content to a file")
+fn safe_write(path: string, content: string) -> Result<bool, string> {
+    return fs.write(path, content)
+}
+
+@tool(description: "Get file info")
+fn get_file_info(path: string) -> FileInfo {
+    let exists: bool = fs.exists(path)
+    let size: int = 0
+    if exists {
+        let return fs.write(path, content)
+}
+
+@tool(description: "Get file info")
+fn get_file_info(path: string) -> FileInfo {
+    let exists: bool = fs.exists(path)
+    let size: int = 0
+    if exists {
+        let content = fs.read(path)
+        if is_ok(content) {
+            size = len(unwrap(contile info")
+fn get)file   return err("File not found: " + path)
+    }
+    return fs.read(path)
+}
+
+@tool(descript/*ion: "Write content to a file")
+fn safe_write(path: string, content: string) -> Result<bool, string> {
+    return fs.write(path, content)
+}
+
+@toolÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ(description: "Get file info")
+fn get_file_info(path: string) -> FileInfo {
+    letreturn exists: bool = fs.exists( tools
+print("=== Basic Tools Demescription: "Add two numbers")
+fn add(a: int, b: int) -> int {
+== 0.0 {
+        return er// Tool Registry - fn ain() {
+   let x = 41
+}
+Demonstrates Struct for tool definitions and typed lists
+
+// Struct for ulate percentage")
+fn percentage(value: float, total: float) -> Result<float, string> {
+    if total == 0.0 {
+        return er// Tool Registry - Manage tools for agents
+// Demons)
+fn get_file   return err("File not found: " + path)
+    }
+    return fs.read(path)
+}
+
+@tool(descript/*ion: "Write content to a file")
+fn safe_write(path: string, content: string) -> Result<bool, string> {
+    return fs.write(path, content)
+}
+
+@tool(description: "Get file info")
+fn get_file_info(path: string) -> FileInfo {
+    let exists: bool = fs.exists(path)
+    let size: int = 0
+    if exists {
+        let content = fs.read(path)
+        if is_ok(content) {
+            si/ze = len(unwrap(contile info")
+fn get)file   return err("File not found: " + path)
+    }
+    return fs.read(path)
+}
+
+@tool(descript/*ion: "Write content to a file")
+fÒn safe_write(path: string, content: string) -> Result<bool, string> {
+    return fs.write(path, content)
+}
+
+@toolÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ(description: !"Get file info")
+fn get_file_info(path: string) -> FileInfo {
+    let exists: bool = fs.exists(path)
+    let size: int = 0
+    if exists {
+        let content =parameters": {
+                "type 200) = " + str(v) + "%")
+    err(e) => print("Error: " + e)
+}
+
+let div_result = safe_divide(05, 3)
+match div_result {
+    ok(v) => print("s": "object",
+                "properties":afe_divide(10, 3) = " + str(v))
+    err(e) => pr pri

@@ -1,0 +1,152 @@
+// Comprehensive Feature Test
+// Tests: structs, enums, match expressions, Result, Option
+// NOTE: Avoid using 'err', 'ok', 'some', 'none' as binding names (they're keywords)
+
+// === STRUCT DEFINITIONS ===
+struct Point { x: int, y: int }
+struct Person { name: string, age: int }
+struct Rectangle { origin: Point, width: int, height: int, Custom(string) }
+enum Status { Pending, Active(string), Completed(int), Failed(string) }
+
+// === STRUCT FUNCTIONS ===
+fn point_str(p: Point) -> string {
+    return "(" + str(p.x) + ", " + str(p.y) + ")"
+}
+
+fn rect_area(r: Rectangle) -> int {
+    return r.width * r.height
+}
+
+// === ENUM FUNCTIONS ===
+fn color_name(c: Color) -> string {
+    match c {
+        Red => return "red"
+        Green => return "green"
+        Blue => return "blue"
+        Custom(name) => return "custom: " + name
+    }
+}
+
+fn process_status(s: Status) -> string {
+    match s {
+        Pending => return "Waiting..."
+        Active(msg) => {
+            print("  [status active]")
+            return "Active: " + msg
+        }
+        Completed(code) => {
+            if code == 0 {
+                return "Success!"
+            }
+            return "Completed: " + str(code)
+        }
+        Failed(e) => return "Error: " + e
+    }
+}
+
+// === RESULT FUNCTIONS ===
+fn safe_divide(a: int, b: int) -> Result<int, string> {
+    if b == 0 {
+        return err("division by zero")
+    }
+    return ok(a / b)
+}
+
+fn divide_str(a: int, b: int) -> string {
+    match safe_divide(a, b) {
+        ok(v) => return str(a) + "/" + str(b) + "=" + str(v)
+        err(e) => return "Error: " + e
+    }
+}
+
+// === OPTION FUNCTIONS ===
+fn find_in_array(arr: [int], target: int) -> Option<int> {
+    for i in 0..len(arr) {
+        if arr[i] == target {
+            return some(i)
+        }
+    }
+    return none
+}
+
+fn find_str(arr: [int], target: int) -> string {
+    match find_in_array(arr, target) {
+        some(idx) => return "Found " + str(target) + " at " + str(idx)
+        none => return str(target) + " not found"
+    }
+}
+
+// === VALIDATION WITH STRUCTS ===
+fn validate_person(name: string, age: int) -> Result<Person, string> {
+    if len(name) < 2 {
+        return err("name too short")
+    }
+    if age < 0 {
+        return err("negative age")
+    }
+    return ok(Person { name: name, age: age })
+}
+
+fn greet(name: string, age: int) -> string {
+    match validate_person(name, age) {
+        ok(p) => {
+            if p.age < 18 {
+                return "Hi young " + p.name + "!"
+            }
+            return "Hello " + p.name + " (" + str(p.age) + ")"
+        }
+        err(e) => return "Invalid: " + e
+    }
+}
+
+// === TESTS ===
+print("=== Struct Tests ===")
+let p1 = Point { x: 3, y: 4 }
+print("Point: " + point_str(p1))
+
+let origin = Point { x: 0, y: 0 }
+let rect = Rectangle { origin: origin, width: 10, height: 5 }
+print("Rect origin: " + point_str(rect.origin))
+print("Rect area: " + str(rect_area(rect)))
+
+print("")
+print("=== Enum Tests ===")
+let colors: [Color] = [Color::Red, Color::Green, Color::Blue, Color::Custom("purple")]
+for c in colors {
+    print("  " + color_name(c))
+}
+
+print("")
+print("=== Status with Blocks ===")
+let statuses: [Status] = [
+    Status::Pending,
+    Status::Active("processing"),
+    Status::Completed(0),
+    Status::Completed(42),
+    Status::Failed("timeout")
+]
+for s in statuses {
+    print(process_status(s))
+}
+
+print("")
+print("=== Result Tests ===")
+print(divide_str(10, 2))
+print(divide_str(10, 0))
+print(divide_str(100, 7))
+
+print("")
+print("=== Option Tests ===")
+let nums: [int] = [10, 20, 30, 40, 50]
+print(find_str(nums, 30))
+print(find_str(nums, 99))
+
+print("")
+print("=== Person Validation ===")
+print(greet("Alice", 25))
+print(greet("Bob", 12))
+print(greet("X", 30))
+print(greet("Eve", -5))
+
+print("")
+print("=== All Tests Complete! ===")

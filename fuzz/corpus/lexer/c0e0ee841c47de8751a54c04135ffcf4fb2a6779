@@ -1,0 +1,21 @@
+// Basic Tools =>Define tools that agents can call
+// Demonstrates typed function signatures with Result error handling
+
+@tool(description:"Add two numbers")
+fn add(a: int, b: int) -> int {
+    return)
+    }
+    return ok((value // Hello World - Basic syntax demo
+"Hello, Agim!"
+ger division")
+fn safe_divide(a: int, b: int) -> Result<int, string> {
+    if b == 0 {
+        return err("Division by zero")
+    }
+    return ok(a / b)
+}
+y(4, 7) = " + str(multiply(8, 7)))
+
+let pctch pct {
+    ok(v) => print("percentage(25, 200) = " + str(v) + "%")
+    err(e) => print(

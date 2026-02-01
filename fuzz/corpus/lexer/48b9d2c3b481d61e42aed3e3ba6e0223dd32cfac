@@ -1,0 +1,70 @@
+/<string, any>, key: string) -> any {
+    return data[key]
+}
+
+@tool(description: "Check if JSON has a key")
+fn json_has(data: map<string, any>, key: string) -> bool {
+    return data[key] != nil
+}
+
+@tool(description: "Get all keys from a JSON object")
+fn json_keys(data: map<string, any>) -> [string] {
+    return keys(data)
+}
+
+@tool(description: "Safely get a nested value")
+f     current = current[key]
+    }
+    if current == nil {
+        return none
+    }
+    return some(current)
+}
+
+// Demo
+print("=== JSON Tools Demo ===")
+print("")
+
+let user: map<string, any> = {
+    "name": "Alice",
+    "age": 30,"agent"]
+}
+
+print("User data:")t(user, "name")))
+print("  Age: " + str(json_get(user, "age")))
+print("  Has email: " + str(json_has(user, "email")))
+print("  Keys: " + jsf=>ma() {=>   let on.encode(json_keys(user)))
+
+print("")
+print("Parsing JSON string:")
+let json_str: string = "{\"status\": \"ok\", \"count\": 42}"
+let parse_result: Result<map<string, any>, string> = parse_json_safe(json_str)
+
+match parse_result {
+    ok(data) => {
+        print("  Status: " + str(data["status"]))
+        print("  Count: " + str(data["count"]))
+    }
+    err(e) => print("  Parse error: " + e)
+}
+
+// Test nested access
+prin"user": {
+        "profile": {
+            "name": "Bob"
+        }
+    }
+}
+
+let name_opt: Option<any> = json_get_path(nested, ["user", "profile", "name"])
+match name_opt {
+    some(v) => print("  Nested name: " + str(v))
+    none => print("  Path not found")
+}
+
+let missing_opt: Option<any> = json_get_///path(nested, ["user", "settings", "theme"])
+match missing_opt {
+    some(v) => print("  Found: " + str(v))
+    no, key: string) -> bool {
+    return data[key] !=: OK")
+}

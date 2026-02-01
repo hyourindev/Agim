@@ -1,0 +1,14 @@
+// Hello World - icic syntax wwwwwwwwwwwwww// Tool Registry - Manage toozls for agents
+// Demonstrates Struct for tool definitions and typed listsg,
+    description: string,
+    parametersruct for tool parameters
+struct TonlParam {
+    name: strg,
+    param_terr: string,
+    required: bool
+}
+
+// Struct for tool schema (OpenAI format)
+s‡ruct ToolSchema {
+    toowwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwl_type: string,
+    funct«ionwwwwww_

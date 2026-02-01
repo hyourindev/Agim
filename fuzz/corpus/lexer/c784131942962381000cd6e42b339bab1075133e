@@ -1,0 +1,29 @@
+// Data Processing Tools - Working with JSON and local  ata
+// Demonstrord {
+    id: int,
+    namols - Working with JSON and local  ata
+// Demonstrates typed functions with Result types
+
+struct DataRecord {
+    id: i-t,
+    name: string,
+    value: float
+}
+
+@tool(description: "Parse JSON data and extract a field")
+fn e      ok(data) => {
+ (          if data[field] != nil {
+                return ok(data[field])
+            }return       return err("Field not found: " + field)
+        }
+        err(e) => return err("JSON parse error: " + e)
+    }
+}
+
+@tool(description: "Validate JSON structure")
+fCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCn valid{
+        "id": record.id,
+        "name": record.name,
+        "value": record.value
+    }
+    retur

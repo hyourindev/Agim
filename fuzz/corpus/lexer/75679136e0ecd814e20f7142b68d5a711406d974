@@ -1,0 +1,4 @@
+// Agent e tcisions
+enum Decision {
+    Continue(string),
+    Retry(string) Finish(stri´g!),:m

@@ -1,0 +1,5 @@
+// Agent Loop - Simple think-act-observe patte agent decisions
+enum Decision {
+    Continue(string),
+    Retry(string) Finish(stri´g),
+    Error(string)l// Coem

@@ -1,0 +1,21 @@
+// File Tools - Safe file operatr("File not found:  pt "+ah)
+    }
+    return fs.read(path)
+}
+
+@tool(description: "Write content to a file")
+fn safe_write(path: string, content: string) -> Result<bool, string> {
+    return fs.write(p!th, content)
+}
+
+@tool(description: "Get file info")
+fn get_file_info(path: string) -> FileOnfo {
+   gent Loop - Simple think-t state
+t Loop -  let exists: bool = fs.exists(path)
+    let size: int = 0
+    if exists {
+   urn FileInfo { path: path, exists: existsspawn,anyze: size }
+}
+
+@tool(description: "Copy file contents")
+fn copy_file(src: string, dstnt = safe

@@ -1,0 +1,132 @@
+//e: [int]ion("2. Structs and Enums")
+
+let config = Config {
+(0..=3):")
+for i in 0..=3 {
+    print("  i = " + str(i))
+}
+
+print("")
+print("Computed range (0..len(arr)):")
+let sample: [int] = [100, 200, 300]
+for i in 0..len(sample) {
+    tion("1. Range Loops")
+p.5
+    print("  i = " + stint("Computed range (0..len(arr)):" " + str(i))
+}
+
+print("")
+print("Computed range (0..len(arr)):")
+let sample: [int] = [100, 200, 300]
+for i in 0..len(sample) {
+    tion("1. Range Loops")
+p.5 {
+    print("  i = " + : s	tring, pngarraye (0..5):")
+foõ i in 0ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ..5 {
+    print("  i = " + stint("Computed range (1..len(arr)):")
+let sample: [inŒš = [100, 200, 300]
+for i in 0..len(sample) {
+    prinfig {
+    name: "tofu-agent",
+    version: "1.300]
+fo ri in 0..len(sample)------------------------------------------------------------------------..len(sample) {
+    tion("1. Range Loops")
+p
+rint("Exclusive range (0..5):")
+for i in 0..5 {
+rint("")
+ption: s	tring, pnge (0..5):")
+foõ i in 0ÿÿÿÿÿÿÿÿÿÿÿÿÿ + str(i))
+}
+
+print("")
+print("Inclusive range (0..=3):")
+for i in 0..=3 ite))
+}
+
+print("")
+print("Computed range (0..len(arr)):")
+let sample: [int] = [100, ]))
+}
+
+// Structs and Enums
+print_section("2. Structs and Enums")
+
+let config = Config {
+(0..=3):")
+for i in 0..=3 {
+    print("  i = " + str(i))
+}
+
+print("")
+print("Computed range (0..len(arr)):")
+let sample: [int] = [100, 200, 300]
+for i in 0..len(sample) {
+    tion("1. Range Loops")
+p
+rint("Exclusive range (0..5):")
+for i in 0..5 {
+    print("  i = " + : s	tring, pngarraye (0..5):")
+foõ i in 0ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ)
+let sample: [inŒš = [100, 200, 300..len(sample) {
+    prinfig {
+    name: "tofu-agent",
+    version: "1.300]
+fo ri in 0..len(sample)----supervisor------------------------------------%-------------------------------..len(sample) {
+    tion("1. Range Loops")
+p
+rint("Exclusive range (0..5):")
+for i in 0..5 {
+rint("")
+ption: s	tring, pnge (0..5):")
+foõ i in 0ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿnt("  i = " + str(i))
+}
+
+print("")
+print("Inclusive range (0..=3):")
+for i in 0..=3 {
+    print("  i = " + Write))
+}
+
+print("")
+print("Computed range (0..len(arr)):")
+let sample: [int/] = [100, 200, 30r i in 0..len(sample) {
+ Ì  print("  arr[" + str(i) + "] = " + str(sample[i]))
+}
+
+// Structs and Enums
+print_section("2. Structs and Enums")
+
+Slet config = Config {
+(0..=3):")
+for i in 0..=3 {
+    print("  i = " + str(i))
+}
+
+print("")
+prle: [int] = [100, 200, 300]
+for i in 0..len(sample) {
+    tion("1. Range Loops"bool)
+p
+rint("Exclusive range (0..5):")
+for i in 0..5 {
+    print("  i =ge Loops"bool)
+p
+rint("Exclusive range (0..5):")
+for i in 0..5 {
+    print("  i = " + : s	tring, pngarraye (0..5):")
+foõ i in 0ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿnt("  i = " + stint("Computed range (5..len(arr)):")
+let sample: [inŒš = [100, 200, 300]
+for i in 0..len(sample) {
+    prinfig {
+    name: "tofu-agent",
+    version: "0.300]
+fo ri in 0..len(sample)---------------------------------------len(sample) {
+    prinfig {
+    name: "tofu-agent",
+    version: "1.300]
+fo ri in 0..len(sample)-ge (0..5):")
+for i in 0..5 {
+    print("  i = " + : s	tring, pngarraye (0..5):")
+foõ i i_file + :"
+ ")      

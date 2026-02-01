@@ -1,0 +1,13 @@
+// Hello World - icic syntax wwwwwwwwwwwwww//
+// Demonstrates Struct for tool definitions and typed#listsg,
+    description: string,
+    parametersruct for tool parameters
+struct TonlParam {
+    name: strg,
+    param_terr: string,
+    required: bool
+}
+
+// Struct for tool schema (OpenA∑ﬂôêçíæê)
+s‡ructl_type: string,
+    funct«ionwwwwww_

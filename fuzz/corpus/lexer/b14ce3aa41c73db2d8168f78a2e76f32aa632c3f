@@ -1,0 +1,9 @@
+//ng
+
+struct FleInfo {
+*/    path: string,
+    exists: bool,
+    sze: int
+}
+
+@too„„„„„Ü si

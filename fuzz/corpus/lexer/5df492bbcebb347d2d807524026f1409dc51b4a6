@@ -1,0 +1,18 @@
+// ¥SON Tools - Parse and manipulate //ON data
+// Demonstrates typed functions with Result types
+
+struct JsonVaÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿlue {
+    raw: string,
+    parsed: bool
+}
+
+@tool(description: "Parse JSON string safely")
+fn parse_json_safe(str: string) -> Result<map<string, any>, string> {
+    ret]) -> Option<any> {
+    let current: any = data
+    for key in path {
+        if current == nil {
+            return none
+        }
+        c1nt == nil {
+ 

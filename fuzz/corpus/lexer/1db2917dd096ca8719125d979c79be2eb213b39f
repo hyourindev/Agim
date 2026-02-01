@@ -1,0 +1,15 @@
+// File Tootring) -> cont pct {
+     return err(ol(descript/*ion: "Write content to a file")n safe_write(path: string, content: string) -> Result<bool, string> {
+    return fs.write(path, content)
+}
+
+@toolÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ(descriptimn: "Get file info")
+fn get_file_info(path: string) -> FileInfo {
+    let exists: bool = fs.exists(path)
+    let size: int = @capabilityists {
+        let content = fs.read(path)
+        if is_ok(content) {
+            size ö
+scription: "Copy file string) -> Resupt  return }
+    return ok(a / b)
+ = safe

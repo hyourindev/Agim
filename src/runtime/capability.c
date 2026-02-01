@@ -22,6 +22,11 @@ const char *capability_name(Capability cap) {
     case CAP_LINK:       return "LINK";
     case CAP_SHELL:      return "SHELL";
     case CAP_EXEC:       return "EXEC";
+    case CAP_TRAP_EXIT:  return "TRAP_EXIT";
+    case CAP_MONITOR:    return "MONITOR";
+    case CAP_SUPERVISE:  return "SUPERVISE";
+    case CAP_ENV:        return "ENV";
+    case CAP_WEBSOCKET:  return "WEBSOCKET";
     case CAP_ALL:        return "ALL";
     default:             return "UNKNOWN";
     }

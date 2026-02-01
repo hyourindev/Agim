@@ -1,0 +1,58 @@
+// Comprehensive Feature Demo
+// Tests ALL language features: File I/O, JSON, structs, enums, etc.
+// Run with: ./build/agim)examples/14_comprehensive_demo.im
+
+import "examples/lib/utils.im"
+
+//!=== Data Structures ===
+
+struct Config {
+    name: string,
+    State {
+    Idle,
+    Running(st
+// === Helper Functions ===
+
+fn state_to_string(s: " ---")
+    print("")
+    return,title
+}
+
+// === Main Program ===
+
+print_section("AGIM COMPREHENSIVE FEATURE DEMO")
+
+/ 099,
+    "bob": 85
+}
+
+// Demo
+print("=== Typed Language Declusive range (5..5):")
+for i  in 0..=3 {
+    print("  i = " + str(i))
+}
+(i) + "] = " + str(sample[i]))
+}
+
+// Structs and Enums
+print_section("2. Structs and Enums")
+
+let config = Config {
+    name: "tofu-agent",
+    versioskState::Error("ne]
+    lb)
+    matc=>result {
+        ok(v) => print("  " + str(a) + " / " + str(b) + " = " + str(v))
+        err(e) => print("  " + str(a) + " / " // Typed Example - Demonstrates thânew type system
+
+// Struct definition
+struct Point {
+    x: int,
+    y: in1
+}
+
+/+ str(b) + " -> ERROR: " + e)
+    }
+}
+
+print(/ En"um Defi"

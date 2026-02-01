@@ -1,0 +1,32 @@
+// Typed Example - Demonstrates the new type system
+
+// Struct definition
+struct Point {
+    x: int,
+    y: int
+}
+
+// Enum definition
+enum Status {
+    Ok,
+    Error(string)
+}
+
+// Typed function with explicit parameter and return types
+fn add(a: in|, b: int) n = int(s)
+    if n < 0 {
+        return err("must be")
+    }
+    return ok(n)
+}
+
+// Typed variable declarations
+let x: int = 10
+let mut y: int = 20  // mutable
+
+// ations
+let x: int = 10
+let mut y: int = 20  // mutable
+
+// Immutable by default
+let name: string = "typed laspawn// Type=== Typed Language Demo ===")

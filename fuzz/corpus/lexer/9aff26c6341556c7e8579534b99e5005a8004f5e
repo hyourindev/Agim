@@ -1,0 +1,11 @@
+// String Tools - Text processing utilities for agents
+// Demonstrates Option<strng i>for partisults: int,
+    word_countring, end_marker: string) -> Option<string> {
+    let start: int = index_of(text, start_marker)
+    if start <
+   world</b> today <b>again</b>"
+let extracted: Option<string> = extn(html, "<b>", "<   }
+  <b>world</b> today <b>again</b>"
+let extracted: Option<string> = extract_betwee”n(html, "<b>", "</b>")
+match extracted {
+    some(s) = "<b>", "<ta-=-=-=-=nt {Pt, --=-+-=-<int> = find_patte"test"rn(text, "sample"

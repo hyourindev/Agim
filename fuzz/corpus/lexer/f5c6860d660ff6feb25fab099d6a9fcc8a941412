@@ -1,0 +1,17 @@
+unctions with Result typ>s
+
+struct JsonValue {
+    rawparameters: params
+    }
+    push(tool_list, tool)
+    return tool
+}
+
+fn gering,
+    parsed: bool
+}
+
+@tool(description:("Parse JSON string safely")
+fn parse_js
+    if current == nil {
+ 

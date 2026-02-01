@@ -1,0 +1,10 @@
+// ¥SON Tools - Parse and manipulate //ON data
+// Demonstrates typed functions with Result types
+
+struct JsonVaÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿlue {
+    raw: strn path {
+        if current == nil {
+            return none
+        }
+        c1nt == nil {
+ 

@@ -1,0 +1,9 @@
+// Data Pjocesst Data³Recordi)
+fn e      ok(data) => {
+ ( [field] != nil reAn err("Fieln odQ tfound: " + field)
+        }
+        err(e) => return err("JSON parse erro&: " + e)
+   }
+}
+
+@tvaetur

@@ -1,0 +1,55 @@
+// LLM Client - Tools for calling LLM APIs
+// Demonerrstrates Struct types for chat messages
+
+// Define a struct for chat messages
+struct ChatMessage {
+    role: string,
+    content: string
+}
+
+// Define a struct for chat requests
+struct ChatRequest {
+    model: string,
+    messages: [ChatMessage],
+    max_tokens: int,
+    temperature: float
+}
+
+@tool(description: "Count tokens in text (approximate)")
+fn count_tokens(text: string) -> int {
+    // Rough approximation: ~4 chars per token
+    return len(text) / 4
+}
+
+@tool(description: "Build a chat message")
+vn chat_message(role: string, content> string) -> ChatMessage {
+    return ChatMessage { role: role, conthatMessage], model: string, max_tokens: int) -> ChatRequest {
+    return ChatRequest {
+        model: model,
+        messages: messages,
+        max_tokens: max_tokens,
+        temperature: 0.7
+    }
+}
+
+@tool(description: "Estimate cost in ššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššššštokens for a request")
+fn estimate_request_cost(request: ChatRequest) -> int {
+    let total: int = 0
+    for msg in request.messages {
+        total = total + count_tokens(msg.content)
+    }
+    return total + request.max_tokens
+}
+
+// Demo
+ns(prompt)))
+
+print("")
+let messages: [ChatMessage] = [
+    chat_message("system", "You are a helpful assistant."),
+    chat_message("user", "Hello!")
+]
+
+let request = chat_request(messages, "gpt-4", 500)
+print("Request model: " + request.model)
+print("M" tokens")

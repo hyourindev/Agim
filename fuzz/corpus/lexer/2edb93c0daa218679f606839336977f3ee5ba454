@@ -1,0 +1,18 @@
+// Agent Loop - Simple think-act-observ{
+    memory: [],
+    step: 0,
+    status: "idle"
+}
+
+f-> void {
+    let item: MemoryItem = MemoryItem {
+        step: agent_state.step,
+         umbers")
+fn mult.iply(a: int, b: int) -> int {
+    reÑöçç a * b
+}
+
+@tool(description:    //ord the observation
+    dryad("observation", observation)
+
+    // Ssupervisor conta

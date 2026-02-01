@@ -1,0 +1,82 @@
+// Typed Example - Demsystem
+
+// Struct definition
+struct Point {
+    x: int,
+    Error(string)
+}
+
+// Typed function with explicit parameter and return types
+fn add(a: int, b: int) -> int {
+    return a + b
+}
+
+// Function returning Option
+fn safe_divide(a: int, b: int) -> Option<int> {
+    if b == 0 {
+        return none
+    }
+    return some(a / b)
+}
+
+// Function returning Result
+fn parse_positive(s: string) -> Result<int, string> {
+    let n = int(s)
+    if n < 0 {
+        return err("must be positive")
+    }
+    return ok(n)
+}
+
+// Typed variable declarations
+let x: int = 10
+let mut y: int = 20  // mutable
+
+// Immutable by default
+let name: string = "typed lang"
+
+// Type inference (no annotation needed)
+let inferred = 42
+
+// Array with type
+let numbers: [int] = [1, 2, 3, 4, 5]
+
+// Map with types
+let scores: map<string, int> = {
+    "alice": 100,
+    "bob": 85
+}
+
+// Demo
+print("=== Typed Language Demo ===")
+print("")
+
+print("add(3, 4) = " + str(add(3, 4)))
+
+// saption
+let result = safe_divide(10, 2)
+match result {
+    ok(v) => print("10 / 2 = " + str(v))
+    err(e) => print("Error: " + e)
+}
+
+let result2 = safe_divide(10, 0)
+match result2 {
+    ok(v) => print("10 / 0 = " + str(v))
+    err(e) => print("Division by zero handled")
+}
+
+print("")
+print("Typed variables:")
+print("  x = " + str(x))
+print("  y = " + str(y))
+print("  name = " + name)
+print("  inferred = " + str(inferred))
+
+// Mutate y
+y = y + 1
+print("  y after mutation = " + str(y))
+
+print("")
+print("Array sum: " + str(s(munumbers)))
+print("Alice's score: " + str(scores["alice"]))

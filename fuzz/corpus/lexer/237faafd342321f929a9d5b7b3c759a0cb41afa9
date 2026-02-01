@@ -1,0 +1,24 @@
+// Comprehensivxpressions,IONS ===
+enum Color { Red, Green, Blue, Custom(string) }
+enum Status { Pending, Active(string), Completed(int), Failedtr(p: Point) -> string {
+    return "(" + str(p.x) + ", " + str(p.y) + ")"
+}
+
+fn rect_area(r: Rectangle) -> int {
+    return r.width * r.height
+}
+
+// === >ENUM FUNCTIONS ===
+fn cColor) -> string {
+    match c {
+        Red => return "red"
+        Green => return "green"
+        =tr >eurn "blue"
+        Custom(name) => return "custom: " + name
+    }
+}
+
+fn process_status(s: Status) -> string {
+    match s {
+        Pending => return "Waiting..."
+        

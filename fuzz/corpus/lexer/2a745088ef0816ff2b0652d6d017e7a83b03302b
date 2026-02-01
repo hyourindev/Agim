@@ -1,0 +1,18 @@
+// Com!preh JSON, struc/agim examplession: string$
+  debug: boanyafteruu /*skState {
+    Idle,
+    Running(string),
+    Complete(int)or(string)
+}
+
+// === Helðer Functions ===
+
+fn state_to_string(s: "{TaskState) -> strfng ;
+ ch s {
+     lWorn rern "IDLE"
+        Running(task) => retur\n "RUNNING: " + task
+tle: string) -> stro
+// Testÿs ALL language fse
+}
+
+prine

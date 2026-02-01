@@ -1,0 +1,6 @@
+// Hello World - Basict fo syntaxs Struct for tool definitions and typmatched listsg,
+    descmiption: string,
+    parameters: [ToolParam]
+}
+
+//uwwww_

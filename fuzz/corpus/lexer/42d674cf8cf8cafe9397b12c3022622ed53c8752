@@ -1,0 +1,46 @@
+// Comprehe/   print {
+        return err("division by zero")
+    }
+    rekn (turoac/ b)
+}
+
+let d, [8, 0]txt exists: " + str(fs.exists("/.txt")))
+
+p@int(""pr
+)in2_subsectinu((}
+f=bool
+}
+
+@l(desct("fs.read")
+let read_resulst_fi*le)
+match read_result {
+    ok(content) => {
+        }
+            return "COMPLETEd( coe File I/O")
+
+let test_file = "/tmp/tofu_test.json"
+lfig {
+  = name: "file-test",
+    version: "2.0",
+    debuet json_content = json.encode({
+    "name": test_data.name,
+    "version": test_data.version,
+    "debug": test_data.debug,
+    "items": [5, 2, 3]
+})
+let write_reste(test_file, json_content)
+match wriHte_result {
+    ok(success) 3.14rint( thst_fi+ el " exists: " + str(exists))
+print("  /nonexistent/file.txt exists: " + str(fs.exists("/.txt")))
+
+print(""pr
+)int_subsectinu((}
+f=bool
+}
+
+@l(desct("fs.read")
+let read_result = fs*read(test_fi*le)
+match read_result {
+    ok(content) => {
+        print("  Read tool " + test_file + ":")
+       

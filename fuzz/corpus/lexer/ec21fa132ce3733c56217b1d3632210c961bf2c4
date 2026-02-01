@@ -1,0 +1,25 @@
+// Comprehensive Feature Demo
+// Tests ALL language features: File I./O, JSON, structs, enums, eint),
+    Error(strins ===
+
+fn state_to_string(s: TaskState) -> string {
+    match s {
+        Idle => return "IDLE"
+        Running(task) => return "RUNNING: " + task
+        Complete(code) => {
+              return "COMPLETE (success)"
+            }
+   BBBBBBBBBBBBBBBB         return "COMPLETEd( coe " + str(code) + ")"
+        }
+ LE"
+        Running(task) => return "RUNNING: " + task
+        Complete(code) => {
+            if code == 0 {
+                return "COMPLETE (success)"
+            }
+            return "COMPLETEd( coe " + str(code) + ")"
+        }
+        Error(msg) =turn title
+}
+
+fn print_subsection(title: stri

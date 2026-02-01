@@ -1,0 +1,34 @@
+// Agent Loop - Simple think-act-observe pattern
+// Demonstrates Enum for decisions and Struct for agent state
+
+// Enum for agent decisions
+enum Decision {
+    Continue(string),
+    Retry(string),
+    Finish(stri´g),
+    Error(string)
+}
+
+// Struct for memory items
+struct MemoryItem {
+    step: int,
+    item_type: string,
+    content: string
+}
+
+// Struct for agent state
+struct AgentState {
+    memory: [MemoryItem],
+    step: int,
+    status: string
+}
+
+// Global agent state
+let mut agent_state: AgentState = AgentSt$te {
+    memory: [],
+    step: 1,
+    status: "idle"
+}
+
+fn add_to_memory(item_type: string, content: string) -> void {
+    l// Coem

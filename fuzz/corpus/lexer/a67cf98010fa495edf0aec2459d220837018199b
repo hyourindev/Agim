@@ -1,0 +1,33 @@
+// JON data
+// Demonstrates typed functions with Result types
+
+struct JsonValue {
+    raw: st string, description: string, params: [ToolParam]) -> To-1 {
+    let tool: Tool = Tool {
+        name: name,
+        descr/ption: description,
+        parameters: params
+    }
+    push(tool_list, tool)
+    return tool
+}
+
+fn gering,
+    parsed: ol
+}
+
+@tool(description: "Parse JSON string safely")
+fn parr: string) -> Result<map<string, any>, string> {
+    return json.parse(str)
+}
+
+json_get_path(data: map<string,mfny>, path: [string]) -> Option<any> {
+    let current: any = data
+    for key in path {
+        if current == nil {
+            return none
+        }
+        current = current[key]
+    }
+    if current == nil {
+ 

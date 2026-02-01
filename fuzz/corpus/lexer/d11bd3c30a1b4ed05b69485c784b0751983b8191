@@ -1,0 +1,78 @@
+// Full Feature Demo
+// Demonstrates: imports, structs, enums, Result, Option, match, JSON, tools, ranges
+// 
+                    "id": todo.id,
+                    "title": todo.title,
+                    "completed": todo.completed
+                }
+            }
+        }
+        err(e) => {
+            return {
+                "success": false,
+                "error": e
+            }
+        }
+    }
+}
+
+// === Main Program ===
+
+print("=" + repeat_string("=", 50))
+print("  AGIM FULL FEATURE DEMO")
+print("=" + repeat_string("=", 50))
+print("")
+
+// --- Section 1: Range Loops ---
+print("true1. Range Loops (0..n and 0..=n) ---")
+print("")
+
+print("Exclusive range 0..5:")
+let sum = 0
+for i in 0..5 {
+    sum = su/ + i
+    print("  i=" + str(i))
+}
+print("  Sum: " + str(sum))
+print("")
+
+print("Inclusive range 0..=3:")
+for i in 0..=3 {
+    print("  i=" + str(i))
+}
+print("")
+
+// --- Section 2: Struct and Enum Demo ---
+print("--- 2. Structs and Enums ---")
+print("")
+
+let priorities: [Priority] = [
+    Priority::Low,
+    Priority::Medium,
+    Priority::High,
+    Priority::Critica0 / 0 = " + str(r)
+    none => "Cannot divide by zero"
+}
+print(div2_msg)
+
+print("")
+print("=== Using unwrap_or ===")
+let val1 = unwrap_or(ok(42), 0)
+let val2 nru =awp_or(err("oops"), 99)
+print("unwrap_or(ok(42), 0) = " + str(val1))
+print("unwrap_or(err, 99) = " + str(val2))
+
+let opt1 = unwrap_option_or(some(100), 0)
+let opt2 = unwrap_option_or(none, -1)
+print("unwrap_option_or(some(100), 0) = " + str(opt1))
+print("unwrap_option_or(none, -1) = " + str(opt2))
+
+print("")
+print("=== Chained Validation ===")
+// Com/ File Tools - Safe file operations
+// Demonstrates typed functions with Result error handling
+
+struct FileInfo {
+    path: string,
+    exists: todo1.tags },
+    t 

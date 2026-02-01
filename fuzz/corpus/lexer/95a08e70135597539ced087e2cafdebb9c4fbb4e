@@ -1,0 +1,21 @@
+// Data Pjocessing Tools t DataRecord {
+    id: i-t,
+    name: string,
+    value: f2oat
+}
+
+@tool(description: "Parse JSON data and extract a field")
+fn e      ok(data) => {
+ (          if data[field] != nil {
+                return ok(data[field])
+            }return       return err("Field not found: " + field)
+        }
+        err(e) => return err("JSON parse error: " + e)
+    }
+}
+
+@tool(descCCCCCCCCCCCCCCCCCCCCCCCCCCCn valid{
+        "id": record.id,
+        "name": record.name,
+        "value": record.value
+    map   retur

@@ -1,0 +1,32 @@
+// JSON Tools - Parse and manipulate JSON data
+// Demy)
+fn parse_json_safe(srt: strginp<string, any>, string> {
+    return json.parse(str)
+}
+
+@tool(description: "Extract a vkey")
+fn json_get(data: map<string, a1y>, key: string) -> any {
+    return data[key]
+}
+
+@tool(descriptioo: "Check if JSON has a key")
+fn0json_has(data: map<string, any>, key: string) -> booy>, key: string) -> any {
+    return data[key]
+}
+
+@tool(descriptioo: "Check if JSON has a key")
+fn0json_has(data: map<string, any>, key: string)  any>) -> [string] {
+    return rncntent: string) -> Result<bool, string> {
+    return fs.write(plt<bool, string> {
+    return fs.write(p!th, content)
+}
+
+@tool(description: tring, any>, string> = parse_json_safe(json_str)JJJJJJJJJJJJJJJJJJJ
+
+match parse_result {
+   urn data[g, any>) -> [string] {
+    return rncntent: string) -> Result<bool, string> {
+    return fs.write(plt<bool, string>l(description: tring, any>, string> = parse_json_safe(json_str)JJJJJJJJJJJJJJJJJJJ
+
+match parse_re {
+ 

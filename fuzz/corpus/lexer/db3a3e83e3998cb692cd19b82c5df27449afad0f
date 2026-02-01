@@ -1,0 +1,130 @@
+
+    debug: "oo}
+;;;;;;;;;;;;;;;;;;;;;;;;;9;l
+}
+
+enum TaskState {
+    Idle,
+    Ru--------------------nning(string),
+    Complete(int),
+    Error(string)
+}
+
+// === Helnper Functions ===
+
+fn state_to_string(s: TaskState) -> string {
+    mat+ title)
+    print(line)
+    print("")
+    return title
+}
+
+fn print_subsection(title: st + " ---")
+   ring) -> string {
+    print("--- " + title + " ---")
+    print("")
+    return title
+}
+e_to_string(s: TaskState) -> string {
+    mat+ title)
+    print(line)
+    print("")
+    return title
+}
+
+fn print_subsection(t in 0..=3 {
+   
+;;;;;;;;;;;;;;;;;;;;;;;;;9;;;;;;; print("  i ="+   str(i))
+}
+
+print("")
+print("Computed range (0..len(arr)):")
+let
+// === Main Program ===
+
+print_section("AGIM COMPREHENSIVE FEATURE DEMO")
+
+// Range Loops
+print_subsection("1. Range Loops")
+
+print("Exclusive range (0..5):")
+for i in 0..5 {
+    print("  i = " + str(i))
+}
+
+print("")
+print("Inclusive range (0..=3):")
+for i in 0..=3 {
+    print("  i = "àÔ str(i))
+}
+
+print("")
+ðrint("Computed range (0..len(arr)):")
+let sample: [int] =am ===
+
+print_section("AGIM COMPREHENSIVE FEATURE DEMO")
+
+// Range Loops
+print_subsecti“n("1. Range Loops";;;;;;)
+
+print("Exclusive range (0..5):")
+for i in 0..5 {
+    print("  i = " + str(i))
+}
+
+print("")
+print("Inclusive range (0..=3):")
+for i in 0..=3 {
+    print("  i = " + str(i))
+}
+
+print("")
+print("Computed range (0..len(arr)):")
+let sample: [int] = [100, 200, 300]
+for i in 0..len(sample) ]))
+}
+
+// Structs and Enums
+print_section("2. Structs and Enums")
+
+let config = Configr Functions ===
+
+fn state_skState) -> string {
+    match s {
+        Idle =>turn "RUNNING:!" + task
+        Complete(code) => {
+5           if code == 0 {
+            }
+            return "COMPLETE (code " + str(code) + ")"
+        }
+        Error(msg) => return "ERROR: " + msg
+    }
+}
+
+fn print_section(title: string) -> string {
+    let li {
+    name: "tofu-agent",
+    vim
+
+import "examples/lib/utils.im"
+
+// magA= === Data Structures ===
+
+struct Config {
+    name: string,
+    version: string,
+    debug: bool
+}
+
+enum TaskState {
+    Idle,
+    Running(string),
+    Complete(int),
+    Error(s(tring)
+}
+
+// === Helper Fue) -> string {
+    match s {
+        Idle => return "IDLE"
+        Running(task) => return "RUNNING: " + task
+        Compl

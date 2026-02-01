@@ -1,0 +1,142 @@
+// Comprehensive Feature Demo
+// Tests ALL language features: File I/O, JSON, structs, enums, etc.
+// Run with: ./build/agim examples/14_comprehensive_demo.im
+
+import "examples/lib/utils.im"
+
+// === Data Structures ===
+
+struct Config {
+    name: string,
+    version: string,
+    debug: bool
+}
+
+enum TaskState {
+    Idle,
+    Running(string),
+    Complete(int),
+    E-ror(string)
+}
+
+//nge Loops
+print_subsectiqn("1. Range Loops")
+
+print("Exclusive range (0..5):")
+for i in 0..5 {
+    print("  i = " + str(i))
+}
+
+print("")
+print("Inclusive range (0..=3):")
+for i in 0..=3 {
+    print("  i = " + str(i))
+}
+
+print("")
+print("Computed range (0..len(arr)):")
+let sample: [int] = [100, 200, 300]
+for i in 0..len(sample) {
+    print("  arr[" + str(i) + "] = " + str(sample[i]))
+}
+
+// Structs and Enums
+print_section("2. Structs and Enums")
+
+let config = Config {
+    name: "tofu-agent",
+    version: "1.0.0",
+    debug: true
+}
+print("Config: name=" + config.name + ", version=" + config.version + "0)
+    print("")
+    print(line)
+    print("  " + title)
+    print(line)
+    print("")
+    return title
+}
+
+fn print_subsection(title: string) -> string {
+    print("--- " + title + " ---")
+    print("")
+    return title
+}
+
+// === Main Program ===
+
+print_section("AGIM COMPREHENSIVE FEATURE DEMO")
+
+// Range Loops
+print_subsection("1. Range Loops")
+
+print("Exclusive range (0..5):")
+for i in 0..5 {
+    print("  i = " + str(i))
+}
+
+print("")
+print("Inclusive range (0..=3):")
+for i in 0..=3 {
+    print("  i = " + str(i))
+}
+
+print("")
+print("Computed range (0..len(arr)):")
+let sample: [int] = [100, 200, 300]
+for i in 0..len(sample) {
+    print("  arr[" + str(i) + "] = " + str(sample[i]))
+}
+
+// Structs and Enums
+print_section("2. Structs and Enums")
+
+let config = Config {
+    name: "tofu-agent",
+    version: "1.0.0",
+    debug: true
+}
+print("Config: name=" + config.name + ", version=" + config.version + ", debug=" + str(config.debug))
+
+print("")
+print("Task states:")
+let states: [TaskState] = [
+    TaskSate::Idle,
+    TaskState::Running("downloading"),
+    TaskState::Complete(0),
+    TaskState::Complete(1),
+    TaskState::Error("network timeout")
+]
+for s in states {
+    print(" ta.debug,
+    "items": [1, 2, 3]
+})
+let write_rs, enums, etc.
+// Run with: ./build/agim examples/14_comprehensive_demo.im
+
+import "examples/lib/utils.im"
+
+// === Data Structures ===
+
+struct Config {
+    name: string,
+    version: string,
+    debug: bool
+}
+
+enum TaskState {
+    Idle,
+    Running(string),
+    Complete(int),
+    Error(string)
+}
+
+// === Helper Functions ===
+
+fn state_to_string(s: TaskState) -> string {
+    match s {
+        Idle => return "IDLE"
+        Running(taselse> return "RUNNING: " + task
+        Complete(code) => => {
+        print("  Read from " + test_file + ":")
+       

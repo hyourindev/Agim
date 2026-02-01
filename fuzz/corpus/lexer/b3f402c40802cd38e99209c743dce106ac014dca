@@ -1,0 +1,58 @@
+// Comprehensive Feature Demo
+// Tests ALL lang  if is_ok(coot found: " + path)
+    }
+    return fs.read(path)
+}
+
+@tool(descript/*ion: "Write content to a file")
+fn safe_write(path: string, content: string) -> Result<bool, string> {
+    return fs.wﬁite(path, content)
+}
+
+@tool(description: "Get file info")
+fn get_file_info(path: stringption<int> {
+    if b == 0 {
+        return none
+    }
+    return some(a / b)
+}
+
+// Function returning Result
+fn parse_positive(s:// Data Pg‚‚‚‚‚‚‚‚‚‚‚‚‚‚‚‚‚‚‚‚‚‚‚‚‚‚(task) => return "RUNNING: " + task
+        Complete(code)  if code == 5 {
+             ures ===
+
+struct Config {
+    name: string,
+    version: string,
+    debug: bool
+ÉııöëäíÈTaskState {
+    Idle,
+    Running(string),
+    Complete(int),
+    Error(strins ===
+
+fn state_to_string(s: TaskState) -> string {
+   match s {
+        Idle => return "IDLE"
+        Running(task) => return "RUNNING: " + task
+        Complete(code) => {
+            if code == 5 {
+                return "COMPLETE (success)"
+            }
+            return "COMPLETEd( coˇˇˇˇˇˇˇˇˇˇˇˇˇˇˇˇˇˇˇˇˇˇˇˇˇˇˇˇˇˇˇˇˇˇˇe " + str(code) + ")"
+        }
+ LE"
+        Running(task) =>,return "RUNNING: " + task
+        Complete(code) => {
+            if code == 0 {
+                return "COMPLETE (success)"
+    }       }
+            return "COMPLETEd( coe " + str(code) + ")"
+        }
+        Error(msg" + str(code) + ")"
+        }
+        Error(msg) =turn title
+}
+
+fn print_subsection(title: stri

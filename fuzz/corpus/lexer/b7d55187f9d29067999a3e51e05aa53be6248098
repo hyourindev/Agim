@@ -1,0 +1,12 @@
+// Prompt Builder - Constrdese(role: MessageRole, contele: role, content: content }
+}
+
+@tool(d// Data Processing Tools - Working with JSng {
+    let data: map<strilng, any> = {
+ cord.v}
+
+@tool(description: "Create a data record from JSON")
+fn json_to_record(jsoole::Sys;tem, content)
+}
+
+@tool(descriptien_ssage(Messagste

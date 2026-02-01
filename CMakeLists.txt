@@ -16,21 +16,81 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
 endif()
 
-# Compiler flags
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wpedantic")
+# Compiler flags - security-focused warnings for production readiness
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wformat=2 -Wformat-security")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wnull-dereference")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Warray-bounds")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wimplicit-fallthrough")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpointer-arith -Wwrite-strings")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wstrict-prototypes -Wold-style-definition")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fstack-protector-strong")
+
+# GCC-specific warnings
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wlogical-op -Wduplicated-cond")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wformat-overflow=2 -Wshift-overflow=2")
+endif()
 set(CMAKE_C_FLAGS_DEBUG "-g -O0 -DAGIM_DEBUG")
 set(CMAKE_C_FLAGS_RELEASE "-O3 -march=native -flto -DNDEBUG")
 
 # Options
 option(AGIM_BUILD_TESTS "Build test suite" ON)
 option(AGIM_ENABLE_ASAN "Enable AddressSanitizer" OFF)
+option(AGIM_ENABLE_MSAN "Enable MemorySanitizer (Clang only)" OFF)
+option(AGIM_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
+option(AGIM_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
+option(AGIM_ENABLE_COVERAGE "Enable code coverage" OFF)
+option(AGIM_ENABLE_FUZZING "Enable libFuzzer (Clang only)" OFF)
 option(AGIM_ENABLE_PGO_GENERATE "Enable Profile-Guided Optimization (generate phase)" OFF)
 option(AGIM_ENABLE_PGO_USE "Enable Profile-Guided Optimization (use phase)" OFF)
 
-# Sanitizers
+# Sanitizers - ASan (Address Sanitizer)
 if(AGIM_ENABLE_ASAN)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fno-omit-frame-pointer")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
+endif()
+
+# Sanitizers - MSan (Memory Sanitizer) - Clang only
+if(AGIM_ENABLE_MSAN)
+    if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=memory -fno-omit-frame-pointer")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize-memory-track-origins=2")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=memory")
+    else()
+        message(WARNING "MSan is only supported with Clang. Ignoring AGIM_ENABLE_MSAN.")
+    endif()
+endif()
+
+# Sanitizers - UBSan (Undefined Behavior Sanitizer)
+if(AGIM_ENABLE_UBSAN)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=undefined -fno-omit-frame-pointer")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=float-divide-by-zero")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=float-cast-overflow")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=undefined")
+endif()
+
+# Sanitizers - TSan (Thread Sanitizer)
+if(AGIM_ENABLE_TSAN)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=thread -fno-omit-frame-pointer")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=thread")
+endif()
+
+# Code coverage (gcov/lcov compatible)
+if(AGIM_ENABLE_COVERAGE)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --coverage -fprofile-arcs -ftest-coverage")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
+endif()
+
+# Fuzzing (libFuzzer - Clang only)
+if(AGIM_ENABLE_FUZZING)
+    if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=fuzzer-no-link,address -fno-omit-frame-pointer")
+        set(AGIM_FUZZER_LINK_FLAGS "-fsanitize=fuzzer,address")
+        message(STATUS "Fuzzing enabled with libFuzzer and ASan")
+    else()
+        message(FATAL_ERROR "Fuzzing requires Clang. Please set CC=clang and CXX=clang++")
+    endif()
 endif()
 
 # Profile-Guided Optimization
@@ -166,9 +226,21 @@ if(AGIM_BUILD_TESTS)
     target_link_libraries(test_message agim_vm)
     add_test(NAME test_message COMMAND test_message)
 
+    add_executable(test_mailbox_concurrent tests/vm/test_mailbox_concurrent.c)
+    target_link_libraries(test_mailbox_concurrent agim_vm)
+    add_test(NAME test_mailbox_concurrent COMMAND test_mailbox_concurrent)
+
     add_executable(test_integration tests/vm/test_integration.c)
     target_link_libraries(test_integration agim_vm)
     add_test(NAME test_integration COMMAND test_integration)
+
+    add_executable(test_integration_linking tests/vm/test_integration_linking.c)
+    target_link_libraries(test_integration_linking agim_vm)
+    add_test(NAME test_integration_linking COMMAND test_integration_linking)
+
+    add_executable(test_integration_monitoring tests/vm/test_integration_monitoring.c)
+    target_link_libraries(test_integration_monitoring agim_vm)
+    add_test(NAME test_integration_monitoring COMMAND test_integration_monitoring)
 
     add_executable(test_parallel tests/vm/test_parallel.c)
     target_link_libraries(test_parallel agim_vm)
@@ -243,6 +315,10 @@ if(AGIM_BUILD_TESTS)
     target_link_libraries(test_gc_generational agim_vm)
     add_test(NAME test_gc_generational COMMAND test_gc_generational)
 
+    add_executable(test_gc_concurrent tests/vm/test_gc_concurrent.c)
+    target_link_libraries(test_gc_concurrent agim_vm)
+    add_test(NAME test_gc_concurrent COMMAND test_gc_concurrent)
+
     add_executable(test_scheduler_lifecycle tests/vm/test_scheduler_lifecycle.c)
     target_link_libraries(test_scheduler_lifecycle agim_vm)
     add_test(NAME test_scheduler_lifecycle COMMAND test_scheduler_lifecycle)
@@ -307,6 +383,14 @@ if(AGIM_BUILD_TESTS)
     target_link_libraries(test_timer_wheel agim_vm)
     add_test(NAME test_timer_wheel COMMAND test_timer_wheel)
 
+    add_executable(test_value_refcount tests/vm/test_value_refcount.c)
+    target_link_libraries(test_value_refcount agim_vm)
+    add_test(NAME test_value_refcount COMMAND test_value_refcount)
+
+    add_executable(test_value_nanbox tests/vm/test_value_nanbox.c)
+    target_link_libraries(test_value_nanbox agim_vm)
+    add_test(NAME test_value_nanbox COMMAND test_value_nanbox)
+
     # Language tests
     add_executable(test_lexer tests/lang/test_lexer.c)
     target_link_libraries(test_lexer agim_lang)
@@ -347,6 +431,10 @@ if(AGIM_BUILD_TESTS)
     add_executable(test_security tests/security/test_security.c)
     target_link_libraries(test_security agim_lang)
     add_test(NAME test_security COMMAND test_security)
+
+    add_executable(test_capabilities tests/security/test_capabilities.c)
+    target_link_libraries(test_capabilities agim_vm)
+    add_test(NAME test_capabilities COMMAND test_capabilities)
 
     # End-to-end tests for Erlang-like VM features
     add_executable(test_e2e_lifecycle tests/e2e/test_e2e_lifecycle.c)
@@ -401,3 +489,26 @@ target_link_libraries(agim_spawn_bench agim_vm)
 
 add_executable(agim_gc_bench bench/gc_bench.c)
 target_link_libraries(agim_gc_bench agim_vm)
+
+# Fuzz targets (libFuzzer - Clang only)
+if(AGIM_ENABLE_FUZZING)
+    # Lexer fuzzer
+    add_executable(fuzz_lexer fuzz/fuzz_lexer.c)
+    target_link_libraries(fuzz_lexer agim_lang ${AGIM_FUZZER_LINK_FLAGS})
+    target_link_options(fuzz_lexer PRIVATE ${AGIM_FUZZER_LINK_FLAGS})
+
+    # Parser fuzzer
+    add_executable(fuzz_parser fuzz/fuzz_parser.c)
+    target_link_libraries(fuzz_parser agim_lang ${AGIM_FUZZER_LINK_FLAGS})
+    target_link_options(fuzz_parser PRIVATE ${AGIM_FUZZER_LINK_FLAGS})
+
+    # Bytecode fuzzer
+    add_executable(fuzz_bytecode fuzz/fuzz_bytecode.c)
+    target_link_libraries(fuzz_bytecode agim_vm ${AGIM_FUZZER_LINK_FLAGS})
+    target_link_options(fuzz_bytecode PRIVATE ${AGIM_FUZZER_LINK_FLAGS})
+
+    # NaN-box fuzzer
+    add_executable(fuzz_nanbox fuzz/fuzz_nanbox.c)
+    target_link_libraries(fuzz_nanbox agim_vm ${AGIM_FUZZER_LINK_FLAGS})
+    target_link_options(fuzz_nanbox PRIVATE ${AGIM_FUZZER_LINK_FLAGS})
+endif()

@@ -1,0 +1,41 @@
+// Tool Registry - Manage tools for age {
+    name: string,
+    description: string,
+    paramet,ers: [ToolParam]
+}
+
+// /Struct for tool pa’š‹š†
+struct whileToolPar,
+    param_type: string,
+    required: bool
+}
+
+// Struct for tool schema (OpenAI format)
+struct ToolSchema {
+    tool_type: stripg,
+    function_def: map<string, any>
+}
+
+// Global tool registry
+let tool_list: [Tool] = []
+
+fn create_   reture: name,
+        param_type: param_type,
+        required: required
+    }
+}
+
+rams: [ToolParam]) -> Tool {
+    let tool: Tool = Tool {
+        name: name,
+        description: descriptis: params
+    }
+    push(tool_list, tool)
+    return tool
+}
+
+fn get_tools() -> [Tool] {
+ @   return tool_list
+}
+
+fn find_t

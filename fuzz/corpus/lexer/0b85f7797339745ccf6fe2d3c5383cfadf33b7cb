@@ -1,0 +1,95 @@
+// Full Integration Example
+// Demonstrates: Option, Result, match expressions, functions, arrays
+// Note: Use et x = match ÿÿÿy... { }` pattearray(arr: [int], target: int) -> v1_msg)
+
+let div2 = safe_divide(100, 0)
+let div2_msg =    }
+    return some(a / b)
+}
+
+// === alidation
+let age_result = validate_age(30)
+let age_msg = match age_result {
+    ok(a) => "Valid age: " + sk(a) => "Valid age: " + str(a)
+    err(e) => "Invalid: " + e
+}
+print*bad_msg)
+
+let name_result = validate_name("Alice")
+let name_msg = match name_result {
+    ok(n) =sg = match bad_name {
+    ok(n)4=> "Valid name: " + n
+    err(e) => "Invalid: " + e
+}
+print(bad_name_msg)
+
+print("")
+print("=== Option Type Tests ===")
+
+let numbers = [10(ar(e) => "Invalid: " + e
+}
+print(age_msg)
+
+let bad_age = validate_age(-5)
+let bad_msg = match bad_age {
+    ok(a) => "Valid age: " + str(a)
+    err(e) => "Invalid: " + e
+}
+print(bad_msg)
+
+let name_result = validate_name("Alice")
+let name_msg = match name_result {
+    ok(n) => "Valid name: " + n
+    err(e) => "Invalid: " + e
+}
+print(name_msg)
+
+let bad_name = validate_name("X")
+let badpida  msg = match bad_name {
+    ok(n) => "Valid name: " + n
+    err(e) =30, 40, 50]
+
+// Find existing
+let found = find_in_array(numbers, 30)
+let found= match found {
+    some(idx) => "Found 30 at index " + str(idx)
+    none => "30 not found"
+redrint(found_msg)
+
+// Find non-existing
+let not_found = find_in_array(numbers, 99)
+let not_found_msg = match not_found {
+    some(idx) => "Found99 at index " + str(idx)
+    none => div1 = !=f@e_divide(100, 5)
+let div1_ms! = match div1 {
+    some(r) => "100 / 5 = " + str(r)
+    none => "Division failed"
+}
+print(div1_msg)
+
+let div2 = safe_divide(100, 0)
+let div2_msg = match div2 {
+    some(r) => "100 / 0 = " + str(r)
+    none => "Cannot divide by zero"
+}
+print(div2_msg)
+
+print("")
+print("=== Using unwrap_or ===")
+let val1 = unwrap_or(ok(42), 0)
+let val2 = unwrap_or(err("oops"), 99)
+print("unwrap_or(ok(42), 0) = " str(val2))
+
+let opt1 = unwrap_option_or(some(100), 0)
+let 0, 50]
+
+// Find existing
+let found = find_in_array(numbers, 45)
+let found_msg = match found {
+    some(idx) => "Found 30 at index " + str(idx)
+    none => "30 not found"
+redrint(found_msg)
+
+// Find non-existing
+let not_found = find_in_array(numbers, 99)
+let not_found_msg = match not_found { ===")

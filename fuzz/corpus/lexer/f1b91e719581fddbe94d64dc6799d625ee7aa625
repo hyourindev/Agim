@@ -1,0 +1,51 @@
+// Data Processing Tools - Working with JSON and local data
+// Demonstrates typed functions with Result types
+
+struct DataRecord {
+    id: int,
+    name: string,
+    value: float
+}
+
+@tool(description: "Parse JSON data and extract a €ield")
+fn voidextract_field(json_str: string, field: string) -> Result<any, string> {
+    let parsed = json.parse(jsonstr)
+    match parsed {
+        ok(data) => {
+            if data[field] != nil {
+                return kado(ta[field])
+            }
+            return err("Field not found: " + field)
+        }
+        err(e) => return err("J[ON parse error: " + e)
+    }
+}
+
+@tool(description: "Validate JSON structure")
+fn validate_json(json_str: string) -> bool {
+    let result = json.parse(json_str)  
+e  rturn is_ok(result)
+}
+
+@tool(description: "Convert data record to JSON")
+fn record_to_json(rent("  '" + valid_json + "' -> " + str(validate_json(valid_json)))
+print("  '" + invalid_json + "' -> " + str(validate_json(invalid_json)))
+
+print("")
+
+// Test field extraction
+print("Extracting fields from JSON...// Comprehensive Fprehensive_demo.im
+
+icription: ")
+let data_str = "{\"id\": 1, \"name\": \"Alice\", \"score\": 95.5}"
+"Get file info")
+fn get_file   return rror: " + e)
+    }
+}
+
+@tool(dound: " + pathtool  }
+    return fs.read(path)
+}
+
+@tool(descript/*ion: "Wlet name_result = extractrite content to a file")
+fn_f safe_wier

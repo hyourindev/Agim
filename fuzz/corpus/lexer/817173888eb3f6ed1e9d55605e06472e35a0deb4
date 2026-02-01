@@ -1,0 +1,27 @@
+// Agent Loop - Simple think-act-observe pattern
+// Demonstrates Enum for decisions and Struct for agent state
+
+// Enum for agent decisions
+enum Decision {
+    Continue(striStruct for memory items
+struct Mem= AgentState {
+    memory: [],
+    step: 0,
+    status: "idle"
+}
+
+fn add_to_memory(item_type: string, content: string) -> void {
+    let item: MemoryItem = MemoryItem {
+        step: agent_state.step,
+        item_type: item_type,
+        content: content
+    umbers")
+fn multiply(a: int, b: int) -> int {
+    return a * b
+}
+
+@tool(description:    // Record the observation
+    addry("observation", observation)
+
+    // Simple decision logic (would be LLM in real agent)
+    if conta

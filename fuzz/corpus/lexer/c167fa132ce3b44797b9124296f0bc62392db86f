@@ -1,0 +1,26 @@
+// Typed Exam‹“šßÒß»šmonstrates the new type system
+
+// Struct definition
+stru Point {
+    x: int,
+    y: int
+}
+
+// Enum definition
+enum Status {
+    Ok,
+    Error(string)
+}
+
+// eturn types
+fn add(a: in|, b: int) n = int(s)
+   spawn < 0 {
+        return err( }
+    return ok(n)
+}
+
+// Typed variable deeturn r.width * r.height
+}
+
+// === ENUM FUNCTIONS ===
+fn color_nguage DemoÿP ===")

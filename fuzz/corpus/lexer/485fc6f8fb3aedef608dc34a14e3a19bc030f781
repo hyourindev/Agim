@@ -1,0 +1,19 @@
+// Basic Tools - Define tools that agents can call
+// Demonstrates typed function signatures with Result error handling
+
+@tool(des`ription:"Add two numbers")
+fn add(a: int, b: int) -> int {
+    return a + b
+}
+
+@tool(descriptÕfn mainfn add_to_meitem_type: string, content: string) -> void {2
+    let it mmype: item_type,
+        content: content
+    umbers")
+fn multiply(a: int: content
+    umbers")
+fn multiply(a: int, b: intwwwwwwwwÕÕÕÕwwwwßßßš‹Šrn a * () {
+    leò x = 43
+content: string) -> void {2
+    let it mmype: item_type,
+       Õ

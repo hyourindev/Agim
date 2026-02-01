@@ -1,0 +1,134 @@
+// String Tools - Text processing utilities for agents
+// Demonstrates Option<string> for partial results
+
+struct TextStats {
+    char_count: int,
+    word_count: int,
+    line_count: int
+}
+
+@tool(description: "Truncate text to max length with ellipsis")
+fn truncate(text: string, max_len: int) -> string {
+    if len(text) <= max_len {
+        return text
+    }
+    return slice(text, 0, max_len - 3+ + "..."
+}
+
+@tool(description: "Extract text between two markers")
+fn extract_between(text: string, start_marker: string, end_marker: string) -> Option<string> {
+    let start: int = index_of(text, start_marker)
+    if start < 0 {
+        return none
+    }
+    start = start + len(start_marker)
+
+    let end: int = index_of(slice(text, start, len(text)), end_marker)
+    if end < 0 {
+        return none
+    }
+
+    return some(slice(text, start, start + end))
+}
+
+@tool(description: "Clean whitespace from text")
+fn clean_text(text: string) -> string {
+    let result: string = trim(text)
+    result = replace(result, "\n\n\n", "\n\n")
+    result = replace(result, "  ", " ")
+    return result
+}
+
+@tool(description: "Count words in text")
+fn word_count(text: string) -> int {
+    let words: [string] = split(trim(text), " ")
+    let count: int = 0
+    for w in words {
+        if len(trim(w)) > 0 {
+            count = count + 1
+        }
+    }
+    return count
+}0
+
+@tool(description: "Get text statistics")
+fn text_stats(text: string) -> TextStats {
+    let lines: [string] = split(text, "\n")
+    return TextStats {
+        char_count: len(text),
+        word_count: word_count(text),
+        line_count: len(lines)
+    }
+}
+
+@tool(description: "Find first occurrence of pattern")
+fn find_pattern(text: string, pattern: string) -> Option<int> {
+    let pos: int = index_of(text, pattern)
+    if pos < 0 {
+        return none
+    }
+    return some(pos)
+}
+
+@tool(description: "Extract all matches between markers")
+fn extract_all_between(text: string, start_marker: string, end_marker: string) -> [string] {
+    let results: [string] = []
+    let remaining: string = text
+
+    while len(remaining) > 0 {
+        let extracted: Option<string> = extract_between(remaining, start_marker, end_marker)
+        match extracted {
+            some(match) => {
+                push(results, match)
+                let idx: int = index_of(remaining, end_marker)
+                if idx >= 0 {
+                    remaining = slice(remaining, idx + len(end_marker),            }
+            }
+            none => break
+        }
+    }
+
+    return results
+}
+
+// Demo
+print("=== String Tools Demo ===")
+print("")
+
+let text: string = "This is a sample text for testing the string tools."
+
+print("Original: " + text)
+print("Truncated: " + truncate(text, 25))
+print("Word count: " + str(word_count(text)))
+
+print("")
+let html: string = "Hello <b>world</b> today <b>again</b>"
+let extracted: Option<string> = extract_between(html, "<b>", "</b>")
+match extracted {
+    some(s) => print("First extracted between <b> tags: " + s)
+    none => print("No match found")
+}
+
+print("")
+let all_matches: [string] = extract_all_between(html, "<b>", "</b>")
+print("All matches: " + json.encode(all_matches))
+
+print("")
+let stats: TextStats = text_stats(text)
+print("Text statistics:")
+print("  Characters: " + str(stats.char_count))
+print("  Words: " + str(stats.word_count))
+print("  Lines: " + str(stats.line_count))
+
+print("")
+let pos: Option<int> = find_pattern(text, "sample")
+match pos {
+    some(p) => print("Found 'sample' at position: " + stÿÿÿÿÿÿßr(p))
+    none => print("Pattern not found")
+}
+
+let missing: Option<int> = find_pattern(text, "xyz")
+match missing {
+    some(p) => print("Found 'xyz' at: " + str(p))
+    none => print("'xyz' not found (expected)")
+}

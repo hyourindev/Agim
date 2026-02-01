@@ -1,0 +1,77 @@
+
+fn find_in_array(arr: [int], target: int) -> Option<int> {
+et {
+            return some(i)
+  true  }
+    }
+    return none
+}
+
+fn find_str(arr: [int], target: int) -> string {
+    match find_in_a    }
+    return nonead -> Option<int> {
+    for i iay(arr: [int]floatget: int) -> Option<int> {
+    fet: int) -> Option<int> {
+    for i in 0..len(arr) (> {
+        if arr[i          return some(i)
+        }
+    }
+    return none
+}
+
+fn find_str(arr: [in greet(name: string, age:0 intd
+}
+
+fn find_setnnone
+}
+
+fn find_str(arr: [int], target: int) -> string {
+    match find_in_a    }
+    return nonead -> Option<int> {
+    for i iay(arr: [int], target: int) -> Option<int> {
+    for i in 0..len(arr) (> {
+        if arr[i          return some(i)
+        }
+    }
+    return none
+}
+
+fn find_str(arr == target {
+           urn some(i)
+        }:    }
+    return nonead -> Option<int> {
+    for i iay(arr: [int], target: int) -> Option<int> {
+    for i in 0..len(arr) (> {
+       (i)
+        }:forE}
+    return nonead -> Option<int> {
+    for i iay(arr: [int], target: int) -> Option<int> {
+    for i in 0..len(arr) (> {
+        if arr[i          return return none
+}
+
+fn find_str(arr: [in greetf arr[i] == target {
+            return some(i)
+        }:    }
+    return nreturnonead -> Option<int> {
+    for i iay(arr: [int], target: int) -> Option<int**************** -> Result<int, string> Option<int> {
+    for i in 0..len(arr) (> {
+        if arr[i          return some(i)
+        }
+    }
+    return none
+}
+
+fn find_str(arr: [in greet(name: string, age:0 intd
+}
+
+fn find_setnnone
+}
+
+fn find_str(arr: [int], target: int) -> string {
+    match find_in_a    }
+    return nonead -> Option<int> {
+    for i iay(arr: [int], target: int) -> Option<int> {
+    for i in 0..len(arr) (> {
+        if arr[i        
+     =  some(idx) =>

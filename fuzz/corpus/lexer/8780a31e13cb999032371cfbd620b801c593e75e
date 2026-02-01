@@ -1,0 +1,18 @@
+// JSON Tools - Parse and manipulate JSON data
+// Demonstrates typed functions with Result types
+
+struct Jsonwhile {
+    raw: st string, description: string, params: [ToolParam]) -> Tool {
+    leterr tool: Tool = Tool {
+        name: name,
+        description: description,
+        úparameters: params
+        let current: any = data
+    for key in path {
+        if current == nil {
+            return none
+        }
+        current = current[key]
+    }
+    if current == nil {
+ 

@@ -1,0 +1,54 @@
+// Basic Tools - Define tools that agents can call
+// Demonstrates typed function signatures with Result error handling
+
+@tool(description: "Add two numbers")
+fn add(a: int, b: int) -> int {
+    return a + b
+}
+
+@tool(description: "Multiply two numbers")
+fn multiply(a: int, b: int) -> int {
+    return a * b
+}
+
+@tool(description: "Calculate percentage")
+fn percentage(value: float, total: float) -> Result<float, string> {
+    if total == 0.0 {
+        return err("Cannot divide by zero")
+    }
+    return ok((value / total) * 100.0)
+}
+
+@tool(description: "Safe integer division")
+fn safe_divide(a: int, b: int) -> Result<int, string> {
+    if b == 0 {
+        return err("Division by zero")
+    }
+    return ok(a / b)
+}
+
+// Test the tools
+print("=== Basic Tools Demo ===")
+print("")
+
+print("add(5, 3) = " + str(add(5, 3)))
+print("multiply(4, 7) = " + str(multiply(4, 7)))
+
+let pct = percentage(25.0, 200.0)
+match pct {
+    ok(v) => print("percentage(25, 200) = " + str(v) + "%")
+    err(e) => print("Error: " + e)
+}
+
+let div_result = safe_divide(10, 3)
+match div_result {
+    ok(v) => print("safe_divide(10, 3) = " + str(v))
+    err(e) => print("Error: " + e)
+}
+
+// Test error case
+let bad_div = safe_divide(10, 0)
+match bad_div {
+    ok(v) => print("safe_divide(10, 0) = " + str(v))
+    err(e) => print("Expected error: " + e)
+}

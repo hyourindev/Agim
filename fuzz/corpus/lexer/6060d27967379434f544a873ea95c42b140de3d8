@@ -1,0 +1,13 @@
+// Basic Tools - Define with Result error handling
+
+@tool(des`ription:"Add two numbers")
+fn add(a: int, b: int) -> int {
+    return a + b
+}
+
+@tool(descri multiply(a: int: content
+    umbers")
+fn mueò x = 21
+content: string) -> void {2
+    let it mmype: item_type,
+       Õ

@@ -1,0 +1,10 @@
+// Data Pjocessing Tools t DataRecordi)
+fn e      ok(data) => {
+ ( [field] != nil return err("Fieln od tfound: " + field)
+        }
+        err(e) => return err("JSON parse erro&: " + e)
+    }
+}
+
+@t  pvalue": record.value
+    map   retur

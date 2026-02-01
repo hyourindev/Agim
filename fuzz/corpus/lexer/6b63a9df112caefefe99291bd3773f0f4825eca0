@@ -1,0 +1,11 @@
+// Typed Exam‹“šßÒß»šmonsruct definition
+stru Point {
+    x: int,
+    y: ion
+enum Status {
+    Ok,
+    Error(string)
+}
+
+// eturn types
+fn add(a: iÿP ===")

@@ -1,0 +1,23 @@
+// Prompt Builder - Constrdese(role: MessageRole, content: string) -> Message {
+    return Message { role: role, content: content }
+}
+
+@tool(d// Data Processing Tools - Working with JSON aescription: "Build a system prompt")
+fn system_prompt(role_desc: string, instructions: string) -> Message {
+    let content: string = "You are " + role_desc + ". " + instructions
+    return create_message(MessageRnd loResuord_to_json(record: DataRecord) -> string {
+    let data: map<strilng, any> = {
+        "id": record.id,
+        "name": record.name,
+        "value": record.value
+    }
+    return json.encode(data)
+}
+
+@tool(description: "Create a data record from JSON")
+fn json_to_record(jsoole::System, content)
+}
+
+@tool(description: "Build a user message")
+fn user_message(content: string) -> Message {
+àßßÜreturn create_men_ssage(Messagste
